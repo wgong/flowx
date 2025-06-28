@@ -13,7 +13,7 @@ import chalk from 'npm:chalk';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const VERSION = '1.0.72';
+const VERSION = '1.0.73';
 
 // Simple in-memory storage for the session
 const memoryStore: Map<string, any> = new Map();
