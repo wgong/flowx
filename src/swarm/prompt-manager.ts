@@ -1,14 +1,14 @@
-import * as path from 'path';
-import { EventEmitter } from 'events';
-import { copyPrompts, copyPromptsEnhanced, CopyOptions, CopyResult } from './prompt-copier-enhanced';
+import * as path from 'node:path';
+import { EventEmitter } from 'node:events';
+import { copyPrompts, copyPromptsEnhanced, CopyOptions, CopyResult } from './prompt-copier-enhanced.ts';
 import { 
   PromptConfigManager, 
   PromptPathResolver, 
   PromptValidator,
   formatDuration,
   formatFileSize
-} from './prompt-utils';
-import { logger } from '../logger';
+} from './prompt-utils.ts';
+import { logger } from '../logger.ts';
 
 export interface PromptManagerOptions {
   configPath?: string;
@@ -205,7 +205,7 @@ export class PromptManager extends EventEmitter {
   }
 
   private async validateDirectory(dirPath: string, issues: ValidationReport['issues']): Promise<void> {
-    const fs = require('fs').promises;
+    const fs = require('node:fs').promises;
     
     try {
       const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -322,7 +322,7 @@ export class PromptManager extends EventEmitter {
     const sources = await Promise.all(
       resolved.sources.map(async (sourcePath) => {
         try {
-          const fs = require('fs').promises;
+          const fs = require('node:fs').promises;
           const stats = await fs.stat(sourcePath);
           
           if (!stats.isDirectory()) {

@@ -1,5 +1,5 @@
 // process-ui.js - Simple process management UI in pure JavaScript
-import { printSuccess, printError, printWarning, printInfo } from '../utils.js';
+import { printSuccess, printError, printWarning, printInfo } from "../utils.ts";
 
 // Simple color utilities
 const colors = {

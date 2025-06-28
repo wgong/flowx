@@ -1,9 +1,9 @@
 // sparc-structure.js - Create SPARC development structure
 
-import { createBasicRoomodesConfig } from './sparc/roomodes-config.js';
-import { createBasicSparcWorkflow } from './sparc/workflows.js';
-import { createRooReadme } from './sparc/roo-readme.js';
-import { createClaudeSlashCommands } from './claude-commands/slash-commands.js';
+import { createBasicRoomodesConfig } from "./sparc/roomodes-config.ts";
+import { createBasicSparcWorkflow } from "./sparc/workflows.ts";
+import { createRooReadme } from "./sparc/roo-readme.ts";
+import { createClaudeSlashCommands } from "./claude-commands/slash-commands.ts";
 
 // Helper function to create SPARC structure manually
 export async function createSparcStructureManually() {

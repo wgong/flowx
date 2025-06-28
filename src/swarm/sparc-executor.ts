@@ -3,10 +3,10 @@
  * Implements the full SPARC methodology with TDD
  */
 
-import { TaskDefinition, AgentState, TaskResult } from './types.js';
+import { TaskDefinition, AgentState, TaskResult } from "./types.ts";
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { Logger } from '../core/logger.js';
+import { Logger } from "../core/logger.ts";
 
 export interface SparcPhase {
   name: string;

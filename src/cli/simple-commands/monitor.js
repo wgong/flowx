@@ -1,5 +1,5 @@
 // monitor.js - System monitoring commands
-import { printSuccess, printError, printWarning } from '../utils.js';
+import { printSuccess, printError, printWarning } from "../utils.ts";
 
 export async function monitorCommand(subArgs, flags) {
   const interval = getFlag(subArgs, '--interval') || flags.interval || 5000;

@@ -3,8 +3,8 @@
  * Designed for environments that don't support stdin raw mode
  */
 
-import readline from 'readline';
-import chalk from 'chalk';
+import readline from 'node:readline';
+import chalk from 'npm:chalk';
 
 export interface UIProcess {
   id: string;
@@ -109,7 +109,7 @@ export class CompatibleUI {
         if (!isNaN(num) && num >= 1 && num <= this.processes.length) {
           await this.showProcessDetails(this.processes[num - 1]);
         } else {
-          console.log(chalk.yellow('Invalid command. Type "h" for help.'));
+          console.log(chalk.hex("#FFAA00")('Invalid command. Type "h" for help.'));
         }
         break;
     }
@@ -125,10 +125,10 @@ export class CompatibleUI {
     
     // System stats
     console.log(chalk.white('System Status:'), 
-      chalk.green(`${stats.runningProcesses}/${stats.totalProcesses} running`));
+      chalk.hex("#00AA00")(`${stats.runningProcesses}/${stats.totalProcesses} running`));
     
     if (stats.errorProcesses > 0) {
-      console.log(chalk.red(`⚠️  ${stats.errorProcesses} processes with errors`));
+      console.log(chalk.hex("#FF0000")(`⚠️  ${stats.errorProcesses} processes with errors`));
     }
     
     console.log();
@@ -148,7 +148,7 @@ export class CompatibleUI {
         console.log(`${chalk.gray(num)} ${status} ${chalk.white(name)}`);
         
         if (process.metrics?.lastError) {
-          console.log(chalk.red(`       Error: ${process.metrics.lastError}`));
+          console.log(chalk.hex("#FF0000")(`       Error: ${process.metrics.lastError}`));
         }
       });
     }
@@ -165,9 +165,9 @@ export class CompatibleUI {
     console.log(chalk.cyan.bold('📊 System Status Details'));
     console.log(chalk.gray('─'.repeat(40)));
     console.log(chalk.white('Total Processes:'), stats.totalProcesses);
-    console.log(chalk.white('Running:'), chalk.green(stats.runningProcesses));
+    console.log(chalk.white('Running:'), chalk.hex("#00AA00")(stats.runningProcesses));
     console.log(chalk.white('Stopped:'), chalk.gray(stats.totalProcesses - stats.runningProcesses - stats.errorProcesses));
-    console.log(chalk.white('Errors:'), chalk.red(stats.errorProcesses));
+    console.log(chalk.white('Errors:'), chalk.hex("#FF0000")(stats.errorProcesses));
     console.log(chalk.white('System Load:'), this.getSystemLoad());
     console.log(chalk.white('Uptime:'), this.getSystemUptime());
   }
@@ -239,7 +239,7 @@ export class CompatibleUI {
         console.log(chalk.white('Restarts:'), process.metrics.restarts);
       }
       if (process.metrics.lastError) {
-        console.log(chalk.red('Last Error:'), process.metrics.lastError);
+        console.log(chalk.hex("#FF0000")('Last Error:'), process.metrics.lastError);
       }
     }
   }
@@ -247,17 +247,17 @@ export class CompatibleUI {
   private getStatusDisplay(status: string): string {
     switch (status) {
       case 'running':
-        return chalk.green('●');
+        return chalk.hex("#00AA00")('●');
       case 'stopped':
         return chalk.gray('○');
       case 'starting':
-        return chalk.yellow('◐');
+        return chalk.hex("#FFAA00")('◐');
       case 'stopping':
-        return chalk.yellow('◑');
+        return chalk.hex("#FFAA00")('◑');
       case 'error':
-        return chalk.red('✗');
+        return chalk.hex("#FF0000")('✗');
       case 'crashed':
-        return chalk.red('☠');
+        return chalk.hex("#FF0000")('☠');
       default:
         return chalk.gray('?');
     }
@@ -323,7 +323,7 @@ export class CompatibleUI {
     
     if (runningProcesses.length > 0) {
       console.log();
-      console.log(chalk.yellow(`⚠️  ${runningProcesses.length} processes are still running.`));
+      console.log(chalk.hex("#FFAA00")(`⚠️  ${runningProcesses.length} processes are still running.`));
       console.log('These processes will continue running in the background.');
       console.log('Use the main CLI to stop them if needed.');
     }
@@ -381,7 +381,7 @@ export async function launchUI(): Promise<void> {
   
   ui.updateProcesses(mockProcesses);
   
-  console.log(chalk.green('✅ Starting Claude-Flow UI (compatible mode)'));
+  console.log(chalk.hex("#00AA00")('✅ Starting Claude-Flow UI (compatible mode)'));
   console.log(chalk.gray('Note: Using compatible UI mode for broader terminal support'));
   console.log();
   

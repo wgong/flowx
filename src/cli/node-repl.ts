@@ -3,13 +3,13 @@
  * Compatible implementation using Node.js readline and inquirer
  */
 
-import readline from 'readline';
-import fs from 'fs/promises';
-import path from 'path';
-import { spawn } from 'child_process';
-import colors from 'chalk';
-import Table from 'cli-table3';
-import inquirer from 'inquirer';
+import readline from 'node:readline';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import colors from 'npm:chalk';
+import Table from 'npm:cli-table3';
+import inquirer from 'npm:inquirer';
 
 interface REPLCommand {
   name: string;
@@ -83,7 +83,7 @@ class CommandCompleter {
     this.commands.clear();
     for (const cmd of commands) {
       this.commands.set(cmd.name, cmd);
-      if (cmd.aliases) {
+      if (cmd.aliases && Array.isArray(cmd.aliases)) {
         for (const alias of cmd.aliases) {
           this.commands.set(alias, cmd);
         }
@@ -546,7 +546,7 @@ function showHelp(commands: REPLCommand[]): void {
   for (const cmd of commands) {
     table.push([
       colors.cyan(cmd.name),
-      cmd.aliases ? colors.gray(cmd.aliases.join(', ')) : '',
+      cmd.aliases && Array.isArray(cmd.aliases) ? colors.gray(cmd.aliases.join(', ')) : '',
       cmd.description
     ]);
   }

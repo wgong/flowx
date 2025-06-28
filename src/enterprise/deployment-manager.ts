@@ -1,9 +1,9 @@
-import { EventEmitter } from 'events';
-import { writeFile, readFile, mkdir, readdir } from 'fs/promises';
-import { join } from 'path';
-import { spawn, ChildProcess } from 'child_process';
-import { Logger } from '../core/logger.js';
-import { ConfigManager } from '../core/config.js';
+import { EventEmitter } from 'node:events';
+import { writeFile, readFile, mkdir, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { spawn, ChildProcess } from 'node:child_process';
+import { Logger } from "../core/logger.ts";
+import { ConfigManager } from "../core/config.ts";
 
 export interface DeploymentEnvironment {
   id: string;

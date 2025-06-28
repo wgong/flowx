@@ -1,14 +1,14 @@
-import { Command, CommandContext } from '../cli-core.js';
-import { success, error, warning, info } from '../cli-core.js';
-import colors from 'chalk';
-import { ProjectManager, Project } from '../../enterprise/project-manager.js';
-import { DeploymentManager, Deployment, DeploymentEnvironment } from '../../enterprise/deployment-manager.js';
-import { CloudManager, CloudProvider, CloudResource } from '../../enterprise/cloud-manager.js';
-import { SecurityManager, SecurityScan } from '../../enterprise/security-manager.js';
-import { AnalyticsManager } from '../../enterprise/analytics-manager.js';
-import { AuditManager } from '../../enterprise/audit-manager.js';
-import { Logger } from '../../core/logger.js';
-import { ConfigManager } from '../../core/config.js';
+import { Command, CommandContext } from "../cli-core.ts";
+import { success, error, warning, info } from "../cli-core.ts";
+import colors from 'npm:chalk';
+import { ProjectManager, Project } from "../../enterprise/project-manager.ts";
+import { DeploymentManager, Deployment, DeploymentEnvironment } from "../../enterprise/deployment-manager.ts";
+import { CloudManager, CloudProvider, CloudResource } from "../../enterprise/cloud-manager.ts";
+import { SecurityManager, SecurityScan } from "../../enterprise/security-manager.ts";
+import { AnalyticsManager } from "../../enterprise/analytics-manager.ts";
+import { AuditManager } from "../../enterprise/audit-manager.ts";
+import { Logger } from "../../core/logger.ts";
+import { ConfigManager } from "../../core/config.ts";
 
 const { bold, blue, green, yellow, red, cyan, magenta } = colors;
 

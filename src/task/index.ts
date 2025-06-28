@@ -17,7 +17,7 @@ export {
   TaskFilter,
   TaskSort,
   TaskCheckpoint
-} from './engine.js';
+} from "./engine.ts";
 
 export {
   createTaskCreateCommand,
@@ -26,14 +26,14 @@ export {
   createTaskCancelCommand,
   createTaskWorkflowCommand,
   TaskCommandContext
-} from './commands.js';
+} from "./commands.ts";
 
 export {
   TaskCoordinator,
   TodoItem,
   MemoryEntry,
   CoordinationContext
-} from './coordination.js';
+} from "./coordination.ts";
 
 /**
  * Initialize the complete task management system
@@ -179,7 +179,7 @@ export async function retrieveCoordinationData(
 export const USAGE_EXAMPLES = {
   todoWrite: `
 // Example: Using TodoWrite for task coordination
-import { createTaskTodos } from './task';
+import { createTaskTodos } from './task.ts';
 
 const todos = await createTaskTodos(
   "Build e-commerce platform",
@@ -201,7 +201,7 @@ const todos = await createTaskTodos(
 
   taskTool: `
 // Example: Using Task tool pattern for parallel agents
-import { launchParallelAgents } from './task';
+import { launchParallelAgents } from './task.ts';
 
 const agentIds = await launchParallelAgents([
   {
@@ -230,7 +230,7 @@ const agentIds = await launchParallelAgents([
 
   memoryCoordination: `
 // Example: Using Memory for cross-agent coordination
-import { storeCoordinationData, retrieveCoordinationData } from './task';
+import { storeCoordinationData, retrieveCoordinationData } from './task.ts';
 
 // Store research findings for other agents
 await storeCoordinationData(
@@ -257,7 +257,7 @@ const findings = await retrieveCoordinationData(
 
   batchOperations: `
 // Example: Coordinated batch operations
-import { TaskCoordinator } from './task';
+import { TaskCoordinator } from './task.ts';
 
 const results = await coordinator.coordinateBatchOperations([
   {
@@ -280,7 +280,7 @@ const results = await coordinator.coordinateBatchOperations([
 
   swarmCoordination: `
 // Example: Swarm coordination patterns
-import { TaskCoordinator } from './task';
+import { TaskCoordinator } from './task.ts';
 
 await coordinator.coordinateSwarm(
   "Comprehensive system development",

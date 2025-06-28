@@ -2,11 +2,11 @@
  * VSCode terminal adapter implementation
  */
 
-import { platform } from 'os';
-import { ITerminalAdapter, Terminal } from './base.js';
-import { ILogger } from '../../core/logger.js';
-import { TerminalError } from '../../utils/errors.js';
-import { generateId, delay, timeout, createDeferred } from '../../utils/helpers.js';
+import { platform } from 'node:os';
+import { ITerminalAdapter, Terminal } from "./base.ts";
+import { ILogger } from "../../core/logger.ts";
+import { TerminalError } from "../../utils/errors.ts";
+import { generateId, delay, timeout, createDeferred } from "../../utils/helpers.ts";
 
 /**
  * VSCode API interface (injected via extension)

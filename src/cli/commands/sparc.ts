@@ -1,6 +1,6 @@
-import { success, error, warning, info } from "../cli-core.js";
-import type { CommandContext } from "../cli-core.js";
-import colors from "chalk";
+import { success, error, warning, info } from "../cli-core.ts";
+import type { CommandContext } from "../cli-core.ts";
+import colors from "npm:chalk";
 const { blue, yellow, green, magenta, cyan } = colors;
 
 interface SparcMode {
@@ -25,7 +25,7 @@ async function loadSparcConfig(): Promise<SparcConfig> {
 
   try {
     const configPath = ".roomodes";
-    const { readFile } = await import("fs/promises");
+    const { readFile } = await import("node:fs/promises");
     const content = await readFile(configPath, "utf-8");
     sparcConfig = JSON.parse(content);
     return sparcConfig!;
@@ -237,7 +237,7 @@ async function runTddFlow(ctx: CommandContext): Promise<void> {
       if (ctx.flags.sequential !== false) {
         console.log("Phase completed. Press Enter to continue to next phase, or Ctrl+C to stop...");
         await new Promise<void>(async (resolve) => {
-          const readline = await import("readline");
+          const readline = await import("node:readline");
           const rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout
@@ -266,7 +266,7 @@ async function runSparcWorkflow(ctx: CommandContext): Promise<void> {
   }
 
   try {
-    const { readFile } = await import("fs/promises");
+    const { readFile } = await import("node:fs/promises");
     const workflowContent = await readFile(workflowFile, "utf-8");
     const workflow = JSON.parse(workflowContent);
 
@@ -319,7 +319,7 @@ async function runSparcWorkflow(ctx: CommandContext): Promise<void> {
       if (workflow.sequential !== false && i < workflow.steps.length - 1) {
         console.log("Step completed. Press Enter to continue, or Ctrl+C to stop...");
         await new Promise<void>((resolve) => {
-          const readline = require("readline");
+          const readline = require("node:readline");
           const rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout
@@ -456,7 +456,7 @@ async function executeClaudeWithSparc(
   }
 
   try {
-    const { spawn } = await import("child_process");
+    const { spawn } = await import("node:child_process");
     const child = spawn("claude", claudeArgs, {
       env: {
         ...process.env,

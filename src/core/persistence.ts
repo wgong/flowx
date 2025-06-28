@@ -2,9 +2,9 @@
  * Persistence layer for Claude-Flow using SQLite
  */
 
-import Database from "better-sqlite3";
-import { join } from "path";
-import { mkdir } from "fs/promises";
+import Database from "npm:better-sqlite3";
+import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
 
 export interface PersistedAgent {
   id: string;

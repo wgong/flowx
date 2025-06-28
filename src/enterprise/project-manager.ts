@@ -1,8 +1,8 @@
-import { EventEmitter } from 'events';
-import { writeFile, readFile, mkdir, readdir, stat } from 'fs/promises';
-import { join } from 'path';
-import { Logger } from '../core/logger.js';
-import { ConfigManager } from '../core/config.js';
+import { EventEmitter } from 'node:events';
+import { writeFile, readFile, mkdir, readdir, stat } from 'node:fs/promises';
+import { join } from 'node:path';
+import { Logger } from "../core/logger.ts";
+import { ConfigManager } from "../core/config.ts";
 
 export interface ProjectPhase {
   id: string;

@@ -1,5 +1,5 @@
 // config.js - Configuration management commands
-import { printSuccess, printError, printWarning, readJsonFile, writeJsonFile } from '../utils.js';
+import { printSuccess, printError, printWarning, readJsonFile, writeJsonFile } from "../utils.ts";
 
 export async function configCommand(subArgs, flags) {
   const configCmd = subArgs[0];

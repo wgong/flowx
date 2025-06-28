@@ -1,5 +1,5 @@
 // performance-monitor.js - Performance monitoring for batch operations
-import { printInfo } from '../../utils.js';
+import { printInfo } from "../../utils.ts";
 
 export class PerformanceMonitor {
   constructor(options = {}) {

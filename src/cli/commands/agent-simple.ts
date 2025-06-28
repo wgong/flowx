@@ -2,11 +2,11 @@
  * Comprehensive Agent management commands - Simplified version
  */
 
-import { AgentManager } from '../../agents/agent-manager.js';
-import { AgentRegistry } from '../../agents/agent-registry.js';
-import { DistributedMemorySystem } from '../../memory/distributed-memory.js';
-import { EventBus } from '../../core/event-bus.js';
-import { Logger } from '../../core/logger.js';
+import { AgentManager } from "../../agents/agent-manager.ts";
+import { AgentRegistry } from "../../agents/agent-registry.ts";
+import { DistributedMemorySystem } from "../../memory/distributed-memory.ts";
+import { EventBus } from "../../core/event-bus.ts";
+import { Logger } from "../../core/logger.ts";
 
 // Global instances
 let agentManager: AgentManager | null = null;

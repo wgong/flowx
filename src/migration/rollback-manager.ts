@@ -2,13 +2,13 @@
  * Rollback Manager - Handles rollback operations and backup management
  */
 
-import * as fs from 'fs-extra';
-import * as path from 'path';
-import * as crypto from 'crypto';
-import { MigrationBackup, BackupFile } from './types';
-import { logger } from './logger';
-import * as chalk from 'chalk';
-import * as inquirer from 'inquirer';
+import * as fs from 'npm:fs-extra';
+import * as path from 'node:path';
+import * as crypto from 'node:crypto';
+import { MigrationBackup, BackupFile } from './types.ts';
+import { logger } from './logger.ts';
+import * as chalk from 'npm:chalk';
+import * as inquirer from 'npm:inquirer';
 
 export class RollbackManager {
   private projectPath: string;
@@ -360,7 +360,7 @@ export class RollbackManager {
 
   printBackupSummary(backups: MigrationBackup[]): void {
     if (backups.length === 0) {
-      console.log(chalk.yellow('No backups found'));
+      console.log(chalk.hex("#FFAA00")('No backups found'));
       return;
     }
 
@@ -373,7 +373,7 @@ export class RollbackManager {
       const type = backup.metadata.type || 'migration';
       const fileCount = backup.files.length;
       
-      console.log(`\n${isRecent ? chalk.green('●') : chalk.gray('○')} ${chalk.bold(backup.metadata.backupId)}`);
+      console.log(`\n${isRecent ? chalk.hex("#00AA00")('●') : chalk.gray('○')} ${chalk.bold(backup.metadata.backupId)}`);
       console.log(`  ${chalk.gray('Date:')} ${date}`);
       console.log(`  ${chalk.gray('Type:')} ${type}`);
       console.log(`  ${chalk.gray('Files:')} ${fileCount}`);

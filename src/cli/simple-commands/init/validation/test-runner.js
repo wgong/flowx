@@ -1,8 +1,8 @@
 // test-runner.js - Test runner for validation and rollback systems
 
-import { ValidationSystem } from './index.js';
-import { RollbackSystem } from '../rollback/index.js';
-import { printSuccess, printError, printWarning } from '../../../utils.js';
+import { ValidationSystem } from "./index.ts";
+import { RollbackSystem } from "../rollback/index.ts";
+import { printSuccess, printError, printWarning } from "../../../utils.ts";
 
 /**
  * Test runner for validation and rollback systems
@@ -341,7 +341,7 @@ export class ValidationTestRunner {
     const result = { success: true, errors: [], details: {} };
 
     try {
-      const { createAtomicOperation } = await import('../rollback/index.js');
+      const { createAtomicOperation } = await import("../rollback/index.ts");
       
       // Test atomic operation creation
       const atomicOp = createAtomicOperation(this.rollbackSystem, 'test-operation');

@@ -1,5 +1,5 @@
 // start-ui.js - Standalone UI launcher
-import { printSuccess, printError, printWarning, printInfo } from '../utils.js';
+import { printSuccess, printError, printWarning, printInfo } from "../utils.ts";
 
 export async function launchUI() {
   try {

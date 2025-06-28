@@ -1,6 +1,6 @@
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { logger } from '../logger';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { logger } from '../logger.ts';
 
 export interface PromptConfig {
   sourceDirectories: string[];
@@ -147,7 +147,7 @@ export class PromptPathResolver {
 
   private directoryExists(dirPath: string): boolean {
     try {
-      const stats = require('fs').statSync(dirPath);
+      const stats = require('node:fs').statSync(dirPath);
       return stats.isDirectory();
     } catch {
       return false;

@@ -24,7 +24,7 @@ describe('Security Mode Batch Integration Tests', () => {
           res.send('<h1>Welcome ' + req.params.id + '</h1>');
         });`, // XSS
         
-        'src/utils/crypto.js': `const crypto = require('crypto');
+        'src/utils/crypto.js': `const crypto = require('node:crypto');
           const hash = crypto.createHash('md5');`, // Weak crypto
         
         'src/config/secrets.js': `const API_KEY = 'sk_live_1234567890abcdef';

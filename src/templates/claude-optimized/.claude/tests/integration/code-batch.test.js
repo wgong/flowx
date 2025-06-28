@@ -27,8 +27,8 @@ describe('Code Mode Batch Integration Tests', () => {
         let code = '';
         
         if (template.type === 'repository') {
-          code = `import { Repository } from './base-repository';
-import { ${template.entity} } from '../models/${template.entity.toLowerCase()}.model';
+          code = `import { Repository } from './base-repository.ts';
+import { ${template.entity} } from '../models/${template.entity.toLowerCase()}.model.ts';
 
 export class ${template.name} extends Repository<${template.entity}> {
   constructor() {
@@ -44,7 +44,7 @@ export class ${template.name} extends Repository<${template.entity}> {
   }
 }`;
         } else if (template.type === 'middleware') {
-          code = `import { Request, Response, NextFunction } from 'express';
+          code = `import { Request, Response, NextFunction } from 'npm:express';
 
 export const ${template.name} = async (
   req: Request,

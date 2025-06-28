@@ -107,7 +107,7 @@ if (!swarmPath) {
   
   // Try to use Claude wrapper approach
   try {
-    const { execSync } = await import('child_process');
+    const { execSync } = await import('node:child_process');
     
     // Check if claude command exists
     try {
@@ -164,7 +164,7 @@ Please coordinate this swarm task by:
 Use all available tools including file operations, web search, and code execution as needed.`;
 
     // Execute Claude non-interactively by piping the prompt
-    const { spawn } = await import('child_process');
+    const { spawn } = await import('node:child_process');
     
     const claudeArgs = [];
     

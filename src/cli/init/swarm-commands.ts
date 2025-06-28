@@ -1,7 +1,7 @@
 // init/swarm-commands.ts - Swarm command documentation creation
 export async function createSwarmCommands(): Promise<void> {
-  const fs = await import('fs/promises');
-  const path = await import('path');
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
   
   const swarmDir = '.claude/commands/swarm';
   

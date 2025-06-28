@@ -1,9 +1,9 @@
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { createHash } from 'crypto';
-import { Worker } from 'worker_threads';
-import { EventEmitter } from 'events';
-import { logger } from '../logger';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { createHash } from 'node:crypto';
+import { Worker } from 'node:worker_threads';
+import { EventEmitter } from 'node:events';
+import { logger } from '../logger.ts';
 
 export interface CopyOptions {
   source: string;

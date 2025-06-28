@@ -2,8 +2,8 @@
  * JSON-based persistence layer for Claude-Flow
  */
 
-import { join } from "path";
-import { mkdir, access, readFile, writeFile } from "fs/promises";
+import { join } from "node:path";
+import { mkdir, access, readFile, writeFile } from "node:fs/promises";
 
 export interface PersistedAgent {
   id: string;

@@ -3,7 +3,7 @@
  * Provides alternative UI when Ink/raw mode isn't supported
  */
 
-import chalk from 'chalk';
+import chalk from 'npm:chalk';
 import { createCompatibleUI } from './compatible-ui.ts';
 
 export interface FallbackOptions {
@@ -41,19 +41,19 @@ export async function handleRawModeError(
   console.log();
 
   if (options.fallbackMessage) {
-    console.log(chalk.blue('ℹ️  '), options.fallbackMessage);
+    console.log(chalk.hex("#0066CC")('ℹ️  '), options.fallbackMessage);
     console.log();
   }
 
   if (options.enableUI) {
-    console.log(chalk.green('✅ Launching compatible UI mode...'));
+    console.log(chalk.hex("#00AA00")('✅ Launching compatible UI mode...'));
     console.log();
     
     try {
       const ui = createCompatibleUI();
       await ui.start();
     } catch (fallbackError) {
-      console.log(chalk.red('❌ Fallback UI also failed:'), fallbackError.message);
+      console.log(chalk.hex("#FF0000")('❌ Fallback UI also failed:'), fallbackError.message);
       await showBasicInterface(options);
     }
   } else {
@@ -65,7 +65,7 @@ export async function handleRawModeError(
  * Shows a basic text-based interface when UI isn't available
  */
 async function showBasicInterface(options: FallbackOptions): Promise<void> {
-  console.log(chalk.green('📋 Available alternatives:'));
+  console.log(chalk.hex("#00AA00")('📋 Available alternatives:'));
   console.log();
   console.log(chalk.white('1. Use CLI commands directly:'));
   console.log(chalk.gray('   ./claude-flow status'));
@@ -92,7 +92,7 @@ async function showBasicInterface(options: FallbackOptions): Promise<void> {
   // Wait for user to exit
   await new Promise(() => {
     process.on('SIGINT', () => {
-      console.log(chalk.green('\n👋 Goodbye!'));
+      console.log(chalk.hex("#00AA00")('\n👋 Goodbye!'));
       process.exit(0);
     });
   });
@@ -175,13 +175,13 @@ export function showUISupport(): void {
   console.log(chalk.gray('─'.repeat(40)));
   
   if (support.supported) {
-    console.log(chalk.green('✅ Interactive UI supported'));
+    console.log(chalk.hex("#00AA00")('✅ Interactive UI supported'));
     console.log(chalk.gray('Your terminal supports all UI features'));
   } else {
-    console.log(chalk.yellow('⚠️  Limited UI support'));
+    console.log(chalk.hex("#FFAA00")('⚠️  Limited UI support'));
     console.log(chalk.gray(`Reason: ${support.reason}`));
     if (support.recommendation) {
-      console.log(chalk.blue(`Recommendation: ${support.recommendation}`));
+      console.log(chalk.hex("#0066CC")(`Recommendation: ${support.recommendation}`));
     }
   }
   

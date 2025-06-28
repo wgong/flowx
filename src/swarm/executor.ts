@@ -7,12 +7,12 @@ import { EventEmitter } from 'node:events';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { Logger } from '../core/logger.js';
-import { generateId } from '../utils/helpers.js';
+import { Logger } from "../core/logger.ts";
+import { generateId } from "../utils/helpers.ts";
 import {
   TaskDefinition, AgentState, TaskResult, SwarmEvent, EventType,
   SWARM_CONSTANTS
-} from './types.js';
+} from "./types.ts";
 
 export interface ExecutionContext {
   task: TaskDefinition;

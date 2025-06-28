@@ -2,8 +2,8 @@
  * Progress Reporter - Provides visual feedback during migration
  */
 
-import * as chalk from 'chalk';
-import { MigrationProgress } from './types';
+import { colors } from '../utils/colors.ts';
+import { MigrationProgress } from './types.ts';
 
 export class ProgressReporter {
   private progress: MigrationProgress;
@@ -29,7 +29,7 @@ export class ProgressReporter {
     this.progress.current = message;
     this.startTime = new Date();
     
-    console.log(chalk.bold(`\n🚀 Starting ${phase}...`));
+    console.log(colors.bold(`\n🚀 Starting ${phase}...`));
     this.startSpinner();
   }
 
@@ -54,31 +54,31 @@ export class ProgressReporter {
     const duration = new Date().getTime() - this.startTime.getTime();
     const seconds = (duration / 1000).toFixed(2);
     
-    console.log(chalk.green(`\n✅ ${message}`));
-    console.log(chalk.gray(`   Completed in ${seconds}s`));
+    console.log(colors.hex("#00AA00")(`\n✅ ${message}`));
+    console.log(colors.gray(`   Completed in ${seconds}s`));
     
     if (this.progress.warnings > 0) {
-      console.log(chalk.yellow(`   ${this.progress.warnings} warnings`));
+      console.log(colors.hex("#FFAA00")(`   ${this.progress.warnings} warnings`));
     }
     
     if (this.progress.errors > 0) {
-      console.log(chalk.red(`   ${this.progress.errors} errors`));
+      console.log(colors.hex("#FF0000")(`   ${this.progress.errors} errors`));
     }
   }
 
   error(message: string): void {
     this.stopSpinner();
-    console.log(chalk.red(`\n❌ ${message}`));
+    console.log(colors.hex("#FF0000")(`\n❌ ${message}`));
     this.progress.errors++;
   }
 
   warning(message: string): void {
-    console.log(chalk.yellow(`⚠️  ${message}`));
+    console.log(colors.hex("#FFAA00")(`⚠️  ${message}`));
     this.progress.warnings++;
   }
 
   info(message: string): void {
-    console.log(chalk.blue(`ℹ️  ${message}`));
+    console.log(colors.hex("#0066CC")(`ℹ️  ${message}`));
   }
 
   private startSpinner(): void {
@@ -110,14 +110,14 @@ export class ProgressReporter {
 
   private getPhaseDisplay(): string {
     const phases = {
-      'analyzing': chalk.blue('📊 Analyzing'),
-      'backing-up': chalk.yellow('💾 Backing up'),
-      'migrating': chalk.green('🔄 Migrating'),
-      'validating': chalk.cyan('✅ Validating'),
-      'complete': chalk.green('✅ Complete')
+      'analyzing': colors.hex("#0066CC")('📊 Analyzing'),
+      'backing-up': colors.hex("#FFAA00")('💾 Backing up'),
+      'migrating': colors.hex("#00AA00")('🔄 Migrating'),
+      'validating': colors.cyan('✅ Validating'),
+      'complete': colors.hex("#00AA00")('✅ Complete')
     };
     
-    return phases[this.progress.phase] || chalk.gray('⏳ Processing');
+    return phases[this.progress.phase] || colors.gray('⏳ Processing');
   }
 
   private getProgressDisplay(): string {
@@ -136,7 +136,7 @@ export class ProgressReporter {
     const filledBar = '█'.repeat(filled);
     const emptyBar = '░'.repeat(empty);
     
-    return chalk.green(filledBar) + chalk.gray(emptyBar);
+    return colors.hex("#00AA00")(filledBar) + colors.gray(emptyBar);
   }
 
   setTotal(total: number): void {

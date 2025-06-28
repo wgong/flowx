@@ -4,8 +4,8 @@
  */
 
 // Node.js compatible imports
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // Polyfill for Deno's ensureDir using Node.js fs
 async function ensureDir(dirPath) {

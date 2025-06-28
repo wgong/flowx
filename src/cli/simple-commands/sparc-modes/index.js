@@ -1,22 +1,22 @@
 // index.js - SPARC mode orchestration loader
-import { getArchitectOrchestration } from './architect.js';
-import { getCodeOrchestration } from './code.js';
-import { getTddOrchestration } from './tdd.js';
-import { getDebugOrchestration } from './debug.js';
-import { getSecurityReviewOrchestration } from './security-review.js';
-import { getDocsWriterOrchestration } from './docs-writer.js';
-import { getIntegrationOrchestration } from './integration.js';
-import { getMonitoringOrchestration } from './monitoring.js';
-import { getOptimizationOrchestration } from './optimization.js';
-import { getSupabaseAdminOrchestration } from './supabase-admin.js';
-import { getSpecPseudocodeOrchestration } from './spec-pseudocode.js';
-import { getMcpOrchestration } from './mcp.js';
-import { getDevOpsOrchestration } from './devops.js';
-import { getAskOrchestration } from './ask.js';
-import { getTutorialOrchestration } from './tutorial.js';
-import { getSparcOrchestratorOrchestration } from './sparc-orchestrator.js';
-import { getGenericOrchestration } from './generic.js';
-import { getSwarmOrchestration } from './swarm.js';
+import { getArchitectOrchestration } from "./architect.ts";
+import { getCodeOrchestration } from "./code.ts";
+import { getTddOrchestration } from "./tdd.ts";
+import { getDebugOrchestration } from "./debug.ts";
+import { getSecurityReviewOrchestration } from "./security-review.ts";
+import { getDocsWriterOrchestration } from "./docs-writer.ts";
+import { getIntegrationOrchestration } from "./integration.ts";
+import { getMonitoringOrchestration } from "./monitoring.ts";
+import { getOptimizationOrchestration } from "./optimization.ts";
+import { getSupabaseAdminOrchestration } from "./supabase-admin.ts";
+import { getSpecPseudocodeOrchestration } from "./spec-pseudocode.ts";
+import { getMcpOrchestration } from "./mcp.ts";
+import { getDevOpsOrchestration } from "./devops.ts";
+import { getAskOrchestration } from "./ask.ts";
+import { getTutorialOrchestration } from "./tutorial.ts";
+import { getSparcOrchestratorOrchestration } from "./sparc-orchestrator.ts";
+import { getGenericOrchestration } from "./generic.ts";
+import { getSwarmOrchestration } from "./swarm.ts";
 
 // Mode orchestration mapping
 const modeOrchestrations = {

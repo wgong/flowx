@@ -220,9 +220,9 @@ exit 0
     }
     
     // Node.js environment - use background script
-    const { execSync } = await import('child_process');
-    const path = await import('path');
-    const fs = await import('fs');
+    const { execSync } = await import('node:child_process');
+    const path = await import('node:path');
+    const fs = await import('node:fs');
     
     const objective = (args || []).join(' ').trim();
     
@@ -287,7 +287,7 @@ exit 0
       
       // Try to use the swarm executor directly
       try {
-        const { executeSwarm } = await import('./swarm-executor.js');
+        const { executeSwarm } = await import("./swarm-executor.ts");
         const result = await executeSwarm(objective, flags);
         
         // If execution was successful, exit
@@ -343,10 +343,10 @@ exit 0
       
       // For actual execution in npm context, try to find and run swarm-demo.ts
       try {
-        const path = await import('path');
-        const { fileURLToPath } = await import('url');
-        const fs = await import('fs');
-        const { spawn } = await import('child_process');
+        const path = await import('node:path');
+        const { fileURLToPath } = await import('node:url');
+        const fs = await import('node:fs');
+        const { spawn } = await import('node:child_process');
         
         const __filename = fileURLToPath(import.meta.url);
         const __dirname = path.dirname(__filename);
@@ -397,7 +397,7 @@ exit 0
       
       // Try to use Claude wrapper approach like SPARC does
       try {
-        const { execSync } = await import('child_process');
+        const { execSync } = await import('node:child_process');
         
         // Check if claude command exists
         try {
@@ -494,7 +494,7 @@ IMPORTANT:
 Begin execution now. Create all necessary files and provide a complete, working solution.`;
 
         // Execute Claude non-interactively by piping the prompt
-        const { spawn } = await import('child_process');
+        const { spawn } = await import('node:child_process');
         
         const claudeArgs = [];
         
@@ -621,8 +621,8 @@ https://github.com/ruvnet/claude-code-flow/docs/swarm.md
 
 // Function to create swarm files directly
 async function createSwarmFiles(objective, flags) {
-  const fs = await import('fs');
-  const path = await import('path');
+  const fs = await import('node:fs');
+  const path = await import('node:path');
   
   const swarmId = `swarm_${Math.random().toString(36).substring(2, 11)}_${Math.random().toString(36).substring(2, 11)}`;
   

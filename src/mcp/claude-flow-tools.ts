@@ -2,9 +2,9 @@
  * Claude-Flow specific MCP tools
  */
 
-import { MCPTool, MCPContext, AgentProfile, Task, MemoryEntry } from '../utils/types.js';
-import { ILogger } from '../core/logger.js';
-import { Permissions } from './auth.js';
+import { MCPTool, MCPContext, AgentProfile, Task, MemoryEntry } from "../utils/types.ts";
+import { ILogger } from "../core/logger.ts";
+import { Permissions } from "./auth.ts";
 
 export interface ClaudeFlowToolContext extends MCPContext {
   orchestrator?: any; // Reference to orchestrator instance

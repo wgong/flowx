@@ -2,12 +2,12 @@
  * Native terminal adapter implementation
  */
 
-import { spawn, ChildProcess } from 'child_process';
-import { platform } from 'os';
-import { ITerminalAdapter, Terminal } from './base.js';
-import { ILogger } from '../../core/logger.js';
-import { TerminalError, TerminalCommandError } from '../../utils/errors.js';
-import { generateId, delay, timeout, createDeferred } from '../../utils/helpers.js';
+import { spawn, ChildProcess } from 'node:child_process';
+import { platform } from 'node:os';
+import { ITerminalAdapter, Terminal } from "./base.ts";
+import { ILogger } from "../../core/logger.ts";
+import { TerminalError, TerminalCommandError } from "../../utils/errors.ts";
+import { generateId, delay, timeout, createDeferred } from "../../utils/helpers.ts";
 
 /**
  * Platform-specific shell configuration
@@ -383,7 +383,7 @@ export class NativeAdapter implements ITerminalAdapter {
     // Verify shell is available
     try {
       const testConfig = this.getTestCommand();
-      const { spawnSync } = require('child_process');
+      const { spawnSync } = require('node:child_process');
       const result = spawnSync(testConfig.cmd, testConfig.args, { stdio: 'ignore' });
       
       if (result.status !== 0) {
@@ -431,7 +431,7 @@ export class NativeAdapter implements ITerminalAdapter {
       
       // Check if PowerShell is available
       try {
-        const { spawnSync } = require('child_process');
+        const { spawnSync } = require('node:child_process');
         const result = spawnSync('powershell', ['-Version'], { stdio: 'ignore' });
         if (result.status === 0) {
           return 'powershell';
@@ -455,7 +455,7 @@ export class NativeAdapter implements ITerminalAdapter {
       const shells = ['bash', 'zsh', 'sh'];
       for (const shell of shells) {
         try {
-          const { spawnSync } = require('child_process');
+          const { spawnSync } = require('node:child_process');
           const result = spawnSync('which', [shell], { stdio: 'ignore' });
           if (result.status === 0) {
             return shell;

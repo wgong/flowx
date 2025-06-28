@@ -2,8 +2,8 @@
  * Simple MCP command implementation for Node.js compatibility
  */
 
-import { Command } from 'commander';
-import http from 'http';
+import { Command } from 'npm:commander';
+import http from 'node:http';
 
 function printSuccess(message: string) {
   console.log(`✅ ${message}`);

@@ -3,12 +3,12 @@
  * Implements comprehensive memory operations with advanced capabilities
  */
 
-import { Command } from 'commander';
+import { Command } from 'npm:commander';
 import { promises as fs } from 'node:fs';
 import { join, extname, basename } from 'node:path';
-import chalk from 'chalk';
-import { AdvancedMemoryManager, QueryOptions, ExportOptions, ImportOptions, CleanupOptions } from '../../memory/advanced-memory-manager.js';
-import { Logger } from '../../core/logger.js';
+import chalk from 'npm:chalk';
+import { AdvancedMemoryManager, QueryOptions, ExportOptions, ImportOptions, CleanupOptions } from "../../memory/advanced-memory-manager.ts";
+import { Logger } from "../../core/logger.ts";
 
 // Initialize logger
 const logger = Logger.getInstance();
@@ -18,19 +18,19 @@ let memoryManager: AdvancedMemoryManager | null = null;
 
 // Helper functions
 function printSuccess(message: string): void {
-  console.log(chalk.green(`✅ ${message}`));
+  console.log(chalk.hex("#00AA00")(`✅ ${message}`));
 }
 
 function printError(message: string): void {
-  console.error(chalk.red(`❌ ${message}`));
+  console.error(chalk.hex("#FF0000")(`❌ ${message}`));
 }
 
 function printWarning(message: string): void {
-  console.warn(chalk.yellow(`⚠️  ${message}`));
+  console.warn(chalk.hex("#FFAA00")(`⚠️  ${message}`));
 }
 
 function printInfo(message: string): void {
-  console.log(chalk.blue(`ℹ️  ${message}`));
+  console.log(chalk.hex("#0066CC")(`ℹ️  ${message}`));
 }
 
 function formatBytes(bytes: number): string {
@@ -193,7 +193,7 @@ export function createAdvancedMemoryCommand(): Command {
                 ? entry.value.substring(0, 100) + '...'
                 : JSON.stringify(entry.value);
 
-              console.log(chalk.blue(`${i + 1}. ${entry.key}`));
+              console.log(chalk.hex("#0066CC")(`${i + 1}. ${entry.key}`));
               console.log(`   Type: ${entry.type} | Namespace: ${entry.namespace} | Size: ${formatBytes(entry.size)}`);
               console.log(`   Tags: [${entry.tags.join(', ')}]`);
               console.log(`   Value: ${value}`);
@@ -211,7 +211,7 @@ export function createAdvancedMemoryCommand(): Command {
         if (result.aggregations) {
           console.log(chalk.cyan('\n📊 Aggregations:\n'));
           for (const [key, value] of Object.entries(result.aggregations)) {
-            console.log(chalk.yellow(`${key}:`));
+            console.log(chalk.hex("#FFAA00")(`${key}:`));
             for (const [subKey, stats] of Object.entries(value as Record<string, any>)) {
               console.log(`  ${subKey}: ${stats.count} entries, ${formatBytes(stats.totalSize)}`);
             }
@@ -413,25 +413,25 @@ export function createAdvancedMemoryCommand(): Command {
         printSuccess(`Import completed in ${formatDuration(duration)}`);
         
         if (result.entriesImported > 0) {
-          console.log(chalk.green(`📥 Imported: ${result.entriesImported} entries`));
+          console.log(chalk.hex("#00AA00")(`📥 Imported: ${result.entriesImported} entries`));
         }
         if (result.entriesUpdated > 0) {
-          console.log(chalk.blue(`🔄 Updated: ${result.entriesUpdated} entries`));
+          console.log(chalk.hex("#0066CC")(`🔄 Updated: ${result.entriesUpdated} entries`));
         }
         if (result.entriesSkipped > 0) {
-          console.log(chalk.yellow(`⏭️  Skipped: ${result.entriesSkipped} entries`));
+          console.log(chalk.hex("#FFAA00")(`⏭️  Skipped: ${result.entriesSkipped} entries`));
         }
         if (result.conflicts.length > 0) {
-          console.log(chalk.red(`⚠️  Conflicts: ${result.conflicts.length}`));
+          console.log(chalk.hex("#FF0000")(`⚠️  Conflicts: ${result.conflicts.length}`));
           if (result.conflicts.length <= 10) {
             result.conflicts.forEach(conflict => {
-              console.log(chalk.red(`   • ${conflict}`));
+              console.log(chalk.hex("#FF0000")(`   • ${conflict}`));
             });
           } else {
             result.conflicts.slice(0, 10).forEach(conflict => {
-              console.log(chalk.red(`   • ${conflict}`));
+              console.log(chalk.hex("#FF0000")(`   • ${conflict}`));
             });
-            console.log(chalk.red(`   ... and ${result.conflicts.length - 10} more`));
+            console.log(chalk.hex("#FF0000")(`   ... and ${result.conflicts.length - 10} more`));
           }
         }
 
@@ -478,7 +478,7 @@ export function createAdvancedMemoryCommand(): Command {
         console.log(chalk.cyan.bold('🧠 Memory System Statistics\n'));
 
         // Overview
-        console.log(chalk.yellow('📊 Overview:'));
+        console.log(chalk.hex("#FFAA00")('📊 Overview:'));
         console.log(`   Total Entries: ${stats.overview.totalEntries.toLocaleString()}`);
         console.log(`   Total Size: ${formatBytes(stats.overview.totalSize)}`);
         console.log(`   Compressed Entries: ${stats.overview.compressedEntries.toLocaleString()} (${(stats.overview.compressionRatio * 100).toFixed(1)}% compression)`);
@@ -488,7 +488,7 @@ export function createAdvancedMemoryCommand(): Command {
         console.log();
 
         // Distribution
-        console.log(chalk.yellow('📈 Distribution:'));
+        console.log(chalk.hex("#FFAA00")('📈 Distribution:'));
         
         if (Object.keys(stats.distribution.byNamespace).length > 0) {
           console.log('   By Namespace:');
@@ -513,7 +513,7 @@ export function createAdvancedMemoryCommand(): Command {
         console.log();
 
         // Temporal
-        console.log(chalk.yellow('⏰ Temporal Analysis:'));
+        console.log(chalk.hex("#FFAA00")('⏰ Temporal Analysis:'));
         console.log(`   Created Last 24h: ${stats.temporal.entriesCreatedLast24h}`);
         console.log(`   Updated Last 24h: ${stats.temporal.entriesUpdatedLast24h}`);
         console.log(`   Accessed Last 24h: ${stats.temporal.entriesAccessedLast24h}`);
@@ -526,7 +526,7 @@ export function createAdvancedMemoryCommand(): Command {
         console.log();
 
         // Performance
-        console.log(chalk.yellow('⚡ Performance:'));
+        console.log(chalk.hex("#FFAA00")('⚡ Performance:'));
         console.log(`   Average Query Time: ${formatDuration(stats.performance.averageQueryTime)}`);
         console.log(`   Average Write Time: ${formatDuration(stats.performance.averageWriteTime)}`);
         console.log(`   Cache Hit Ratio: ${(stats.performance.cacheHitRatio * 100).toFixed(1)}%`);
@@ -534,7 +534,7 @@ export function createAdvancedMemoryCommand(): Command {
         console.log();
 
         // Health
-        console.log(chalk.yellow('🏥 Health:'));
+        console.log(chalk.hex("#FFAA00")('🏥 Health:'));
         const healthColor = stats.health.recommendedCleanup ? chalk.red : chalk.green;
         console.log(`   Status: ${healthColor(stats.health.recommendedCleanup ? 'Needs Attention' : 'Healthy')}`);
         console.log(`   Expired Entries: ${stats.health.expiredEntries}`);
@@ -545,13 +545,13 @@ export function createAdvancedMemoryCommand(): Command {
 
         // Optimization
         if (stats.optimization.suggestions.length > 0) {
-          console.log(chalk.yellow('💡 Optimization Suggestions:'));
+          console.log(chalk.hex("#FFAA00")('💡 Optimization Suggestions:'));
           stats.optimization.suggestions.forEach(suggestion => {
             console.log(`   • ${suggestion}`);
           });
           console.log();
 
-          console.log(chalk.yellow('💰 Potential Savings:'));
+          console.log(chalk.hex("#FFAA00")('💰 Potential Savings:'));
           console.log(`   Compression: ${formatBytes(stats.optimization.potentialSavings.compression)}`);
           console.log(`   Cleanup: ${formatBytes(stats.optimization.potentialSavings.cleanup)}`);
           console.log(`   Deduplication: ${formatBytes(stats.optimization.potentialSavings.deduplication)}`);
@@ -559,7 +559,7 @@ export function createAdvancedMemoryCommand(): Command {
         }
 
         if (options.detailed && stats.optimization.indexOptimization.length > 0) {
-          console.log(chalk.yellow('🔍 Index Optimization:'));
+          console.log(chalk.hex("#FFAA00")('🔍 Index Optimization:'));
           stats.optimization.indexOptimization.forEach(suggestion => {
             console.log(`   • ${suggestion}`);
           });
@@ -657,16 +657,16 @@ export function createAdvancedMemoryCommand(): Command {
         printSuccess(`Cleanup completed in ${formatDuration(duration)}`);
 
         if (result.entriesRemoved > 0) {
-          console.log(chalk.red(`🗑️  Removed: ${result.entriesRemoved} entries`));
+          console.log(chalk.hex("#FF0000")(`🗑️  Removed: ${result.entriesRemoved} entries`));
         }
         if (result.entriesArchived > 0) {
-          console.log(chalk.blue(`📦 Archived: ${result.entriesArchived} entries`));
+          console.log(chalk.hex("#0066CC")(`📦 Archived: ${result.entriesArchived} entries`));
         }
         if (result.entriesCompressed > 0) {
-          console.log(chalk.green(`🗜️  Compressed: ${result.entriesCompressed} entries`));
+          console.log(chalk.hex("#00AA00")(`🗜️  Compressed: ${result.entriesCompressed} entries`));
         }
         if (result.spaceSaved > 0) {
-          console.log(chalk.yellow(`💾 Space Saved: ${formatBytes(result.spaceSaved)}`));
+          console.log(chalk.hex("#FFAA00")(`💾 Space Saved: ${formatBytes(result.spaceSaved)}`));
         }
 
         if (result.actions.length > 0) {
@@ -891,7 +891,7 @@ export function createAdvancedMemoryCommand(): Command {
 
         for (const [i, entry] of result.entries.entries()) {
           const num = options.offset + i + 1;
-          console.log(chalk.blue(`${num}. ${entry.key}`));
+          console.log(chalk.hex("#0066CC")(`${num}. ${entry.key}`));
           console.log(`   Namespace: ${entry.namespace} | Type: ${entry.type} | Size: ${formatBytes(entry.size)}`);
           console.log(`   Updated: ${entry.updatedAt.toLocaleString()}`);
           

@@ -3,9 +3,8 @@
  * Claude-Flow CLI - Core implementation using Node.js
  */
 
-import chalk from "chalk";
-import fs from "fs-extra";
-import path from "path";
+import { chalk, fsExtra as fs, path } from "../utils/imports.ts";
+import { getEnv, cwd, exit } from "../utils/runtime-env.ts";
 
 export const VERSION = "1.0.43";
 
@@ -71,7 +70,7 @@ class CLI {
 
   command(cmd: Command): this {
     this.commands.set(cmd.name, cmd);
-    if (cmd.aliases) {
+    if (cmd.aliases && Array.isArray(cmd.aliases)) {
       for (const alias of cmd.aliases) {
         this.commands.set(alias, cmd);
       }
@@ -97,7 +96,7 @@ class CLI {
 
     const command = this.commands.get(commandName);
     if (!command) {
-      console.error(chalk.red(`Unknown command: ${commandName}`));
+      console.error(chalk.hex("#FF0000")(`Unknown command: ${commandName}`));
       console.log(`Run "${this.name} help" for available commands`);
       process.exit(1);
     }
@@ -112,10 +111,10 @@ class CLI {
       if (command.action) {
         await command.action(ctx);
       } else {
-        console.log(chalk.yellow(`Command '${commandName}' has no action defined`));
+        console.log(chalk.hex("#FFAA00")(`Command '${commandName}' has no action defined`));
       }
     } catch (error) {
-      console.error(chalk.red(`Error executing command '${commandName}':`), (error as Error).message);
+      console.error(chalk.hex("#FF0000")(`Error executing command '${commandName}':`), (error as Error).message);
       if (flags.verbose) {
         console.error(error);
       }
@@ -221,7 +220,7 @@ class CLI {
 
   private showHelp(): void {
     console.log(`
-${chalk.bold(chalk.blue(`🧠 ${this.name} v${VERSION}`))} - ${this.description}
+${chalk.bold(chalk.hex("#0066CC")(`🧠 ${this.name} v${VERSION}`))} - ${this.description}
 
 ${chalk.bold("USAGE:")}
   ${this.name} [COMMAND] [OPTIONS]
@@ -252,7 +251,11 @@ Created by rUv - Built with ❤️ for the Claude community
   private formatCommands(): string {
     const commands = Array.from(new Set(this.commands.values()));
     return commands
-      .map(cmd => `  ${cmd.name.padEnd(20)} ${cmd.description}`)
+      .map(cmd => {
+        const name = String(cmd.name || 'unknown');
+        const description = String(cmd.description || '');
+        return `  ${name.padEnd(20)} ${description}`;
+      })
       .join("\n");
   }
 
@@ -268,19 +271,19 @@ Created by rUv - Built with ❤️ for the Claude community
 
 // Helper functions
 function success(message: string): void {
-  console.log(chalk.green(`✅ ${message}`));
+  console.log(chalk.hex("#00AA00")(`✅ ${message}`));
 }
 
 function error(message: string): void {
-  console.error(chalk.red(`❌ ${message}`));
+  console.error(chalk.hex("#FF0000")(`❌ ${message}`));
 }
 
 function warning(message: string): void {
-  console.warn(chalk.yellow(`⚠️  ${message}`));
+  console.warn(chalk.hex("#FFAA00")(`⚠️  ${message}`));
 }
 
 function info(message: string): void {
-  console.log(chalk.blue(`ℹ️  ${message}`));
+  console.log(chalk.hex("#0066CC")(`ℹ️  ${message}`));
 }
 
 // Export for use in other modules
@@ -293,7 +296,7 @@ async function main() {
     const cli = new CLI("claude-flow", "Advanced AI Agent Orchestration System");
 
     // Import and register all commands
-    const { setupCommands } = await import("./commands/index.js");
+    const { setupCommands } = await import("./commands/index.ts");
     setupCommands(cli);
 
     // Run the CLI

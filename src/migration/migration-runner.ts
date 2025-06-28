@@ -2,9 +2,10 @@
  * Migration Runner - Executes migration strategies
  */
 
-import * as fs from 'fs-extra';
-import * as path from 'path';
-import * as crypto from 'crypto';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { 
   MigrationOptions, 
   MigrationResult, 
@@ -13,14 +14,15 @@ import {
   ValidationResult,
   MigrationProgress,
   MigrationManifest
-} from './types';
-import { MigrationAnalyzer } from './migration-analyzer';
-import { logger } from './logger';
-import { ProgressReporter } from './progress-reporter';
-import { MigrationValidator } from './migration-validator';
-import { glob } from 'glob';
-import * as inquirer from 'inquirer';
-import * as chalk from 'chalk';
+} from './types.ts';
+import { MigrationAnalyzer } from './migration-analyzer.ts';
+import { logger } from './logger.ts';
+import { ProgressReporter } from './progress-reporter.ts';
+import { MigrationValidator } from './migration-validator.ts';
+import globPkg from 'npm:glob';
+const { glob } = globPkg;
+import * as inquirer from 'npm:inquirer';
+import { colors } from '../utils/colors.ts';
 
 export class MigrationRunner {
   private options: MigrationOptions;
@@ -312,7 +314,7 @@ export class MigrationRunner {
         backup.files.push({
           path: `.claude/${file}`,
           content,
-          checksum: crypto.createHash('md5').update(content).digest('hex')
+          checksum: createHash('md5').update(content).digest('hex')
         });
       }
     }
@@ -327,7 +329,7 @@ export class MigrationRunner {
         backup.files.push({
           path: file,
           content,
-          checksum: crypto.createHash('md5').update(content).digest('hex')
+          checksum: createHash('md5').update(content).digest('hex')
         });
       }
     }
@@ -417,15 +419,15 @@ export class MigrationRunner {
       return;
     }
 
-    console.log(chalk.bold('\n📦 Available Backups'));
-    console.log(chalk.gray('─'.repeat(50)));
+    console.log(colors.bold('\n📦 Available Backups'));
+    console.log(colors.gray('─'.repeat(50)));
 
     for (const backup of backups.sort().reverse()) {
       const backupPath = path.join(backupDir, backup);
       const stats = await fs.stat(backupPath);
       const manifest = await fs.readJson(path.join(backupPath, 'backup.json')).catch(() => null);
 
-      console.log(`\n${chalk.bold(backup)}`);
+      console.log(`\n${colors.bold(backup)}`);
       console.log(`  Created: ${stats.mtime.toLocaleString()}`);
       console.log(`  Size: ${(stats.size / 1024).toFixed(2)} KB`);
       
@@ -436,7 +438,7 @@ export class MigrationRunner {
       }
     }
 
-    console.log(chalk.gray('\n' + '─'.repeat(50)));
+    console.log(colors.gray('\n' + '─'.repeat(50)));
   }
 
   private async confirmMigration(analysis: any): Promise<boolean> {
@@ -517,42 +519,42 @@ export class MigrationRunner {
   }
 
   private printSummary(result: MigrationResult): void {
-    console.log(chalk.bold('\n📋 Migration Summary'));
-    console.log(chalk.gray('─'.repeat(50)));
+    console.log(colors.bold('\n📋 Migration Summary'));
+    console.log(colors.gray('─'.repeat(50)));
 
-    console.log(`\n${chalk.bold('Status:')} ${result.success ? chalk.green('Success') : chalk.red('Failed')}`);
+    console.log(`\n${colors.bold('Status:')} ${result.success ? colors.hex("#00AA00")('Success') : colors.hex("#FF0000")('Failed')}`);
     
     if (result.filesCreated.length > 0) {
-      console.log(`\n${chalk.bold('Files Created:')} ${chalk.green(result.filesCreated.length)}`);
+      console.log(`\n${colors.bold('Files Created:')} ${colors.hex("#00AA00")(result.filesCreated.length)}`);
       if (result.filesCreated.length <= 10) {
         result.filesCreated.forEach(file => console.log(`  • ${file}`));
       }
     }
 
     if (result.filesModified.length > 0) {
-      console.log(`\n${chalk.bold('Files Modified:')} ${chalk.yellow(result.filesModified.length)}`);
+      console.log(`\n${colors.bold('Files Modified:')} ${colors.hex("#FFAA00")(result.filesModified.length)}`);
       result.filesModified.forEach(file => console.log(`  • ${file}`));
     }
 
     if (result.filesBackedUp.length > 0) {
-      console.log(`\n${chalk.bold('Files Backed Up:')} ${chalk.blue(result.filesBackedUp.length)}`);
+      console.log(`\n${colors.bold('Files Backed Up:')} ${colors.hex("#0066CC")(result.filesBackedUp.length)}`);
     }
 
     if (result.warnings.length > 0) {
-      console.log(`\n${chalk.bold('Warnings:')}`);
+      console.log(`\n${colors.bold('Warnings:')}`);
       result.warnings.forEach(warning => console.log(`  ⚠️  ${warning}`));
     }
 
     if (result.errors.length > 0) {
-      console.log(`\n${chalk.bold('Errors:')}`);
+      console.log(`\n${colors.bold('Errors:')}`);
       result.errors.forEach(error => console.log(`  ❌ ${error.error}`));
     }
 
     if (result.rollbackPath) {
-      console.log(`\n${chalk.bold('Rollback Available:')} ${result.rollbackPath}`);
-      console.log(chalk.gray(`  Run "claude-flow migrate rollback -t ${result.rollbackPath}" to revert`));
+      console.log(`\n${colors.bold('Rollback Available:')} ${result.rollbackPath}`);
+      console.log(colors.gray(`  Run "claude-flow migrate rollback -t ${result.rollbackPath}" to revert`));
     }
 
-    console.log(chalk.gray('\n' + '─'.repeat(50)));
+    console.log(colors.gray('\n' + '─'.repeat(50)));
   }
 }

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { Command } from 'commander';
-import * as path from 'path';
-import { copyPrompts, copyPromptsEnhanced } from './prompt-copier-enhanced';
+import { Command } from 'npm:commander';
+import * as path from 'node:path';
+import { copyPrompts, copyPromptsEnhanced } from './prompt-copier-enhanced.ts';
 import { 
   PromptConfigManager, 
   PromptPathResolver, 
@@ -10,8 +10,8 @@ import {
   createProgressBar,
   formatFileSize,
   formatDuration
-} from './prompt-utils';
-import { logger } from '../logger';
+} from './prompt-utils.ts';
+import { logger } from '../logger.ts';
 
 const program = new Command();
 
@@ -141,7 +141,7 @@ program
   .option('--recursive', 'Validate recursively')
   .action(async (filePath, options) => {
     try {
-      const stats = await require('fs').promises.stat(filePath);
+      const stats = await require('node:fs').promises.stat(filePath);
       const files: string[] = [];
       
       if (stats.isFile()) {
@@ -149,7 +149,7 @@ program
       } else if (stats.isDirectory()) {
         // Scan directory for prompt files
         const scanDir = async (dir: string) => {
-          const entries = await require('fs').promises.readdir(dir, { withFileTypes: true });
+          const entries = await require('node:fs').promises.readdir(dir, { withFileTypes: true });
           
           for (const entry of entries) {
             const fullPath = path.join(dir, entry.name);
@@ -244,7 +244,7 @@ program
   .argument('<manifest>', 'Path to backup manifest file')
   .action(async (manifestPath) => {
     try {
-      const { PromptCopier } = await import('./prompt-copier');
+      const { PromptCopier } = await import('./prompt-copier.ts');
       const copier = new PromptCopier({
         source: '',
         destination: ''

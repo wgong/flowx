@@ -2,13 +2,14 @@
  * Migration Analyzer - Analyzes existing projects for migration readiness
  */
 
-import * as fs from 'fs-extra';
-import * as path from 'path';
-import * as crypto from 'crypto';
-import { MigrationAnalysis, MigrationRisk } from './types';
-import { logger } from './logger';
-import * as chalk from 'chalk';
-import { glob } from 'glob';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import * as crypto from 'node:crypto';
+import { MigrationAnalysis, MigrationRisk, MigrationConfig } from './types.ts';
+import { logger } from './logger.ts';
+import { colors } from '../utils/colors.ts';
+import globPkg from 'npm:glob';
+const { glob } = globPkg;
 
 export class MigrationAnalyzer {
   private optimizedCommands = [
@@ -228,34 +229,34 @@ export class MigrationAnalyzer {
   }
 
   printAnalysis(analysis: MigrationAnalysis, detailed: boolean = false): void {
-    console.log(chalk.bold('\n📊 Migration Analysis Report'));
-    console.log(chalk.gray('─'.repeat(50)));
+    console.log(colors.bold('\n📊 Migration Analysis Report'));
+    console.log(colors.gray('─'.repeat(50)));
     
-    console.log(`\n${chalk.bold('Project:')} ${analysis.projectPath}`);
-    console.log(`${chalk.bold('Timestamp:')} ${analysis.timestamp.toISOString()}`);
+    console.log(`\n${colors.bold('Project:')} ${analysis.projectPath}`);
+    console.log(`${colors.bold('Timestamp:')} ${analysis.timestamp.toISOString()}`);
     
     // Status
-    console.log(chalk.bold('\n📋 Current Status:'));
-    console.log(`  • .claude folder: ${analysis.hasClaudeFolder ? chalk.green('✓') : chalk.red('✗')}`);
-    console.log(`  • Optimized prompts: ${analysis.hasOptimizedPrompts ? chalk.green('✓') : chalk.red('✗')}`);
-    console.log(`  • Custom commands: ${analysis.customCommands.length > 0 ? chalk.yellow(analysis.customCommands.length) : chalk.green('0')}`);
-    console.log(`  • Conflicts: ${analysis.conflictingFiles.length > 0 ? chalk.yellow(analysis.conflictingFiles.length) : chalk.green('0')}`);
+    console.log(colors.bold('\n📋 Current Status:'));
+    console.log(`  • .claude folder: ${analysis.hasClaudeFolder ? colors.hex("#00AA00")('✓') : colors.hex("#FF0000")('✗')}`);
+    console.log(`  • Optimized prompts: ${analysis.hasOptimizedPrompts ? colors.hex("#00AA00")('✓') : colors.hex("#FF0000")('✗')}`);
+    console.log(`  • Custom commands: ${analysis.customCommands.length > 0 ? colors.hex("#FFAA00")(analysis.customCommands.length) : colors.hex("#00AA00")('0')}`);
+    console.log(`  • Conflicts: ${analysis.conflictingFiles.length > 0 ? colors.hex("#FFAA00")(analysis.conflictingFiles.length) : colors.hex("#00AA00")('0')}`);
     
     // Risks
     if (analysis.migrationRisks.length > 0) {
-      console.log(chalk.bold('\n⚠️  Migration Risks:'));
+      console.log(colors.bold('\n⚠️  Migration Risks:'));
       analysis.migrationRisks.forEach(risk => {
         const icon = risk.level === 'high' ? '🔴' : risk.level === 'medium' ? '🟡' : '🟢';
-        console.log(`  ${icon} ${chalk.bold(risk.level.toUpperCase())}: ${risk.description}`);
+        console.log(`  ${icon} ${colors.bold(risk.level.toUpperCase())}: ${risk.description}`);
         if (risk.mitigation) {
-          console.log(`     ${chalk.gray('→')} ${chalk.italic(risk.mitigation)}`);
+          console.log(`     ${colors.gray('→')} ${colors.italic(risk.mitigation)}`);
         }
       });
     }
     
     // Recommendations
     if (analysis.recommendations.length > 0) {
-      console.log(chalk.bold('\n💡 Recommendations:'));
+      console.log(colors.bold('\n💡 Recommendations:'));
       analysis.recommendations.forEach(rec => {
         console.log(`  • ${rec}`);
       });
@@ -264,28 +265,28 @@ export class MigrationAnalyzer {
     // Detailed information
     if (detailed) {
       if (analysis.customCommands.length > 0) {
-        console.log(chalk.bold('\n🔧 Custom Commands:'));
+        console.log(colors.bold('\n🔧 Custom Commands:'));
         analysis.customCommands.forEach(cmd => {
           console.log(`  • ${cmd}`);
         });
       }
       
       if (analysis.conflictingFiles.length > 0) {
-        console.log(chalk.bold('\n📁 Conflicting Files:'));
+        console.log(colors.bold('\n📁 Conflicting Files:'));
         analysis.conflictingFiles.forEach(file => {
           console.log(`  • ${file}`);
         });
       }
       
       if (Object.keys(analysis.customConfigurations).length > 0) {
-        console.log(chalk.bold('\n⚙️  Configurations:'));
+        console.log(colors.bold('\n⚙️  Configurations:'));
         Object.entries(analysis.customConfigurations).forEach(([file, config]) => {
           console.log(`  • ${file}: ${JSON.stringify(config, null, 2)}`);
         });
       }
     }
     
-    console.log(chalk.gray('\n' + '─'.repeat(50)));
+    console.log(colors.gray('\n' + '─'.repeat(50)));
   }
 
   async saveAnalysis(analysis: MigrationAnalysis, outputPath: string): Promise<void> {

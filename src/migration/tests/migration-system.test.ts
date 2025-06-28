@@ -4,14 +4,14 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'jest';
-import * as fs from 'fs-extra';
-import * as path from 'path';
-import * as os from 'os';
-import { MigrationRunner } from '../migration-runner';
-import { MigrationAnalyzer } from '../migration-analyzer';
-import { RollbackManager } from '../rollback-manager';
-import { MigrationValidator } from '../migration-validator';
-import { MigrationStrategy } from '../types';
+import * as fs from 'npm:fs-extra';
+import * as path from 'node:path';
+import * as os from 'node:os';
+import { MigrationRunner } from '../migration-runner.ts';
+import { MigrationAnalyzer } from '../migration-analyzer.ts';
+import { RollbackManager } from '../rollback-manager.ts';
+import { MigrationValidator } from '../migration-validator.ts';
+import { MigrationStrategy } from '../types.ts';
 
 describe('Migration System', () => {
   let testDir: string;

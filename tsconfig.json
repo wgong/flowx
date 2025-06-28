@@ -29,6 +29,8 @@
     "skipLibCheck": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "lib": ["ES2022", "DOM"],
     "types": ["node", "jest"],
     "typeRoots": ["./node_modules/@types", "./src/types"]

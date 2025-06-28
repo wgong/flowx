@@ -8,8 +8,8 @@ import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ILogger } from '../core/logger.js';
-import { generateId } from '../utils/helpers.js';
+import { ILogger } from "../core/logger.ts";
+import { generateId } from "../utils/helpers.ts";
 
 // === INTERFACES ===
 

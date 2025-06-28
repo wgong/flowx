@@ -35,7 +35,7 @@ describe('Rollback Mechanism Tests', () => {
           id: 2,
           type: 'update',
           path: 'src/index.js',
-          content: 'import { feature1 } from "./new-file1";\nconsole.log("Updated");'
+          content: 'import { feature1 } from "./new-file1.ts";\nconsole.log("Updated");'
         },
         {
           id: 3,

@@ -1,6 +1,6 @@
 const { TestHarness } = require('../test-harness');
 const assert = require('assert');
-const os = require('os');
+const os = require('node:os');
 
 describe('Resource Usage Tests', () => {
   let harness;

@@ -2,9 +2,9 @@
  * Migration Logger - Structured logging for migration operations
  */
 
-import * as fs from 'fs-extra';
-import * as path from 'path';
-import * as chalk from 'chalk';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { colors } from '../utils/colors.ts';
 
 export interface LogEntry {
   timestamp: Date;
@@ -24,31 +24,31 @@ export class MigrationLogger {
 
   info(message: string, context?: any): void {
     this.log('info', message, context);
-    console.log(chalk.blue(`ℹ️  ${message}`));
+    console.log(colors.hex("#0066CC")(`ℹ️  ${message}`));
   }
 
   warn(message: string, context?: any): void {
     this.log('warn', message, context);
-    console.log(chalk.yellow(`⚠️  ${message}`));
+    console.log(colors.hex("#FFAA00")(`⚠️  ${message}`));
   }
 
   error(message: string, error?: Error | any, context?: any): void {
     this.log('error', message, context, error?.stack);
-    console.log(chalk.red(`❌ ${message}`));
+    console.log(colors.hex("#FF0000")(`❌ ${message}`));
     if (error && error.message !== message) {
-      console.log(chalk.red(`   ${error.message}`));
+      console.log(colors.hex("#FF0000")(`   ${error.message}`));
     }
   }
 
   success(message: string, context?: any): void {
     this.log('success', message, context);
-    console.log(chalk.green(`✅ ${message}`));
+    console.log(colors.hex("#00AA00")(`✅ ${message}`));
   }
 
   debug(message: string, context?: any): void {
     if (process.env.DEBUG === 'true' || process.env.NODE_ENV === 'development') {
       this.log('debug', message, context);
-      console.log(chalk.gray(`🔍 ${message}`));
+      console.log(colors.gray(`🔍 ${message}`));
     }
   }
 
@@ -110,17 +110,17 @@ export class MigrationLogger {
       debug: this.getEntriesByLevel('debug').length
     };
 
-    console.log(chalk.bold('\n📊 Migration Log Summary'));
-    console.log(chalk.gray('─'.repeat(30)));
+    console.log(colors.bold('\n📊 Migration Log Summary'));
+    console.log(colors.gray('─'.repeat(30)));
     console.log(`Total entries: ${summary.total}`);
-    console.log(`${chalk.blue('Info:')} ${summary.info}`);
-    console.log(`${chalk.green('Success:')} ${summary.success}`);
-    console.log(`${chalk.yellow('Warnings:')} ${summary.warn}`);
-    console.log(`${chalk.red('Errors:')} ${summary.error}`);
+    console.log(`${colors.hex("#0066CC")('Info:')} ${summary.info}`);
+    console.log(`${colors.hex("#00AA00")('Success:')} ${summary.success}`);
+    console.log(`${colors.hex("#FFAA00")('Warnings:')} ${summary.warn}`);
+    console.log(`${colors.hex("#FF0000")('Errors:')} ${summary.error}`);
     if (summary.debug > 0) {
-      console.log(`${chalk.gray('Debug:')} ${summary.debug}`);
+      console.log(`${colors.gray('Debug:')} ${summary.debug}`);
     }
-    console.log(chalk.gray('─'.repeat(30)));
+    console.log(colors.gray('─'.repeat(30)));
   }
 }
 

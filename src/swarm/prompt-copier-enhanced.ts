@@ -1,8 +1,8 @@
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { Worker } from 'worker_threads';
-import { PromptCopier, CopyOptions, CopyResult, FileInfo } from './prompt-copier';
-import { logger } from '../logger';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { Worker } from 'node:worker_threads';
+import { PromptCopier, CopyOptions, CopyResult, FileInfo } from './prompt-copier.ts';
+import { logger } from '../logger.ts';
 
 interface WorkerPool {
   workers: Worker[];

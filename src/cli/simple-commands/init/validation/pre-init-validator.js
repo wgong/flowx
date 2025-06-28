@@ -1,6 +1,6 @@
 // pre-init-validator.js - Pre-initialization validation checks
 
-import { printWarning } from '../../../utils.js';
+import { printWarning } from "../../../utils.ts";
 
 export class PreInitValidator {
   constructor(workingDir) {

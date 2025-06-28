@@ -5,9 +5,9 @@
 import { Input, Confirm, Select } from '@cliffy/prompt';
 import { colors } from '@cliffy/ansi/colors';
 import { Table } from '@cliffy/table';
-import { AgentProfile, Task } from '../utils/types.js';
-import { generateId } from '../utils/helpers.js';
-import { formatStatusIndicator, formatDuration, formatProgressBar } from './formatter.js';
+import { AgentProfile, Task } from "../utils/types.ts";
+import { generateId } from "../utils/helpers.ts";
+import { formatStatusIndicator, formatDuration, formatProgressBar } from "./formatter.ts";
 
 interface REPLCommand {
   name: string;
@@ -80,7 +80,7 @@ class CommandCompleter {
     this.commands.clear();
     for (const cmd of commands) {
       this.commands.set(cmd.name, cmd);
-      if (cmd.aliases) {
+      if (cmd.aliases && Array.isArray(cmd.aliases)) {
         for (const alias of cmd.aliases) {
           this.commands.set(alias, cmd);
         }
@@ -500,7 +500,7 @@ function showHelp(commands: REPLCommand[]): void {
   for (const cmd of commands) {
     table.push([
       colors.cyan(cmd.name),
-      cmd.aliases ? colors.gray(cmd.aliases.join(', ')) : '',
+      cmd.aliases && Array.isArray(cmd.aliases) ? colors.gray(cmd.aliases.join(', ')) : '',
       cmd.description
     ]);
   }

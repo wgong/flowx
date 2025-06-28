@@ -1,6 +1,6 @@
-const fs = require('fs').promises;
-const path = require('path');
-const { performance } = require('perf_hooks');
+const fs = require('node:fs').promises;
+const path = require('node:path');
+const { performance } = require('node:perf_hooks');
 
 /**
  * Test Harness for Batchtools Integration Tests
@@ -220,7 +220,7 @@ class TestHarness {
 
   generateComplexProject() {
     return {
-      'src/index.ts': 'import { App } from "./app";\nnew App().start();',
+      'src/index.ts': 'import { App } from "./app.ts";\nnew App().start();',
       'src/app.ts': 'export class App { start() { console.log("Started"); } }',
       'src/services/auth.service.ts': 'export class AuthService { /* implementation */ }',
       'src/services/user.service.ts': 'export class UserService { /* implementation */ }',

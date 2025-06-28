@@ -1,6 +1,6 @@
 // init/sparc-environment.ts - SPARC development environment setup
 export async function createSparcEnvironment(): Promise<void> {
-  const fs = await import('fs/promises');
+  const fs = await import('node:fs/promises');
   
   // Create .roomodes file with 17 pre-configured modes
   const roomodes = createRoomodes();

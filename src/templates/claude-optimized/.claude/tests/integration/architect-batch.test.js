@@ -66,9 +66,9 @@ describe('Architect Mode Batch Integration Tests', () => {
     it('should analyze dependencies across multiple files', async () => {
       // Add more complex dependencies
       harness.mockFS.set('src/services/auth.service.ts', 
-        'import { UserService } from "./user.service";\nimport { Logger } from "../utils/logger";\nexport class AuthService { }');
+        'import { UserService } from "./user.service.ts";\nimport { Logger } from "../utils/logger.ts";\nexport class AuthService { }');
       harness.mockFS.set('src/services/user.service.ts',
-        'import { User } from "../models/user.model";\nimport { Logger } from "../utils/logger";\nexport class UserService { }');
+        'import { User } from "../models/user.model.ts";\nimport { Logger } from "../utils/logger.ts";\nexport class UserService { }');
       
       const files = ['src/services/auth.service.ts', 'src/services/user.service.ts'];
       

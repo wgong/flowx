@@ -1,6 +1,6 @@
 // sparc.js - SPARC development mode commands
-import { printSuccess, printError, printWarning } from '../utils.js';
-import { createSparcPrompt } from './sparc-modes/index.js';
+import { printSuccess, printError, printWarning } from "../utils.ts";
+import { createSparcPrompt } from "./sparc-modes/index.ts";
 
 export async function sparcCommand(subArgs, flags) {
   const sparcCmd = subArgs[0];

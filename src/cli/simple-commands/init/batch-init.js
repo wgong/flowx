@@ -1,30 +1,30 @@
 // batch-init.js - Batch initialization features with parallel processing
-import { printSuccess, printError, printWarning, printInfo } from '../../utils.js';
+import { printSuccess, printError, printWarning, printInfo } from "../../utils.ts";
 import { 
   PerformanceMonitor, 
   ResourceThresholdMonitor, 
   BatchOptimizer 
-} from './performance-monitor.js';
-import { initCommand } from './index.js';
-import { createSparcStructureManually } from './sparc-structure.js';
-import { createClaudeSlashCommands } from './claude-commands/slash-commands.js';
+} from "./performance-monitor.ts";
+import { initCommand } from "./index.ts";
+import { createSparcStructureManually } from "./sparc-structure.ts";
+import { createClaudeSlashCommands } from "./claude-commands/slash-commands.ts";
 import { 
   createSparcClaudeMd, 
   createFullClaudeMd, 
   createMinimalClaudeMd 
-} from './templates/claude-md.js';
+} from "./templates/claude-md.ts";
 import { 
   createFullMemoryBankMd, 
   createMinimalMemoryBankMd 
-} from './templates/memory-bank-md.js';
+} from "./templates/memory-bank-md.ts";
 import { 
   createFullCoordinationMd, 
   createMinimalCoordinationMd 
-} from './templates/coordination-md.js';
+} from "./templates/coordination-md.ts";
 import { 
   createAgentsReadme, 
   createSessionsReadme 
-} from './templates/readme-files.js';
+} from "./templates/readme-files.ts";
 
 // Progress tracking for batch operations
 class BatchProgressTracker {
@@ -150,8 +150,8 @@ const PROJECT_TEMPLATES = {
           dotenv: '^16.0.0'
         }
       },
-      'src/index.js': `import express from 'express';
-import cors from 'cors';
+      'src/index.js': `import express from 'npm:express';
+import cors from 'npm:cors';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -259,7 +259,7 @@ coverage
         }
       },
       'src/cli.js': `#!/usr/bin/env node
-import { Command } from 'commander';
+import { Command } from 'npm:commander';
 
 const program = new Command();
 

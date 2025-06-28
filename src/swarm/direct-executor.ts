@@ -4,10 +4,10 @@
  * Works in both local development and npm installed environments
  */
 
-import { TaskDefinition, AgentState, TaskResult } from './types.js';
+import { TaskDefinition, AgentState, TaskResult } from "./types.ts";
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { Logger } from '../core/logger.js';
+import { Logger } from "../core/logger.ts";
 
 export interface DirectExecutorConfig {
   logger?: Logger;
@@ -310,7 +310,7 @@ module.exports = Calculator;
 `,
       'cli.js': `#!/usr/bin/env node
 const Calculator = require('./calculator');
-const readline = require('readline');
+const readline = require('node:readline');
 
 const calc = new Calculator();
 const rl = readline.createInterface({
@@ -746,8 +746,8 @@ module.exports = router;
     return `#!/usr/bin/env node
 const { program } = require('commander');
 const chalk = require('chalk');
-const fs = require('fs').promises;
-const path = require('path');
+const fs = require('node:fs').promises;
+const path = require('node:path');
 
 const TODO_FILE = path.join(__dirname, 'todos.json');
 
@@ -780,7 +780,7 @@ program
     };
     todos.push(todo);
     await saveTodos(todos);
-    console.log(chalk.green('✓ Todo added:', task));
+    console.log(chalk.hex("#00AA00")('✓ Todo added:', task));
   });
 
 // List todos
@@ -790,12 +790,12 @@ program
   .action(async () => {
     const todos = await loadTodos();
     if (todos.length === 0) {
-      console.log(chalk.yellow('No todos found'));
+      console.log(chalk.hex("#FFAA00")('No todos found'));
       return;
     }
     
     todos.forEach((todo, index) => {
-      const status = todo.completed ? chalk.green('✓') : chalk.red('✗');
+      const status = todo.completed ? chalk.hex("#00AA00")('✓') : chalk.hex("#FF0000")('✗');
       console.log(\`\${index + 1}. \${status} \${todo.task}\`);
     });
   });
@@ -808,13 +808,13 @@ program
     const todos = await loadTodos();
     const index = parseInt(id) - 1;
     if (index < 0 || index >= todos.length) {
-      console.log(chalk.red('Invalid todo ID'));
+      console.log(chalk.hex("#FF0000")('Invalid todo ID'));
       return;
     }
     
     const removed = todos.splice(index, 1);
     await saveTodos(todos);
-    console.log(chalk.green('✓ Todo removed:', removed[0].task));
+    console.log(chalk.hex("#00AA00")('✓ Todo removed:', removed[0].task));
   });
 
 // Complete todo
@@ -825,14 +825,14 @@ program
     const todos = await loadTodos();
     const index = parseInt(id) - 1;
     if (index < 0 || index >= todos.length) {
-      console.log(chalk.red('Invalid todo ID'));
+      console.log(chalk.hex("#FF0000")('Invalid todo ID'));
       return;
     }
     
     todos[index].completed = true;
     todos[index].completedAt = new Date();
     await saveTodos(todos);
-    console.log(chalk.green('✓ Todo completed:', todos[index].task));
+    console.log(chalk.hex("#00AA00")('✓ Todo completed:', todos[index].task));
   });
 
 program.parse(process.argv);
@@ -841,9 +841,9 @@ program.parse(process.argv);
 
   private generateChatServer(task: TaskDefinition): string {
     return `const express = require('express');
-const http = require('http');
+const http = require('node:http');
 const socketIo = require('socket.io');
-const path = require('path');
+const path = require('node:path');
 
 const app = express();
 const server = http.createServer(app);

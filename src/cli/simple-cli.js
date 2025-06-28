@@ -10,8 +10,8 @@ import {
   showCommandHelp, 
   showAllCommands,
   listCommands 
-} from './command-registry.js';
-import { parseFlags } from './utils.js';
+} from "./command-registry.ts";
+import { parseFlags } from "./utils.ts";
 
 const VERSION = '1.0.71';
 

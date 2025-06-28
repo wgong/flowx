@@ -2,8 +2,8 @@
  * Memory indexer for fast querying
  */
 
-import { MemoryEntry, MemoryQuery } from '../utils/types.js';
-import { ILogger } from '../core/logger.js';
+import { MemoryEntry, MemoryQuery } from "../utils/types.ts";
+import { ILogger } from "../core/logger.ts";
 
 interface Index<T> {
   get(key: T): Set<string>;

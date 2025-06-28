@@ -6,9 +6,9 @@
 import { Command } from '@cliffy/command';
 import { colors } from '@cliffy/ansi/colors';
 import { Confirm, Input, Select } from '@cliffy/prompt';
-import { configManager } from '../../core/config.js';
-import { deepMerge } from '../../utils/helpers.js';
-import { join } from 'path';
+import { configManager } from "../../core/config.ts";
+import { deepMerge } from "../../utils/helpers.ts";
+import { join } from 'node:path';
 
 export const configCommand = new Command()
   .description('Manage Claude-Flow configuration')

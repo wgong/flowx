@@ -3,9 +3,9 @@
  * Provides seamless coordination between task management and Claude Code batch tools
  */
 
-import { EventEmitter } from 'events';
-import { TaskEngine, WorkflowTask, TaskExecution } from './engine.js';
-import { generateId } from '../utils/helpers.js';
+import { EventEmitter } from 'node:events';
+import { TaskEngine, WorkflowTask, TaskExecution } from "./engine.ts";
+import { generateId } from "../utils/helpers.ts";
 
 export interface TodoItem {
   id: string;

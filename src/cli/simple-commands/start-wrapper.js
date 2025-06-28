@@ -1,5 +1,5 @@
 // start-wrapper.js - Wrapper to maintain backward compatibility with the new modular start command
-import { printSuccess, printError, printWarning, printInfo } from '../utils.js';
+import { printSuccess, printError, printWarning, printInfo } from "../utils.ts";
 
 export async function startCommand(subArgs, flags) {
   // Show help if requested
@@ -22,14 +22,14 @@ export async function startCommand(subArgs, flags) {
     if (ui) {
       try {
         // Launch the enhanced JavaScript UI
-        const { launchEnhancedUI } = await import('./process-ui-enhanced.js');
+        const { launchEnhancedUI } = await import("./process-ui-enhanced.ts");
         await launchEnhancedUI();
         return;
       } catch (err) {
         // Fallback to simple UI
         try {
           printWarning('Enhanced UI failed, launching simple UI...');
-          const { launchProcessUI } = await import('./process-ui.js');
+          const { launchProcessUI } = await import("./process-ui.ts");
           await launchProcessUI();
           return;
         } catch (fallbackErr) {

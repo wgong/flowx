@@ -1,7 +1,7 @@
 // slash-commands.js - Create Claude Code slash commands
 
-import { createSparcSlashCommand, createMainSparcCommand } from './sparc-commands.js';
-import { createClaudeFlowCommands } from './claude-flow-commands.js';
+import { createSparcSlashCommand, createMainSparcCommand } from "./sparc-commands.ts";
+import { createClaudeFlowCommands } from "./claude-flow-commands.ts";
 
 // Create Claude Code slash commands for SPARC modes
 export async function createClaudeSlashCommands(workingDir) {

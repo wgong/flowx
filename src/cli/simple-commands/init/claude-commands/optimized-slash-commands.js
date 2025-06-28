@@ -1,7 +1,7 @@
 // optimized-slash-commands.js - Create batchtools-optimized Claude Code slash commands
 
-import { createOptimizedSparcSlashCommand, createOptimizedMainSparcCommand } from './optimized-sparc-commands.js';
-import { createOptimizedClaudeFlowCommands } from './optimized-claude-flow-commands.js';
+import { createOptimizedSparcSlashCommand, createOptimizedMainSparcCommand } from "./optimized-sparc-commands.ts";
+import { createOptimizedClaudeFlowCommands } from "./optimized-claude-flow-commands.ts";
 
 // Create batchtools-optimized Claude Code slash commands for SPARC modes
 export async function createOptimizedClaudeSlashCommands(workingDir, selectedModes = null) {

@@ -1,8 +1,8 @@
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as os from 'os';
-import { PromptManager } from '../prompt-manager';
-import { PromptConfigManager } from '../prompt-utils';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import * as os from 'node:os';
+import { PromptManager } from '../prompt-manager.ts';
+import { PromptConfigManager } from '../prompt-utils.ts';
 
 describe('Prompt Copying Integration Tests', () => {
   let tempDir: string;

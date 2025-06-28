@@ -3,15 +3,15 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { ILogger } from '../core/logger.js';
-import { IEventBus } from '../core/event-bus.js';
+import { ILogger } from "../core/logger.ts";
+import { IEventBus } from "../core/event-bus.ts";
 import { 
   SwarmEvent, 
   EventType, 
   AgentId, 
   CommunicationStrategy 
-} from '../swarm/types.js';
-import { generateId } from '../utils/helpers.js';
+} from "../swarm/types.ts";
+import { generateId } from "../utils/helpers.ts";
 
 export interface MessageBusConfig {
   strategy: CommunicationStrategy;

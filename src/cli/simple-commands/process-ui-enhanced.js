@@ -1,5 +1,5 @@
 // process-ui-enhanced.js - Enhanced process management UI with multiple views
-import { printSuccess, printError, printWarning, printInfo } from '../utils.js';
+import { printSuccess, printError, printWarning, printInfo } from "../utils.ts";
 
 // Simple color utilities
 const colors = {

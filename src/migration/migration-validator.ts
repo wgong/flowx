@@ -2,12 +2,13 @@
  * Migration Validator - Validates successful migration
  */
 
-import * as fs from 'fs-extra';
-import * as path from 'path';
-import { ValidationResult, ValidationCheck } from './types';
-import { logger } from './logger';
-import * as chalk from 'chalk';
-import { glob } from 'glob';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { ValidationResult, ValidationCheck } from './types.ts';
+import { logger } from './logger.ts';
+import { colors } from '../utils/colors.ts';
+import globPkg from 'npm:glob';
+const { glob } = globPkg;
 
 export class MigrationValidator {
   private requiredFiles = [
@@ -286,43 +287,43 @@ export class MigrationValidator {
   }
 
   printValidation(validation: ValidationResult): void {
-    console.log(chalk.bold('\n✅ Migration Validation Report'));
-    console.log(chalk.gray('─'.repeat(50)));
+    console.log(colors.bold('\n✅ Migration Validation Report'));
+    console.log(colors.gray('─'.repeat(50)));
     
-    console.log(`\n${chalk.bold('Overall Status:')} ${validation.valid ? chalk.green('✓ Valid') : chalk.red('✗ Invalid')}`);
+    console.log(`\n${colors.bold('Overall Status:')} ${validation.valid ? colors.green('✓ Valid') : colors.red('✗ Invalid')}`);
     
     // Show checks
-    console.log(chalk.bold('\n📋 Validation Checks:'));
+    console.log(colors.bold('\n📋 Validation Checks:'));
     validation.checks.forEach(check => {
-      const status = check.passed ? chalk.green('✓') : chalk.red('✗');
+      const status = check.passed ? colors.green('✓') : colors.red('✗');
       console.log(`  ${status} ${check.name}`);
       if (check.message) {
-        console.log(`     ${chalk.gray(check.message)}`);
+        console.log(`     ${colors.gray(check.message)}`);
       }
     });
     
     // Show errors
     if (validation.errors.length > 0) {
-      console.log(chalk.bold('\n❌ Errors:'));
+      console.log(colors.bold('\n❌ Errors:'));
       validation.errors.forEach(error => {
-        console.log(`  • ${chalk.red(error)}`);
+        console.log(`  • ${colors.red(error)}`);
       });
     }
     
     // Show warnings
     if (validation.warnings.length > 0) {
-      console.log(chalk.bold('\n⚠️  Warnings:'));
+      console.log(colors.bold('\n⚠️  Warnings:'));
       validation.warnings.forEach(warning => {
-        console.log(`  • ${chalk.yellow(warning)}`);
+        console.log(`  • ${colors.yellow(warning)}`);
       });
     }
     
-    console.log(chalk.gray('\n' + '─'.repeat(50)));
+    console.log(colors.gray('\n' + '─'.repeat(50)));
     
     if (validation.valid) {
-      console.log(chalk.green('\n🎉 Migration validation passed! Your project is ready to use optimized prompts.'));
+      console.log(colors.green('\n🎉 Migration validation passed! Your project is ready to use optimized prompts.'));
     } else {
-      console.log(chalk.red('\n⚠️  Migration validation failed. Please address the errors above.'));
+      console.log(colors.red('\n⚠️  Migration validation failed. Please address the errors above.'));
     }
   }
 }

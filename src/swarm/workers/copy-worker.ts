@@ -1,7 +1,7 @@
-import { parentPort, workerData } from 'worker_threads';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { createHash } from 'crypto';
+import { parentPort, workerData } from 'node:worker_threads';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { createHash } from 'node:crypto';
 
 interface WorkerData {
   files: Array<{

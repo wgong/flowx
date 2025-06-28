@@ -51,7 +51,7 @@ describe('TDD Mode Batch Integration Tests', () => {
   });`);
         }
         
-        const testContent = `import { ${component.name} } from '../src/${component.type}s/${component.name}';
+        const testContent = `import { ${component.name} } from '../src/${component.type}s/${component.name}.ts';
 
 describe('${component.name}', () => {
   let ${component.type === 'service' ? 'service' : 'helper'};

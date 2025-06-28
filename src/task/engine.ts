@@ -3,9 +3,9 @@
  * Integrates with TodoWrite/TodoRead for coordination and Memory for persistence
  */
 
-import { EventEmitter } from 'events';
-import { Task, TaskStatus, AgentProfile, Resource } from '../utils/types.js';
-import { generateId } from '../utils/helpers.js';
+import { EventEmitter } from 'node:events';
+import { Task, TaskStatus, AgentProfile, Resource } from "../utils/types.ts";
+import { generateId } from "../utils/helpers.ts";
 
 export interface TaskDependency {
   taskId: string;

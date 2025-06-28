@@ -6,9 +6,9 @@
  */
 
 const blessed = require('blessed');
-const fs = require('fs').promises;
-const path = require('path');
-const { spawn } = require('child_process');
+const fs = require('node:fs').promises;
+const path = require('node:path');
+const { spawn } = require('node:child_process');
 
 class SwarmUI {
   constructor() {
@@ -567,7 +567,7 @@ class SwarmUI {
     
     try {
       // Kill all swarm processes (simplified)
-      const { exec } = require('child_process');
+      const { exec } = require('node:child_process');
       exec('pkill -f "claude-flow swarm"', (error) => {
         if (error) {
           this.log(`Error stopping swarm: ${error.message}`, 'error');
@@ -589,7 +589,7 @@ class SwarmUI {
     this.log(`Executing command: ${command}`);
     
     try {
-      const { exec } = require('child_process');
+      const { exec } = require('node:child_process');
       exec(command, (error, stdout, stderr) => {
         if (error) {
           this.log(`Command error: ${error.message}`, 'error');

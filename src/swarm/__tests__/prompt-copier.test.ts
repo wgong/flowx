@@ -1,9 +1,9 @@
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as os from 'os';
-import { PromptCopier, copyPrompts } from '../prompt-copier';
-import { EnhancedPromptCopier, copyPromptsEnhanced } from '../prompt-copier-enhanced';
-import { PromptConfigManager, PromptValidator } from '../prompt-utils';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import * as os from 'node:os';
+import { PromptCopier, copyPrompts } from '../prompt-copier.ts';
+import { EnhancedPromptCopier, copyPromptsEnhanced } from '../prompt-copier-enhanced.ts';
+import { PromptConfigManager, PromptValidator } from '../prompt-utils.ts';
 
 describe('PromptCopier', () => {
   let tempDir: string;

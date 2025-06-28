@@ -1,7 +1,7 @@
 // backup-manager.js - Backup creation and management
 
 // Node.js compatible import
-import fs from 'fs';
+import fs from 'node:fs';
 
 // Polyfill for Deno's ensureDirSync
 function ensureDirSync(dirPath) {

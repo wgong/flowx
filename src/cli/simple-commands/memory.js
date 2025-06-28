@@ -1,5 +1,5 @@
 // memory.js - Memory management commands
-import { printSuccess, printError, printWarning } from '../utils.js';
+import { printSuccess, printError, printWarning } from "../utils.ts";
 
 export async function memoryCommand(subArgs, flags) {
   const memorySubcommand = subArgs[0];

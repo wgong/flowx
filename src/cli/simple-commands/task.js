@@ -1,5 +1,5 @@
 // task.js - Task management commands
-import { printSuccess, printError, printWarning } from '../utils.js';
+import { printSuccess, printError, printWarning } from "../utils.ts";
 
 export async function taskCommand(subArgs, flags) {
   const taskCmd = subArgs[0];

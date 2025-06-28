@@ -1,10 +1,10 @@
 // validation/index.js - Comprehensive validation system for SPARC initialization
 
-import { PreInitValidator } from './pre-init-validator.js';
-import { PostInitValidator } from './post-init-validator.js';
-import { ConfigValidator } from './config-validator.js';
-import { ModeValidator } from './mode-validator.js';
-import { HealthChecker } from './health-checker.js';
+import { PreInitValidator } from "./pre-init-validator.ts";
+import { PostInitValidator } from "./post-init-validator.ts";
+import { ConfigValidator } from "./config-validator.ts";
+import { ModeValidator } from "./mode-validator.ts";
+import { HealthChecker } from "./health-checker.ts";
 
 /**
  * Main validation orchestrator

@@ -1,5 +1,5 @@
 // agent.js - Agent management commands
-import { printSuccess, printError, printWarning } from '../utils.js';
+import { printSuccess, printError, printWarning } from "../utils.ts";
 
 export async function agentCommand(subArgs, flags) {
   const agentCmd = subArgs[0];

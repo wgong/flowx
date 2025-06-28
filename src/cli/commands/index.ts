@@ -1,24 +1,23 @@
-import { CLI, success, error, warning, info, VERSION } from "../cli-core.js";
-import type { Command, CommandContext } from "../cli-core.js";
-import colors from "chalk";
-const { bold, blue, yellow } = colors;
-import { Orchestrator } from "../../core/orchestrator-fixed.js";
-import { ConfigManager } from "../../core/config.js";
-import { MemoryManager } from "../../memory/manager.js";
-import { EventBus } from "../../core/event-bus.js";
-import { Logger } from "../../core/logger.js";
-import { JsonPersistenceManager } from "../../core/json-persistence.js";
-import { swarmAction } from "./swarm.js";
-import { SimpleMemoryManager } from "./memory.js";
-import { sparcAction } from "./sparc.js";
-import { createMigrateCommand } from "./migrate.js";
-import { enterpriseCommands } from "./enterprise.js";
+import { CLI, success, error, warning, info, VERSION } from "../cli-core.ts";
+import type { Command, CommandContext } from "../cli-core.ts";
+import { colors } from '../../utils/colors.ts';
+import { Orchestrator } from "../../core/orchestrator-fixed.ts";
+import { ConfigManager } from "../../core/config.ts";
+import { MemoryManager } from "../../memory/manager.ts";
+import { EventBus } from "../../core/event-bus.ts";
+import { Logger } from "../../core/logger.ts";
+import { JsonPersistenceManager } from "../../core/json-persistence.ts";
+import { swarmAction } from "./swarm.ts";
+import { SimpleMemoryManager } from "./memory.ts";
+import { sparcAction } from "./sparc.ts";
+import { createMigrateCommand } from "./migrate.ts";
+import { enterpriseCommands } from "./enterprise.ts";
 
 // Import enhanced orchestration commands
-import { startCommand } from "./start.js";
-import { statusCommand } from "./status.js";
-import { monitorCommand } from "./monitor.js";
-import { sessionCommand } from "./session.js";
+import { startCommand } from "./start.ts";
+import { statusCommand } from "./status.ts";
+import { monitorCommand } from "./monitor.ts";
+import { sessionCommand } from "./session.ts";
 
 let orchestrator: Orchestrator | null = null;
 let configManager: ConfigManager | null = null;
@@ -81,7 +80,7 @@ export function setupCommands(cli: CLI): void {
         const existingFiles = [];
         
         for (const file of files) {
-          const { access } = await import("fs/promises");
+          const { access } = await import("node:fs/promises");
           const exists = await access(file).then(() => true).catch(() => false);
           if (exists) {
             existingFiles.push(file);
@@ -96,7 +95,7 @@ export function setupCommands(cli: CLI): void {
         
         // Create CLAUDE.md
         const claudeMd = minimal ? createMinimalClaudeMd() : createFullClaudeMd();
-        const { writeFile } = await import("fs/promises");
+        const { writeFile } = await import("node:fs/promises");
         await writeFile("CLAUDE.md", claudeMd);
         console.log("  ✓ Created CLAUDE.md");
         
@@ -126,7 +125,7 @@ export function setupCommands(cli: CLI): void {
           directories.unshift("memory");
         }
         
-        const { mkdir } = await import("fs/promises");
+        const { mkdir } = await import("node:fs/promises");
         for (const dir of directories) {
           try {
             await mkdir(dir, { recursive: true });
@@ -344,7 +343,7 @@ export function setupCommands(cli: CLI): void {
           }
           
           try {
-            const { readFile } = await import("fs/promises");
+            const { readFile } = await import("node:fs/promises");
             const content = await readFile(workflowFile, "utf-8");
             const workflow = JSON.parse(content);
             
@@ -383,7 +382,7 @@ export function setupCommands(cli: CLI): void {
       const subcommand = ctx.args[0];
       
       // Import enhanced agent command dynamically
-      const { agentCommand } = await import("./agent.js");
+      const { agentCommand } = await import("./agent.ts");
       
       // Create a mock context for the enhanced command
       const enhancedCtx = {
@@ -407,11 +406,11 @@ export function setupCommands(cli: CLI): void {
             console.log(colors.cyan('🚀 Using enhanced agent management system...'));
             
             // Create a simplified wrapper around the enhanced command
-            const agentManager = await import("../../agents/agent-manager.js");
-            const { MemoryManager } = await import("../../memory/manager.js");
-            const { EventBus } = await import("../../core/event-bus.js");
-            const { Logger } = await import("../../core/logger.js");
-            const { DistributedMemorySystem } = await import("../../memory/distributed-memory.js");
+            const agentManager = await import("../../agents/agent-manager.ts");
+            const { MemoryManager } = await import("../../memory/manager.ts");
+            const { EventBus } = await import("../../core/event-bus.ts");
+            const { Logger } = await import("../../core/logger.ts");
+            const { DistributedMemorySystem } = await import("../../memory/distributed-memory.ts");
             
             warning("Enhanced agent management is available!");
             console.log("For full functionality, use the comprehensive agent commands:");
@@ -534,7 +533,7 @@ export function setupCommands(cli: CLI): void {
         const stats = await persist.getStats();
         
         // Check if orchestrator is running by looking for the log file
-        const { access } = await import("fs/promises");
+        const { access } = await import("node:fs/promises");
         const isRunning = await access("orchestrator.log").then(() => true).catch(() => false);
         
         success("Claude-Flow System Status:");
@@ -591,7 +590,7 @@ export function setupCommands(cli: CLI): void {
           const persist = await getPersistence();
           const stats = await persist.getStats();
           
-          const { access } = await import("fs/promises");
+          const { access } = await import("node:fs/promises");
           const isRunning = await access("orchestrator.log").then(() => true).catch(() => false);
           
           success("Claude-Flow System Status:");
@@ -818,7 +817,7 @@ export function setupCommands(cli: CLI): void {
             
             const limited = results.slice(0, limit);
             for (const entry of limited) {
-              console.log(blue(`\n📌 ${entry.key}`));
+              console.log(colors.blue(`\n📌 ${entry.key}`));
               console.log(`   Namespace: ${entry.namespace}`);
               console.log(`   Value: ${entry.value.substring(0, 100)}${entry.value.length > 100 ? '...' : ''}`);
               console.log(`   Stored: ${new Date(entry.timestamp).toLocaleString()}`);
@@ -885,7 +884,7 @@ export function setupCommands(cli: CLI): void {
             console.log(`   Size: ${(stats.sizeBytes / 1024).toFixed(2)} KB`);
             
             if (stats.namespaces > 0) {
-              console.log(blue("\n📁 Namespace Breakdown:"));
+              console.log(colors.blue("\n📁 Namespace Breakdown:"));
               for (const [namespace, count] of Object.entries(stats.namespaceStats)) {
                 console.log(`   ${namespace}: ${count} entries`);
               }
@@ -911,10 +910,10 @@ export function setupCommands(cli: CLI): void {
         default: {
           console.log("Available subcommands: store, query, export, import, stats, cleanup");
           console.log("\nExamples:");
-          console.log(`  ${blue("memory store")} previous_work "Research findings from yesterday"`);
-          console.log(`  ${blue("memory query")} research`);
-          console.log(`  ${blue("memory export")} backup.json`);
-          console.log(`  ${blue("memory stats")}`);
+          console.log(`  ${colors.blue("memory store")} previous_work "Research findings from yesterday"`);
+          console.log(`  ${colors.blue("memory query")} research`);
+          console.log(`  ${colors.blue("memory export")} backup.json`);
+          console.log(`  ${colors.blue("memory stats")}`);
           break;
         }
       }
@@ -1154,7 +1153,7 @@ Now, please proceed with the task: ${task}`;
             console.log('');
             
             // Execute Claude command
-            const { spawn } = await import("child_process");
+            const { spawn } = await import("node:child_process");
             const child = spawn("claude", claudeCmd.slice(1).map(arg => arg.replace(/^"|"$/g, '')), {
               env: {
                 ...process.env,
@@ -1197,7 +1196,7 @@ Now, please proceed with the task: ${task}`;
           }
           
           try {
-            const { readFile } = await import("fs/promises");
+            const { readFile } = await import("node:fs/promises");
             const content = await readFile(workflowFile, "utf-8");
             const workflow = JSON.parse(content);
             
@@ -1232,14 +1231,14 @@ Now, please proceed with the task: ${task}`;
               const taskId = task.id || `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
               
               if (ctx.flags.dryRun || ctx.flags["dry-run"]) {
-                console.log(`\n${yellow("DRY RUN")} - Task: ${task.name || taskId}`);
+                console.log(`\n${colors.yellow("DRY RUN")} - Task: ${task.name || taskId}`);
                 console.log(`Command: ${claudeCmd.join(" ")}`);
                 continue;
               }
               
               console.log(`\n🚀 Spawning Claude for task: ${task.name || taskId}`);
               
-              const { spawn } = await import("child_process");
+              const { spawn } = await import("node:child_process");
               const child = spawn("claude", claudeCmd.slice(1).map(arg => arg.replace(/^"|"$/g, '')), {
                 env: {
                   ...process.env,
@@ -1321,7 +1320,7 @@ Now, please proceed with the task: ${task}`;
         const persist = await getPersistence();
         const stats = await persist.getStats();
         
-        const { access } = await import("fs/promises");
+        const { access } = await import("node:fs/promises");
         const isRunning = await access("orchestrator.log").then(() => true).catch(() => false);
         
         if (!isRunning) {
@@ -1469,7 +1468,7 @@ Now, please proceed with the task: ${task}`;
         // Original basic monitor implementation
         try {
           const persist = await getPersistence();
-          const { access } = await import("fs/promises");
+          const { access } = await import("node:fs/promises");
           const isRunning = await access("orchestrator.log").then(() => true).catch(() => false);
           
           if (!isRunning) {
@@ -1914,15 +1913,15 @@ Now, please proceed with the task: ${task}`;
       const command = ctx.args[0];
       
       if (command === "claude") {
-        console.log(bold(blue("Claude Instance Management")));
+        console.log(colors.bold(colors.blue("Claude Instance Management")));
         console.log();
         console.log("Spawn and manage Claude Code instances with specific configurations.");
         console.log();
-        console.log(bold("Subcommands:"));
+        console.log(colors.bold("Subcommands:"));
         console.log("  spawn <task>    Spawn Claude with specific configuration");
         console.log("  batch <file>    Execute multiple Claude instances from workflow");
         console.log();
-        console.log(bold("Spawn Options:"));
+        console.log(colors.bold("Spawn Options:"));
         console.log("  -t, --tools <tools>        Allowed tools (comma-separated)");
         console.log("  --no-permissions           Use --dangerously-skip-permissions flag");
         console.log("  -c, --config <file>        MCP config file path");
@@ -1934,22 +1933,22 @@ Now, please proceed with the task: ${task}`;
         console.log("  -v, --verbose              Enable verbose output");
         console.log("  -d, --dry-run              Show what would be executed without running");
         console.log();
-        console.log(bold("Examples:"));
-        console.log(`  ${blue("claude-flow claude spawn")} "implement user authentication" --research --parallel`);
-        console.log(`  ${blue("claude-flow claude spawn")} "fix payment bug" --tools "View,Edit,Bash" --no-permissions`);
-        console.log(`  ${blue("claude-flow claude batch")} workflow.json --dry-run`);
+        console.log(colors.bold("Examples:"));
+        console.log(`  ${colors.blue("claude-flow claude spawn")} "implement user authentication" --research --parallel`);
+        console.log(`  ${colors.blue("claude-flow claude spawn")} "fix payment bug" --tools "View,Edit,Bash" --no-permissions`);
+        console.log(`  ${colors.blue("claude-flow claude batch")} workflow.json --dry-run`);
         console.log();
         console.log("For more information, see: https://github.com/ruvnet/claude-code-flow/docs/11-claude-spawning.md");
       } else if (command === "swarm" || command === "swarm-ui") {
-        console.log(bold(blue("Claude Swarm Mode")));
+        console.log(colors.bold(colors.blue("Claude Swarm Mode")));
         console.log();
         console.log("Create self-orchestrating Claude agent swarms to tackle complex objectives.");
         console.log();
-        console.log(bold("Usage:"));
+        console.log(colors.bold("Usage:"));
         console.log("  claude-flow swarm <objective> [options]");
         console.log("  claude-flow swarm-ui <objective> [options]  # Uses blessed UI (avoids TTY issues)");
         console.log();
-        console.log(bold("Options:"));
+        console.log(colors.bold("Options:"));
         console.log("  -s, --strategy <s>         Orchestration strategy (auto, research, development, analysis)");
         console.log("  --max-agents <n>           Maximum number of agents (default: 5)");
         console.log("  --max-depth <n>            Maximum delegation depth (default: 3)");
@@ -1966,11 +1965,11 @@ Now, please proceed with the task: ${task}`;
         console.log("  --monitor                  Enable real-time monitoring");
         console.log("  --ui                       Use blessed terminal UI (avoids TTY issues)");
         console.log();
-        console.log(bold("Examples:"));
-        console.log(`  ${blue("claude-flow swarm")} "Build a REST API"`);
-        console.log(`  ${blue("claude-flow swarm-ui")} "Build a REST API"  # Avoids TTY issues`);
-        console.log(`  ${blue("claude-flow swarm")} "Research cloud architecture" --strategy research --research`);
-        console.log(`  ${blue("claude-flow swarm")} "Migrate app to microservices" --coordinator --review --ui`);
+        console.log(colors.bold("Examples:"));
+        console.log(`  ${colors.blue("claude-flow swarm")} "Build a REST API"`);
+        console.log(`  ${colors.blue("claude-flow swarm-ui")} "Build a REST API"  # Avoids TTY issues`);
+        console.log(`  ${colors.blue("claude-flow swarm")} "Research cloud architecture" --strategy research --research`);
+        console.log(`  ${colors.blue("claude-flow swarm")} "Migrate app to microservices" --coordinator --review --ui`);
         console.log();
         console.log(bold("TTY Issues?"));
         console.log("If you encounter 'Raw mode is not supported' errors, use:");

@@ -1,42 +1,42 @@
 // init/index.js - Initialize Claude Code integration files
-import { printSuccess, printError, printWarning } from '../../utils.js';
-import { createLocalExecutable } from './executable-wrapper.js';
-import { createSparcStructureManually } from './sparc-structure.js';
-import { createClaudeSlashCommands } from './claude-commands/slash-commands.js';
-import { createOptimizedClaudeSlashCommands } from './claude-commands/optimized-slash-commands.js';
+import { printSuccess, printError, printWarning } from "../../utils.ts";
+import { createLocalExecutable } from "./executable-wrapper.ts";
+import { createSparcStructureManually } from "./sparc-structure.ts";
+import { createClaudeSlashCommands } from "./claude-commands/slash-commands.ts";
+import { createOptimizedClaudeSlashCommands } from "./claude-commands/optimized-slash-commands.ts";
 import { 
   createSparcClaudeMd, 
   createFullClaudeMd, 
   createMinimalClaudeMd,
   createOptimizedSparcClaudeMd 
-} from './templates/claude-md.js';
+} from "./templates/claude-md.ts";
 import { 
   createFullMemoryBankMd, 
   createMinimalMemoryBankMd,
   createOptimizedMemoryBankMd 
-} from './templates/memory-bank-md.js';
+} from "./templates/memory-bank-md.ts";
 import { 
   createFullCoordinationMd, 
   createMinimalCoordinationMd,
   createOptimizedCoordinationMd 
-} from './templates/coordination-md.js';
+} from "./templates/coordination-md.ts";
 import { 
   createAgentsReadme, 
   createSessionsReadme 
-} from './templates/readme-files.js';
+} from "./templates/readme-files.ts";
 import { 
   createSparcModeTemplates, 
   createSparcModesOverview,
   createSwarmStrategyTemplates 
-} from './templates/sparc-modes.js';
-import { showInitHelp } from './help.js';
+} from "./templates/sparc-modes.ts";
+import { showInitHelp } from "./help.ts";
 import { 
   batchInitCommand, 
   batchInitFromConfig, 
   validateBatchOptions 
-} from './batch-init.js';
-import { ValidationSystem, runFullValidation } from './validation/index.js';
-import { RollbackSystem, createAtomicOperation } from './rollback/index.js';
+} from "./batch-init.ts";
+import { ValidationSystem, runFullValidation } from "./validation/index.ts";
+import { RollbackSystem, createAtomicOperation } from "./rollback/index.ts";
 
 export async function initCommand(subArgs, flags) {
   // Show help if requested

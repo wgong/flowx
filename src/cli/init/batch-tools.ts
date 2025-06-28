@@ -1,7 +1,7 @@
 // init/batch-tools.ts - Batch tools coordination guides
 export async function createBatchToolsGuide(): Promise<void> {
-  const fs = await import('fs/promises');
-  const path = await import('path');
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
   
   const batchToolsDir = '.claude/commands/swarm';
   

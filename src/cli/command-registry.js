@@ -1,16 +1,16 @@
 // command-registry.js - Extensible command registration system
-import { initCommand } from './simple-commands/init.js';
-import { memoryCommand } from './simple-commands/memory.js';
-import { sparcCommand } from './simple-commands/sparc.js';
-import { agentCommand } from './simple-commands/agent.js';
-import { taskCommand } from './simple-commands/task.js';
-import { configCommand } from './simple-commands/config.js';
-import { statusCommand } from './simple-commands/status.js';
-import { mcpCommand } from './simple-commands/mcp.js';
-import { monitorCommand } from './simple-commands/monitor.js';
-import { startCommand } from './simple-commands/start.js';
-import { swarmCommand } from './simple-commands/swarm.js';
-import { batchManagerCommand } from './simple-commands/batch-manager.js';
+import { initCommand } from "./simple-commands/init.ts";
+import { memoryCommand } from "./simple-commands/memory.ts";
+import { sparcCommand } from "./simple-commands/sparc.ts";
+import { agentCommand } from "./simple-commands/agent.ts";
+import { taskCommand } from "./simple-commands/task.ts";
+import { configCommand } from "./simple-commands/config.ts";
+import { statusCommand } from "./simple-commands/status.ts";
+import { mcpCommand } from "./simple-commands/mcp.ts";
+import { monitorCommand } from "./simple-commands/monitor.ts";
+import { startCommand } from "./simple-commands/start.ts";
+import { swarmCommand } from "./simple-commands/swarm.ts";
+import { batchManagerCommand } from "./simple-commands/batch-manager.ts";
 
 // Command registry for extensible CLI
 export const commandRegistry = new Map();

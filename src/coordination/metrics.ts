@@ -2,9 +2,9 @@
  * Metrics and monitoring for coordination performance
  */
 
-import { ILogger } from '../core/logger.js';
-import { IEventBus } from '../core/event-bus.js';
-import { SystemEvents } from '../utils/types.js';
+import { ILogger } from "../core/logger.ts";
+import { IEventBus } from "../core/event-bus.ts";
+import { SystemEvents } from "../utils/types.ts";
 
 export interface CoordinationMetrics {
   timestamp: Date;

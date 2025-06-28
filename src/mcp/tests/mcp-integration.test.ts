@@ -3,15 +3,15 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi, Mock } from 'vitest';
-import { MCPServer } from '../server.js';
-import { MCPLifecycleManager, LifecycleState } from '../lifecycle-manager.js';
-import { MCPPerformanceMonitor } from '../performance-monitor.js';
-import { MCPProtocolManager } from '../protocol-manager.js';
-import { MCPOrchestrationIntegration } from '../orchestration-integration.js';
-import { ToolRegistry } from '../tools.js';
-import { AuthManager } from '../auth.js';
-import { ILogger } from '../../core/logger.js';
-import { MCPConfig, MCPInitializeParams, MCPRequest, MCPSession } from '../../utils/types.js';
+import { MCPServer } from "../server.ts";
+import { MCPLifecycleManager, LifecycleState } from "../lifecycle-manager.ts";
+import { MCPPerformanceMonitor } from "../performance-monitor.ts";
+import { MCPProtocolManager } from "../protocol-manager.ts";
+import { MCPOrchestrationIntegration } from "../orchestration-integration.ts";
+import { ToolRegistry } from "../tools.ts";
+import { AuthManager } from "../auth.ts";
+import { ILogger } from "../../core/logger.ts";
+import { MCPConfig, MCPInitializeParams, MCPRequest, MCPSession } from "../../utils/types.ts";
 import { EventEmitter } from 'node:events';
 
 // Mock logger

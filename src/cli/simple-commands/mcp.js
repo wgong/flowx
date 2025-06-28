@@ -1,5 +1,5 @@
 // mcp.js - MCP server management commands
-import { printSuccess, printError, printWarning } from '../utils.js';
+import { printSuccess, printError, printWarning } from "../utils.ts";
 
 export async function mcpCommand(subArgs, flags) {
   const mcpCmd = subArgs[0];

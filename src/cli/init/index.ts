@@ -1,10 +1,10 @@
 // init/index.ts - Main init command orchestrator
-import { printSuccess, printError } from '../utils.js';
-import { createDirectoryStructure } from './directory-structure.js';
-import { createSwarmCommands } from './swarm-commands.js';
-import { createSparcEnvironment } from './sparc-environment.js';
-import { createClaudeConfig } from './claude-config.js';
-import { createBatchToolsGuide } from './batch-tools.js';
+import { printSuccess, printError } from "../utils.ts";
+import { createDirectoryStructure } from "./directory-structure.ts";
+import { createSwarmCommands } from "./swarm-commands.ts";
+import { createSparcEnvironment } from "./sparc-environment.ts";
+import { createClaudeConfig } from "./claude-config.ts";
+import { createBatchToolsGuide } from "./batch-tools.ts";
 
 export interface InitOptions {
   sparc?: boolean;
@@ -13,8 +13,8 @@ export interface InitOptions {
 
 export async function initCommand(options: InitOptions = {}) {
   try {
-    const fs = await import('fs/promises');
-    const path = await import('path');
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
     
     printSuccess('Initializing Claude-Flow project...');
     

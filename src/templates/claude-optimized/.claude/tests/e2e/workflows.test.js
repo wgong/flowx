@@ -533,7 +533,7 @@ export class ${depService.name.replace('-', '')}Client {
           }));
           
           await harness.mockWriteFile(`${libPath}/index.ts`, 
-            lib.exports.map(exp => `export { ${exp} } from './${exp}';`).join('\n')
+            lib.exports.map(exp => `export { ${exp} } from './${exp}.ts';`).join('\n')
           );
           
           return { library: lib.name, exports: lib.exports.length };
@@ -766,24 +766,24 @@ module.exports = module${i};`;
       // Create a complex module structure with circular dependencies
       const modules = {
         'src/core/auth.ts': `
-import { UserService } from '../services/user';
+import { UserService } from '../services/user.ts';
 export class AuthService {
   constructor(private userService: UserService) {}
 }`,
         'src/services/user.ts': `
-import { AuthService } from '../core/auth';
-import { ProfileService } from './profile';
+import { AuthService } from '../core/auth.ts';
+import { ProfileService } from './profile.ts';
 export class UserService {
   constructor(private auth: AuthService, private profile: ProfileService) {}
 }`,
         'src/services/profile.ts': `
-import { UserService } from './user';
+import { UserService } from './user.ts';
 export class ProfileService {
   constructor(private userService: UserService) {}
 }`,
         'src/controllers/api.ts': `
-import { AuthService } from '../core/auth';
-import { UserService } from '../services/user';
+import { AuthService } from '../core/auth.ts';
+import { UserService } from '../services/user.ts';
 export class ApiController {
   constructor(private auth: AuthService, private user: UserService) {}
 }`,

@@ -2,12 +2,12 @@
  * Markdown backend implementation for human-readable memory storage
  */
 
-import { promises as fs } from 'fs';
-import path from 'path';
-import { IMemoryBackend } from './base.js';
-import { MemoryEntry, MemoryQuery } from '../../utils/types.js';
-import { ILogger } from '../../core/logger.js';
-import { MemoryBackendError } from '../../utils/errors.js';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { IMemoryBackend } from "./base.ts";
+import { MemoryEntry, MemoryQuery } from "../../utils/types.ts";
+import { ILogger } from "../../core/logger.ts";
+import { MemoryBackendError } from "../../utils/errors.ts";
 
 /**
  * Markdown-based memory backend

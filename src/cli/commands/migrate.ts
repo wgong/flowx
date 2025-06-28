@@ -3,13 +3,14 @@
  */
 
 import { Command } from 'commander';
-import { MigrationRunner } from '../../migration/migration-runner';
-import { MigrationAnalyzer } from '../../migration/migration-analyzer';
-import { RollbackManager } from '../../migration/rollback-manager';
-import { MigrationStrategy } from '../../migration/types';
-import { logger } from '../../migration/logger';
-import * as path from 'path';
-import chalk from "npm:chalk@^4.1.2";
+import { MigrationRunner } from '../../migration/migration-runner.ts';
+import { MigrationAnalyzer } from '../../migration/migration-analyzer.ts';
+import { RollbackManager } from '../../migration/rollback-manager.ts';
+import { MigrationStrategy } from '../../migration/types.ts';
+import { logger } from '../../migration/logger.ts';
+import * as path from 'node:path';
+import * as fs from 'node:fs/promises';
+import { colors } from '../../utils/colors.ts';
 
 export function createMigrateCommand(): Command {
   const command = new Command('migrate');
@@ -127,36 +128,36 @@ async function runMigration(projectPath: string, options: any): Promise<void> {
 }
 
 async function showMigrationStatus(projectPath: string): Promise<void> {
-  console.log(chalk.bold('\n📊 Migration Status'));
-  console.log(chalk.gray('─'.repeat(50)));
+  console.log(colors.bold('\n📊 Migration Status'));
+  console.log(colors.gray('─'.repeat(50)));
   
   // Project analysis
   const analyzer = new MigrationAnalyzer();
   const analysis = await analyzer.analyze(projectPath);
   
-  console.log(`\n${chalk.bold('Project:')} ${projectPath}`);
-  console.log(`${chalk.bold('Status:')} ${analysis.hasOptimizedPrompts ? chalk.green('Migrated') : chalk.yellow('Not Migrated')}`);
-  console.log(`${chalk.bold('Custom Commands:')} ${analysis.customCommands.length}`);
-  console.log(`${chalk.bold('Conflicts:')} ${analysis.conflictingFiles.length}`);
+  console.log(`\n${colors.bold('Project:')} ${projectPath}`);
+  console.log(`${colors.bold('Status:')} ${analysis.hasOptimizedPrompts ? colors.hex("#00AA00")('Migrated') : colors.hex("#FFAA00")('Not Migrated')}`);
+  console.log(`${colors.bold('Custom Commands:')} ${analysis.customCommands.length}`);
+  console.log(`${colors.bold('Conflicts:')} ${analysis.conflictingFiles.length}`);
   
   // Backup status
   const rollbackManager = new RollbackManager(projectPath);
   const backups = await rollbackManager.listBackups();
   
-  console.log(`\n${chalk.bold('Backups Available:')} ${backups.length}`);
+  console.log(`\n${colors.bold('Backups Available:')} ${backups.length}`);
   
   if (backups.length > 0) {
     const latestBackup = backups[0];
-    console.log(`${chalk.bold('Latest Backup:')} ${latestBackup.timestamp.toLocaleString()}`);
+    console.log(`${colors.bold('Latest Backup:')} ${latestBackup.timestamp.toLocaleString()}`);
   }
   
   // Recommendations
   if (!analysis.hasOptimizedPrompts) {
-    console.log(chalk.bold('\n💡 Recommendations:'));
+    console.log(colors.bold('\n💡 Recommendations:'));
     console.log('  • Run migration analysis: claude-flow migrate analyze');
     console.log('  • Start with dry run: claude-flow migrate --dry-run');
     console.log('  • Use selective strategy: claude-flow migrate --strategy selective');
   }
   
-  console.log(chalk.gray('\n' + '─'.repeat(50)));
+  console.log(colors.gray('\n' + '─'.repeat(50)));
 }

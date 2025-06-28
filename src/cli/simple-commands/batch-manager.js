@@ -1,6 +1,6 @@
 // batch-manager.js - Batch configuration management utility
-import { printSuccess, printError, printInfo, printWarning } from '../utils.js';
-import { PROJECT_TEMPLATES, ENVIRONMENT_CONFIGS } from './init/batch-init.js';
+import { printSuccess, printError, printInfo, printWarning } from "../utils.ts";
+import { PROJECT_TEMPLATES, ENVIRONMENT_CONFIGS } from "./init/batch-init.ts";
 
 export async function batchManagerCommand(subArgs, flags) {
   const command = subArgs[0];

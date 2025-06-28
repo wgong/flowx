@@ -12,8 +12,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Check if we have the compiled version
-const compiledPath = join(__dirname, 'dist', 'cli', 'simple-cli.js');
-const sourcePath = join(__dirname, 'src', 'cli', 'simple-cli.ts');
+const compiledPath = join(__dirname, 'dist', 'main.js');
+const sourcePath = join(__dirname, 'src', 'cli', 'main.ts');
 
 // Check which version exists
 if (existsSync(compiledPath)) {

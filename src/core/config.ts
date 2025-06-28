@@ -10,6 +10,8 @@ import { createHash, randomBytes, createCipher, createDecipher } from 'crypto';
 import { Config } from '../utils/types.js';
 import { deepMerge, safeParseJSON } from '../utils/helpers.js';
 import { ConfigError, ValidationError } from '../utils/errors.js';
+import { EventEmitter } from 'node:events';
+import { Buffer } from 'node:buffer';
 
 // Format parsers
 interface FormatParser {
@@ -285,20 +287,20 @@ export class ConfigManager {
   /**
    * Initializes encryption for sensitive configuration values
    */
-  private initializeEncryption(): void {
-    try {
+  private async initializeEncryption(): Promise<void> {
+    if (this.config.security?.encryptionEnabled) {
       const keyFile = join(this.userConfigDir, '.encryption-key');
-      // Check if key file exists (simplified for demo)
       try {
         await fs.access(keyFile);
-        // In a real implementation, this would be more secure
-        this.encryptionKey = randomBytes(32);
+        this.encryptionKey = await fs.readFile(keyFile);
       } catch {
         this.encryptionKey = randomBytes(32);
-        // Store key securely (in production, use proper key management)
+        try {
+          await fs.writeFile(keyFile, this.encryptionKey, { mode: 0o600 });
+        } catch (writeError) {
+          console.warn('Failed to save new encryption key:', (writeError as Error).message);
+        }
       }
-    } catch (error) {
-      console.warn('Failed to initialize encryption:', (error as Error).message);
     }
   }
 

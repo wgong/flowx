@@ -4,11 +4,11 @@
  * Converted from Deno to Node.js with commander.js
  */
 
-import { Command } from 'commander';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-import { configManager, ConfigError } from '../config/config-manager.js';
-import chalk from 'chalk';
+import { Command } from 'npm:commander';
+import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
+import { configManager, ConfigError } from "../config/config-manager.ts";
+import chalk from 'npm:chalk';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,9 +24,9 @@ function printError(message: string) {
 
 // Create local wrapper script for easier execution
 async function createLocalWrapper(force: boolean = false): Promise<void> {
-  const fs = await import('fs/promises');
-  const path = await import('path');
-  const os = await import('os');
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+  const os = await import('node:os');
   
   const isWindows = os.platform() === 'win32';
   const fileName = isWindows ? 'claude-flow.cmd' : 'claude-flow';
@@ -188,7 +188,7 @@ function simulateSwarmExecution(config: any) {
 
 // Helper function to launch SPARC execution with comprehensive configuration
 async function launchSparcExecution(mode: string, prompt: string, options: any) {
-  const { spawn } = await import('child_process');
+  const { spawn } = await import('node:child_process');
   
   // Load the full SPARC prompt from .claude/commands/sparc/{mode}.md
   const sparcPrompt = await loadSparcPrompt(mode);
@@ -243,9 +243,9 @@ Mode: ${mode} | ${options.parallel ? 'Parallel' : 'Sequential'} | Memory: ${opti
 **START IMMEDIATELY** with TodoWrite breakdown and execute systematically.`;
   
   // Write the prompt to a temporary file
-  const fs = await import('fs/promises');
-  const path = await import('path');
-  const os = await import('os');
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+  const os = await import('node:os');
   
   const tempDir = os.tmpdir();
   const promptFile = path.join(tempDir, `sparc-${mode}-${Date.now()}.txt`);
@@ -302,8 +302,8 @@ Mode: ${mode} | ${options.parallel ? 'Parallel' : 'Sequential'} | Memory: ${opti
 // Helper function to load all SPARC modes information
 async function loadAllSparcModes(): Promise<Record<string, any>> {
   const modes: Record<string, any> = {};
-  const fs = await import('fs/promises');
-  const path = await import('path');
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
   
   const sparcDir = path.join('.claude', 'commands', 'sparc');
   
@@ -370,8 +370,8 @@ async function loadAllSparcModes(): Promise<Record<string, any>> {
 // Helper function to load SPARC mode prompt from .claude/commands/sparc/*.md files
 async function loadSparcPrompt(mode: string): Promise<string | null> {
   try {
-    const fs = await import('fs/promises');
-    const path = await import('path');
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
     
     const sparcFile = path.join('.claude', 'commands', 'sparc', `${mode}.md`);
     
@@ -460,10 +460,10 @@ async function createProgram() {
       let output = '';
       output += `\n${chalk.cyan.bold('🧠 Claude-Flow v' + VERSION)} - Advanced AI Agent Orchestration System\n\n`;
       
-      output += chalk.yellow('USAGE:') + '\n';
+      output += chalk.hex("#FFAA00")('USAGE:') + '\n';
       output += '  claude-flow <command> [options]\n\n';
       
-      output += chalk.yellow('INSTALLATION & SETUP:') + '\n';
+      output += chalk.hex("#FFAA00")('INSTALLATION & SETUP:') + '\n';
       output += '  npx claude-flow@latest init --sparc  # Initialize SPARC development environment\n';
       output += '  \n';
       output += '  The --sparc flag creates:\n';
@@ -471,7 +471,7 @@ async function createProgram() {
       output += '  • CLAUDE.md for project instructions\n';
       output += '  • Ready-to-use TDD and code generation environment\n\n';
       
-      output += chalk.yellow('KEY COMMANDS:') + '\n';
+      output += chalk.hex("#FFAA00")('KEY COMMANDS:') + '\n';
       output += '  init [--sparc]                       Initialize project with Claude integration\n';
       output += '  start [--ui]                         Start orchestration (--ui for enhanced UI)\n';
       output += '  spawn <type> [--name <name>]         Create AI agent (alias for agent spawn)\n';
@@ -480,14 +480,14 @@ async function createProgram() {
       output += '  memory <subcommand>                  Manage persistent memory\n';
       output += '  status                               Show system status\n\n';
       
-      output += chalk.yellow('COMMAND CATEGORIES:') + '\n';
-      output += `  ${chalk.green('Core:')}         init, start, status, config\n`;
-      output += `  ${chalk.green('Agents:')}       agent, task, claude\n`;
-      output += `  ${chalk.green('Development:')}  sparc, memory, workflow\n`;
-      output += `  ${chalk.green('Infrastructure:')} mcp, terminal, session\n`;
-      output += `  ${chalk.green('Enterprise:')}   project, deploy, cloud, security, analytics\n\n`;
+      output += chalk.hex("#FFAA00")('COMMAND CATEGORIES:') + '\n';
+      output += `  ${chalk.hex("#00AA00")('Core:')}         init, start, status, config\n`;
+      output += `  ${chalk.hex("#00AA00")('Agents:')}       agent, task, claude\n`;
+      output += `  ${chalk.hex("#00AA00")('Development:')}  sparc, memory, workflow\n`;
+      output += `  ${chalk.hex("#00AA00")('Infrastructure:')} mcp, terminal, session\n`;
+      output += `  ${chalk.hex("#00AA00")('Enterprise:')}   project, deploy, cloud, security, analytics\n\n`;
       
-      output += chalk.yellow('QUICK START:') + '\n';
+      output += chalk.hex("#FFAA00")('QUICK START:') + '\n';
       output += '  npx -y claude-flow@latest init --sparc # First-time setup with SPARC modes\n';
       output += '  ./claude-flow start --ui              # Interactive process management UI\n';
       output += '  ./claude-flow sparc modes             # List available development modes\n';
@@ -497,7 +497,7 @@ async function createProgram() {
       output += '  ./claude-flow memory store key "data"  # Store information\n';
       output += '  ./claude-flow status                  # Check system status\n\n';
       
-      output += chalk.yellow('GET DETAILED HELP:') + '\n';
+      output += chalk.hex("#FFAA00")('GET DETAILED HELP:') + '\n';
       output += '  claude-flow help <command>           # Show command-specific help\n';
       output += '  claude-flow <command> --help         # Alternative help syntax\n';
       output += '  \n';
@@ -507,23 +507,23 @@ async function createProgram() {
       output += '    claude-flow help memory            # Memory operations\n';
       output += '    claude-flow agent --help           # Agent subcommands\n\n';
       
-      output += chalk.yellow('COMMON OPTIONS:') + '\n';
+      output += chalk.hex("#FFAA00")('COMMON OPTIONS:') + '\n';
       output += '  --verbose, -v                        Enable detailed output\n';
       output += '  --help                               Show command help\n';
       output += '  --config <path>                      Use custom config file\n\n';
       
-      output += `Documentation: ${chalk.blue('https://github.com/ruvnet/claude-code-flow')}\n\n`;
-      output += `Created by ${chalk.magenta('rUv')} - Built with ${chalk.red('❤️')} for the Claude community\n\n`;
+      output += `Documentation: ${chalk.hex("#0066CC")('https://github.com/ruvnet/claude-code-flow')}\n\n`;
+      output += `Created by ${chalk.magenta('rUv')} - Built with ${chalk.hex("#FF0000")('❤️')} for the Claude community\n\n`;
       
       // List registered commands
-      output += '\n' + chalk.yellow('Registered Commands:') + '\n';
+      output += '\n' + chalk.hex("#FFAA00")('Registered Commands:') + '\n';
       const commands = cmd.commands.filter(c => !c._hidden);
       const maxCmdLength = Math.max(...commands.map(c => c.name().length));
       
       commands.forEach(subcmd => {
         const name = subcmd.name().padEnd(maxCmdLength + 2);
         const desc = subcmd.description() || '';
-        output += `  ${chalk.green(name)} ${desc}\n`;
+        output += `  ${chalk.hex("#00AA00")(name)} ${desc}\n`;
       });
       
       output += `\nUse "${chalk.cyan('claude-flow help <command>')}" for detailed usage information\n`;
@@ -552,7 +552,7 @@ async function createProgram() {
       printSuccess('Starting Claude-Flow orchestration system...');
       
       try {
-        const { startOrchestrator } = await import('./simple-orchestrator.js');
+        const { startOrchestrator } = await import("./simple-orchestrator.ts");
         await startOrchestrator(options);
       } catch (error: any) {
         if (error.code === 'MODULE_NOT_FOUND') {
@@ -700,11 +700,11 @@ async function createProgram() {
       }
       
       if (options.dryRun) {
-        console.log(chalk.yellow('🔍 Dry run - Task configuration shown above'));
+        console.log(chalk.hex("#FFAA00")('🔍 Dry run - Task configuration shown above'));
       } else {
-        console.log(chalk.green('✅ Task created successfully with full orchestration support'));
-        console.log(chalk.blue('\n💡 Features: Dependencies, Scheduling, Resource Management, Checkpoints, Rollback'));
-        console.log(chalk.blue('💡 Use TodoWrite/Memory for coordination in Claude Code'));
+        console.log(chalk.hex("#00AA00")('✅ Task created successfully with full orchestration support'));
+        console.log(chalk.hex("#0066CC")('\n💡 Features: Dependencies, Scheduling, Resource Management, Checkpoints, Rollback'));
+        console.log(chalk.hex("#0066CC")('💡 Use TodoWrite/Memory for coordination in Claude Code'));
       }
     });
 
@@ -734,7 +734,7 @@ async function createProgram() {
       console.log(`📊 Sort: ${options.sort} (${options.sortDir}), Limit: ${options.limit}, Offset: ${options.offset}`);
       console.log(`🎨 Format: ${options.format}, Dependencies: ${options.showDependencies ? 'yes' : 'no'}`);
       console.log('📋 No tasks currently active (orchestrator not running)');
-      console.log(chalk.blue('\n💡 Full implementation includes: Dependency visualization, Progress tracking, Performance metrics'));
+      console.log(chalk.hex("#0066CC")('\n💡 Full implementation includes: Dependency visualization, Progress tracking, Performance metrics'));
     });
 
   // Task Status - Detailed status with progress and metrics
@@ -767,10 +767,10 @@ async function createProgram() {
       }
       
       if (options.watch) {
-        console.log(chalk.blue('👀 Watching mode would refresh every 5 seconds...'));
+        console.log(chalk.hex("#0066CC")('👀 Watching mode would refresh every 5 seconds...'));
       }
       
-      console.log(chalk.blue('\n💡 Full implementation includes: Real-time metrics, Checkpoint management, Resource tracking'));
+      console.log(chalk.hex("#0066CC")('\n💡 Full implementation includes: Real-time metrics, Checkpoint management, Resource tracking'));
     });
 
   // Task Cancel - Safe cancellation with rollback
@@ -789,10 +789,10 @@ async function createProgram() {
       console.log(`🔗 Cascade: ${options.cascade ? 'enabled' : 'disabled'}`);
       
       if (options.dryRun) {
-        console.log(chalk.yellow('🔍 Dry run - Would cancel task with safe cleanup and rollback'));
+        console.log(chalk.hex("#FFAA00")('🔍 Dry run - Would cancel task with safe cleanup and rollback'));
       } else {
-        console.log(chalk.green('✅ Task cancelled successfully with cleanup'));
-        console.log(chalk.blue('💡 Features: Safe rollback, Resource cleanup, Dependent task handling'));
+        console.log(chalk.hex("#00AA00")('✅ Task cancelled successfully with cleanup'));
+        console.log(chalk.hex("#0066CC")('💡 Features: Safe rollback, Resource cleanup, Dependent task handling'));
       }
     });
 
@@ -815,7 +815,7 @@ async function createProgram() {
           console.log(`⚡ Max concurrent: ${options.maxConcurrent}`);
           console.log(`🎯 Strategy: ${options.strategy}`);
           console.log(`🛡️  Error handling: ${options.errorHandling}`);
-          console.log(chalk.green('✅ Workflow created with parallel processing support'));
+          console.log(chalk.hex("#00AA00")('✅ Workflow created with parallel processing support'));
         })
     )
     .addCommand(
@@ -827,9 +827,9 @@ async function createProgram() {
         .action((workflowId, options) => {
           printSuccess(`Executing workflow: ${workflowId}`);
           if (options.monitor) {
-            console.log(chalk.blue('👀 Monitoring execution with real-time progress...'));
+            console.log(chalk.hex("#0066CC")('👀 Monitoring execution with real-time progress...'));
           }
-          console.log(chalk.green('🚀 Workflow execution started with orchestration'));
+          console.log(chalk.hex("#00AA00")('🚀 Workflow execution started with orchestration'));
         })
     )
     .addCommand(
@@ -843,7 +843,7 @@ async function createProgram() {
           if (options.output) {
             console.log(`💾 Output: ${options.output}`);
           }
-          console.log(chalk.blue('🕸️  Dependency visualization with orchestration flow'));
+          console.log(chalk.hex("#0066CC")('🕸️  Dependency visualization with orchestration flow'));
         })
     );
 
@@ -859,7 +859,7 @@ async function createProgram() {
     .option('--force', 'Overwrite existing configuration file')
     .action(async (options) => {
       try {
-        const fs = await import('fs/promises');
+        const fs = await import('node:fs/promises');
         
         // Check if file exists
         if (!options.force) {
@@ -980,7 +980,7 @@ async function createProgram() {
       
       try {
         // Try to get actual status from orchestrator
-        const { getComponentStatus, getStores } = await import('./simple-orchestrator.js');
+        const { getComponentStatus, getStores } = await import("./simple-orchestrator.ts");
         const status = getComponentStatus();
         const stores = getStores();
         
@@ -1008,7 +1008,7 @@ async function createProgram() {
 
   // Advanced Memory commands
   try {
-    const { createAdvancedMemoryCommand } = await import('./commands/advanced-memory-commands.js');
+    const { createAdvancedMemoryCommand } = await import("./commands/advanced-memory-commands.ts");
     const memoryCmd = createAdvancedMemoryCommand();
     program.addCommand(memoryCmd);
   } catch (error) {
@@ -1118,7 +1118,7 @@ async function createProgram() {
       .description('Export memory to file')
       .action(async (file) => {
         try {
-          const fs = await import('fs/promises');
+          const fs = await import('node:fs/promises');
           const data = Object.fromEntries(memoryStore);
           await fs.writeFile(file, JSON.stringify(data, null, 2), 'utf8');
           printSuccess(`Exporting memory to: ${file}`);
@@ -1134,7 +1134,7 @@ async function createProgram() {
       .description('Import memory from file')
       .action(async (file) => {
         try {
-          const fs = await import('fs/promises');
+          const fs = await import('node:fs/promises');
           const content = await fs.readFile(file, 'utf8');
           const data = JSON.parse(content);
           
@@ -1218,7 +1218,7 @@ async function createProgram() {
     .description('Check terminal UI compatibility')
     .action(async () => {
       try {
-        const chalk = await import('chalk');
+        const chalk = await import('npm:chalk');
         
         // Inline UI support check
         console.log(chalk.default.cyan.bold('🖥️  UI Support Information'));
@@ -1309,7 +1309,7 @@ async function createProgram() {
 
   // MCP command
   try {
-    const { createMCPCommand } = await import('./simple-mcp.js');
+    const { createMCPCommand } = await import("./simple-mcp.ts");
     const mcpCommand = createMCPCommand();
     program.addCommand(mcpCommand);
   } catch (error) {
@@ -1349,9 +1349,9 @@ async function createProgram() {
     .option('--transport <transport>', 'Transport type (stdio, http)', 'http')
     .action(async (options) => {
       try {
-        const { MCPServer } = await import('../mcp/server.js');
-        const { eventBus } = await import('../core/event-bus.js');
-        const { logger } = await import('../core/logger.js');
+        const { MCPServer } = await import("../mcp/server.ts");
+        const { eventBus } = await import("../core/event-bus.ts");
+        const { logger } = await import("../core/logger.ts");
         
         try {
           await configManager.load('claude-flow.config.json');
@@ -1438,7 +1438,7 @@ async function createProgram() {
     .option('--history-file <path>', 'Custom history file path')
     .action(async (options) => {
       try {
-        const { startNodeREPL } = await import('./node-repl.js');
+        const { startNodeREPL } = await import("./node-repl.ts");
         await startNodeREPL(options);
       } catch (error) {
         printError(`Failed to start REPL: ${error.message}`);
@@ -1453,8 +1453,8 @@ async function createProgram() {
     .option('--force', 'Overwrite existing files')
     .action(async (options) => {
       try {
-        const fs = await import('fs/promises');
-        const path = await import('path');
+        const fs = await import('node:fs/promises');
+        const path = await import('node:path');
         
         printSuccess('Initializing Claude-Flow project...');
         
@@ -1948,7 +1948,7 @@ See .claude/commands/swarm/ for detailed documentation on each strategy.
     .option('--coverage-target <percentage>', 'Code coverage target', '95')
     .option('--memory-key <key>', 'Memory key for TDD session data')
     .action(async (description, options) => {
-      const { spawn } = await import('child_process');
+      const { spawn } = await import('node:child_process');
       
       printSuccess('Launching Claude Code with SPARC TDD mode...');
       console.log(`📝 Feature: ${description}`);
@@ -1977,9 +1977,9 @@ Please use the SPARC test-driven development (TDD) mode to:
 Follow the red-green-refactor cycle strictly.`;
       
       // Write the prompt to a temporary file
-      const fs = await import('fs/promises');
-      const path = await import('path');
-      const os = await import('os');
+      const fs = await import('node:fs/promises');
+      const path = await import('node:path');
+      const os = await import('node:os');
       
       const tempDir = os.tmpdir();
       const promptFile = path.join(tempDir, `sparc-tdd-prompt-${Date.now()}.txt`);
@@ -2644,13 +2644,13 @@ Follow the red-green-refactor cycle strictly.`;
         return `
 ${chalk.cyan.bold('🧠 Claude-Flow Swarm')} - AI Agent Coordination
 
-${chalk.yellow('USAGE:')}
+${chalk.hex("#FFAA00")('USAGE:')}
   claude-flow swarm [objective] [options]
 
-${chalk.yellow('ARGUMENTS:')}
+${chalk.hex("#FFAA00")('ARGUMENTS:')}
   objective                   The goal or task for the swarm to accomplish
 
-${chalk.yellow('OPTIONS:')}
+${chalk.hex("#FFAA00")('OPTIONS:')}
   --strategy <type>          Execution strategy (default: auto)
                              auto, research, development, analysis, testing, 
                              optimization, maintenance
@@ -2665,28 +2665,28 @@ ${chalk.yellow('OPTIONS:')}
   --dry-run                  Show configuration without executing
   -h, --help                 Display this help message
 
-${chalk.yellow('EXAMPLES:')}
+${chalk.hex("#FFAA00")('EXAMPLES:')}
   $ claude-flow swarm "Build a REST API" --strategy development
   $ claude-flow swarm "Research cloud architecture" --strategy research --mode distributed
   $ claude-flow swarm "Analyze user data" --strategy analysis --parallel --max-agents 10
 
-${chalk.yellow('STRATEGIES:')}
-  ${chalk.green('auto')}         - Automatically determine best approach
-  ${chalk.green('research')}     - Information gathering and analysis  
-  ${chalk.green('development')}  - Software development and coding
-  ${chalk.green('analysis')}     - Data analysis and insights
-  ${chalk.green('testing')}      - Quality assurance workflows
-  ${chalk.green('optimization')} - Performance improvements
-  ${chalk.green('maintenance')}  - System maintenance tasks
+${chalk.hex("#FFAA00")('STRATEGIES:')}
+  ${chalk.hex("#00AA00")('auto')}         - Automatically determine best approach
+  ${chalk.hex("#00AA00")('research')}     - Information gathering and analysis  
+  ${chalk.hex("#00AA00")('development')}  - Software development and coding
+  ${chalk.hex("#00AA00")('analysis')}     - Data analysis and insights
+  ${chalk.hex("#00AA00")('testing')}      - Quality assurance workflows
+  ${chalk.hex("#00AA00")('optimization')} - Performance improvements
+  ${chalk.hex("#00AA00")('maintenance')}  - System maintenance tasks
 
-${chalk.yellow('COORDINATION MODES:')}
-  ${chalk.green('centralized')}  - Single coordinator (default)
-  ${chalk.green('distributed')}  - Multiple coordinators
-  ${chalk.green('hierarchical')} - Tree structure
-  ${chalk.green('mesh')}         - Peer-to-peer
-  ${chalk.green('hybrid')}       - Mixed patterns
+${chalk.hex("#FFAA00")('COORDINATION MODES:')}
+  ${chalk.hex("#00AA00")('centralized')}  - Single coordinator (default)
+  ${chalk.hex("#00AA00")('distributed')}  - Multiple coordinators
+  ${chalk.hex("#00AA00")('hierarchical')} - Tree structure
+  ${chalk.hex("#00AA00")('mesh')}         - Peer-to-peer
+  ${chalk.hex("#00AA00")('hybrid')}       - Mixed patterns
 
-${chalk.yellow('SUBCOMMANDS:')}
+${chalk.hex("#FFAA00")('SUBCOMMANDS:')}
   list                       List recent swarm runs
   status <id>                Show status of a swarm run
 
@@ -2748,7 +2748,7 @@ Run 'claude-flow swarm <subcommand> --help' for subcommand help.
       console.log(`⏱️  Timeout: ${options.timeout} minutes`);
 
       // Launch Claude Code with swarm configuration
-      const { spawn } = await import('child_process');
+      const { spawn } = await import('node:child_process');
       
       // Construct optimized swarm prompt with clear action focus
       const swarmPrompt = `SPARC: swarm-${options.strategy}
@@ -2855,9 +2855,9 @@ Use ▶ to indicate actionable items`;
       console.log('\n🚀 Launching swarm execution...\n');
       
       // Write the prompt to a temporary file since it's very long
-      const fs = await import('fs/promises');
-      const path = await import('path');
-      const os = await import('os');
+      const fs = await import('node:fs/promises');
+      const path = await import('node:path');
+      const os = await import('node:os');
       
       const tempDir = os.tmpdir();
       const promptFile = path.join(tempDir, `swarm-prompt-${Date.now()}.txt`);
@@ -2961,7 +2961,7 @@ Use ▶ to indicate actionable items`;
 
   // Helper function for comprehensive SPARC setup when module import fails
   async function createComprehensiveSparcSetup() {
-    const fs = await import('fs/promises');
+    const fs = await import('node:fs/promises');
     
     // Create comprehensive .roomodes file
     const roomodes = {
@@ -3056,7 +3056,7 @@ Use ▶ to indicate actionable items`;
     console.log('   ✅ Created comprehensive .roomodes file with 17 modes');
     
     // Create SPARC command files directory
-    const path = await import('path');
+    const path = await import('node:path');
     const sparcDir = path.join('.claude', 'commands', 'sparc');
     await fs.mkdir(sparcDir, { recursive: true });
     

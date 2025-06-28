@@ -4,7 +4,7 @@
  */
 
 // Core MCP Server
-export { MCPServer, type IMCPServer } from './server.js';
+export { MCPServer, type IMCPServer } from "./server.ts";
 
 // Lifecycle Management
 export { 
@@ -13,7 +13,7 @@ export {
   type LifecycleEvent,
   type HealthCheckResult,
   type LifecycleManagerConfig 
-} from './lifecycle-manager.js';
+} from "./lifecycle-manager.ts";
 
 // Tool Registry and Management
 export { 
@@ -21,7 +21,7 @@ export {
   type ToolCapability,
   type ToolMetrics,
   type ToolDiscoveryQuery 
-} from './tools.js';
+} from "./tools.ts";
 
 // Protocol Management
 export { 
@@ -29,7 +29,7 @@ export {
   type ProtocolVersionInfo,
   type CompatibilityResult,
   type NegotiationResult 
-} from './protocol-manager.js';
+} from "./protocol-manager.ts";
 
 // Authentication and Authorization
 export { 
@@ -41,7 +41,7 @@ export {
   type TokenGenerationOptions,
   type AuthSession,
   Permissions 
-} from './auth.js';
+} from "./auth.ts";
 
 // Performance Monitoring
 export { 
@@ -51,7 +51,7 @@ export {
   type AlertRule,
   type Alert,
   type OptimizationSuggestion 
-} from './performance-monitor.js';
+} from "./performance-monitor.ts";
 
 // Orchestration Integration
 export { 
@@ -59,25 +59,25 @@ export {
   type OrchestrationComponents,
   type MCPOrchestrationConfig,
   type IntegrationStatus 
-} from './orchestration-integration.js';
+} from "./orchestration-integration.ts";
 
 // Transport Implementations
-export { type ITransport } from './transports/base.js';
-export { StdioTransport } from './transports/stdio.js';
-export { HttpTransport } from './transports/http.js';
+export { type ITransport } from "./transports/base.ts";
+export { StdioTransport } from "./transports/stdio.ts";
+export { HttpTransport } from "./transports/http.ts";
 
 // Request Routing
-export { RequestRouter } from './router.js';
+export { RequestRouter } from "./router.ts";
 
 // Session Management
-export { SessionManager, type ISessionManager } from './session-manager.js';
+export { SessionManager, type ISessionManager } from "./session-manager.ts";
 
 // Load Balancing
-export { LoadBalancer, type ILoadBalancer, RequestQueue } from './load-balancer.js';
+export { LoadBalancer, type ILoadBalancer, RequestQueue } from "./load-balancer.ts";
 
 // Tool Implementations
-export { createClaudeFlowTools, type ClaudeFlowToolContext } from './claude-flow-tools.js';
-export { createSwarmTools, type SwarmToolContext } from './swarm-tools.js';
+export { createClaudeFlowTools, type ClaudeFlowToolContext } from "./claude-flow-tools.ts";
+export { createSwarmTools, type SwarmToolContext } from "./swarm-tools.ts";
 
 /**
  * MCP Integration Factory
@@ -88,10 +88,10 @@ export class MCPIntegrationFactory {
    * Create a complete MCP integration with all components
    */
   static async createIntegration(config: {
-    mcpConfig: import('../utils/types.js').MCPConfig;
+    mcpConfig: import("../utils/types.ts").MCPConfig;
     orchestrationConfig?: Partial<MCPOrchestrationConfig>;
     components?: Partial<OrchestrationComponents>;
-    logger: import('../core/logger.js').ILogger;
+    logger: import("../core/logger.ts").ILogger;
   }): Promise<MCPOrchestrationIntegration> {
     const { mcpConfig, orchestrationConfig = {}, components = {}, logger } = config;
 
@@ -126,8 +126,8 @@ export class MCPIntegrationFactory {
    * Create a standalone MCP server (without orchestration integration)
    */
   static async createStandaloneServer(config: {
-    mcpConfig: import('../utils/types.js').MCPConfig;
-    logger: import('../core/logger.js').ILogger;
+    mcpConfig: import("../utils/types.ts").MCPConfig;
+    logger: import("../core/logger.ts").ILogger;
     enableLifecycleManagement?: boolean;
     enablePerformanceMonitoring?: boolean;
   }): Promise<{
@@ -170,13 +170,13 @@ export class MCPIntegrationFactory {
   /**
    * Create a development/testing MCP setup
    */
-  static async createDevelopmentSetup(logger: import('../core/logger.js').ILogger): Promise<{
+  static async createDevelopmentSetup(logger: import("../core/logger.ts").ILogger): Promise<{
     server: MCPServer;
     lifecycleManager: MCPLifecycleManager;
     performanceMonitor: MCPPerformanceMonitor;
     protocolManager: MCPProtocolManager;
   }> {
-    const mcpConfig: import('../utils/types.js').MCPConfig = {
+    const mcpConfig: import("../utils/types.ts").MCPConfig = {
       transport: 'stdio',
       enableMetrics: true,
       auth: {
@@ -261,7 +261,7 @@ export const MCPUtils = {
   /**
    * Validate MCP protocol version
    */
-  isValidProtocolVersion(version: import('../utils/types.js').MCPProtocolVersion): boolean {
+  isValidProtocolVersion(version: import("../utils/types.ts").MCPProtocolVersion): boolean {
     return (
       typeof version.major === 'number' &&
       typeof version.minor === 'number' &&
@@ -274,8 +274,8 @@ export const MCPUtils = {
    * Compare two protocol versions
    */
   compareVersions(
-    a: import('../utils/types.js').MCPProtocolVersion,
-    b: import('../utils/types.js').MCPProtocolVersion
+    a: import("../utils/types.ts").MCPProtocolVersion,
+    b: import("../utils/types.ts").MCPProtocolVersion
   ): number {
     if (a.major !== b.major) return a.major - b.major;
     if (a.minor !== b.minor) return a.minor - b.minor;
@@ -285,14 +285,14 @@ export const MCPUtils = {
   /**
    * Format protocol version as string
    */
-  formatVersion(version: import('../utils/types.js').MCPProtocolVersion): string {
+  formatVersion(version: import("../utils/types.ts").MCPProtocolVersion): string {
     return `${version.major}.${version.minor}.${version.patch}`;
   },
 
   /**
    * Parse protocol version from string
    */
-  parseVersion(versionString: string): import('../utils/types.js').MCPProtocolVersion {
+  parseVersion(versionString: string): import("../utils/types.ts").MCPProtocolVersion {
     const parts = versionString.split('.').map(p => parseInt(p, 10));
     if (parts.length !== 3 || parts.some(p => isNaN(p))) {
       throw new Error(`Invalid version string: ${versionString}`);

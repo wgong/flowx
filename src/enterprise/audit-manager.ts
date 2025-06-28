@@ -1,9 +1,9 @@
-import { EventEmitter } from 'events';
-import { writeFile, readFile, mkdir, readdir } from 'fs/promises';
-import { join } from 'path';
-import { createHash } from 'crypto';
-import { Logger } from '../core/logger.js';
-import { ConfigManager } from '../core/config.js';
+import { EventEmitter } from 'node:events';
+import { writeFile, readFile, mkdir, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { Logger } from "../core/logger.ts";
+import { ConfigManager } from "../core/config.ts";
 
 export interface AuditEntry {
   id: string;

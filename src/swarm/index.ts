@@ -1,48 +1,48 @@
 // Main exports for the swarm system
-export * from './coordinator';
-export * from './executor';
-export * from './types';
-export * from './strategies/base';
-export * from './strategies/auto';
-export * from './strategies/research';
-export * from './memory';
+export * from './coordinator.ts';
+export * from './executor.ts';
+export * from './types.ts';
+export * from './strategies/base.ts';
+export * from './strategies/auto.ts';
+export * from './strategies/research.ts';
+export * from './memory.ts';
 
 // Prompt copying system exports
-export * from './prompt-copier';
-export * from './prompt-copier-enhanced';
-export * from './prompt-utils';
-export * from './prompt-manager';
-export * from './prompt-cli';
+export * from './prompt-copier.ts';
+export * from './prompt-copier-enhanced.ts';
+export * from './prompt-utils.ts';
+export * from './prompt-manager.ts';
+export * from './prompt-cli.ts';
 
 // Optimizations
-export * from './optimizations';
+export * from './optimizations.ts';
 
 // Utility function to get all exports
 export function getSwarmComponents() {
   return {
     // Core components
-    coordinator: () => import('./coordinator'),
-    executor: () => import('./executor'),
-    types: () => import('./types'),
+    coordinator: () => import('./coordinator.ts'),
+    executor: () => import('./executor.ts'),
+    types: () => import('./types.ts'),
     
     // Strategies
     strategies: {
-      base: () => import('./strategies/base'),
-      auto: () => import('./strategies/auto'),
-      research: () => import('./strategies/research')
+      base: () => import('./strategies/base.ts'),
+      auto: () => import('./strategies/auto.ts'),
+      research: () => import('./strategies/research.ts')
     },
     
     // Memory
-    memory: () => import('./memory'),
+    memory: () => import('./memory.ts'),
     
     // Prompt system
-    promptCopier: () => import('./prompt-copier'),
-    promptCopierEnhanced: () => import('./prompt-copier-enhanced'),
-    promptUtils: () => import('./prompt-utils'),
-    promptManager: () => import('./prompt-manager'),
-    promptCli: () => import('./prompt-cli'),
+    promptCopier: () => import('./prompt-copier.ts'),
+    promptCopierEnhanced: () => import('./prompt-copier-enhanced.ts'),
+    promptUtils: () => import('./prompt-utils.ts'),
+    promptManager: () => import('./prompt-manager.ts'),
+    promptCli: () => import('./prompt-cli.ts'),
     
     // Optimizations
-    optimizations: () => import('./optimizations')
+    optimizations: () => import('./optimizations.ts')
   };
 }

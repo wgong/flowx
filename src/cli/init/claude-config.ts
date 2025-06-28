@@ -1,9 +1,9 @@
 // init/claude-config.ts - Claude configuration creation
-import type { InitOptions } from './index.js';
+import type { InitOptions } from "./index.ts";
 
 export async function createClaudeConfig(options: InitOptions): Promise<void> {
-  const fs = await import('fs/promises');
-  const path = await import('path');
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
   
   // Create base configuration
   const claudeConfig = {
@@ -58,7 +58,7 @@ export async function createClaudeConfig(options: InitOptions): Promise<void> {
 }
 
 async function createBatchToolsConfig(): Promise<void> {
-  const fs = await import('fs/promises');
+  const fs = await import('node:fs/promises');
   
   const batchConfig = {
     version: "1.0.71",
@@ -139,7 +139,7 @@ async function createBatchToolsConfig(): Promise<void> {
 }
 
 async function createSwarmConfig(): Promise<void> {
-  const fs = await import('fs/promises');
+  const fs = await import('node:fs/promises');
   
   const swarmConfig = {
     version: "1.0.71",
@@ -233,7 +233,7 @@ async function createSwarmConfig(): Promise<void> {
 }
 
 async function createCoordinationConfig(): Promise<void> {
-  const fs = await import('fs/promises');
+  const fs = await import('node:fs/promises');
   
   const coordinationConfig = {
     version: "1.0.71",

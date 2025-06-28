@@ -3,10 +3,10 @@
  * Coordinates all components of the Claude Code Console
  */
 
-import { WebSocketClient } from './websocket-client.js';
-import { TerminalEmulator } from './terminal-emulator.js';
-import { CommandHandler } from './command-handler.js';
-import { SettingsManager } from './settings.js';
+import { WebSocketClient } from "./websocket-client.ts";
+import { TerminalEmulator } from "./terminal-emulator.ts";
+import { CommandHandler } from "./command-handler.ts";
+import { SettingsManager } from "./settings.ts";
 
 class ClaudeCodeConsole {
   constructor() {

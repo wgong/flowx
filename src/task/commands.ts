@@ -3,10 +3,10 @@
  * Integrates with TodoWrite/TodoRead for coordination and Memory for persistence
  */
 
-import { Command } from 'commander';
-import chalk from 'chalk';
-import { TaskEngine, WorkflowTask, TaskFilter, TaskSort, Workflow, ResourceRequirement, TaskSchedule } from './engine.js';
-import { generateId } from '../utils/helpers.js';
+import { Command } from 'npm:commander';
+import chalk from 'npm:chalk';
+import { TaskEngine, WorkflowTask, TaskFilter, TaskSort, Workflow, ResourceRequirement, TaskSchedule } from "./engine.ts";
+import { generateId } from "../utils/helpers.ts";
 
 export interface TaskCommandContext {
   taskEngine: TaskEngine;
@@ -48,7 +48,7 @@ export function createTaskCreateCommand(context: TaskCommandContext): Command {
     .option('--dry-run', 'Show what would be created without creating')
     .action(async (type: string, description: string, options: any) => {
       try {
-        console.log(chalk.blue('🔧 Creating new task...'));
+        console.log(chalk.hex("#0066CC")('🔧 Creating new task...'));
         
         // Parse dependencies
         const dependencies = options.dependencies 
@@ -137,7 +137,7 @@ export function createTaskCreateCommand(context: TaskCommandContext): Command {
         };
 
         if (options.dryRun) {
-          console.log(chalk.yellow('🔍 Dry run - Task configuration:'));
+          console.log(chalk.hex("#FFAA00")('🔍 Dry run - Task configuration:'));
           console.log(JSON.stringify(taskData, null, 2));
           return;
         }
@@ -155,7 +155,7 @@ export function createTaskCreateCommand(context: TaskCommandContext): Command {
 
         const task = await context.taskEngine.createTask(taskData);
 
-        console.log(chalk.green('✅ Task created successfully:'));
+        console.log(chalk.hex("#00AA00")('✅ Task created successfully:'));
         console.log(chalk.cyan(`📝 ID: ${task.id}`));
         console.log(chalk.cyan(`🎯 Type: ${task.type}`));
         console.log(chalk.cyan(`📄 Description: ${task.description}`));
@@ -180,10 +180,10 @@ export function createTaskCreateCommand(context: TaskCommandContext): Command {
           console.log(chalk.cyan(`💻 Resources: ${resourceRequirements.map(r => `${r.type}:${r.amount}${r.unit}`).join(', ')}`));
         }
 
-        console.log(chalk.blue(`\n💡 Use 'task status ${task.id}' to monitor progress`));
+        console.log(chalk.hex("#0066CC")(`\n💡 Use 'task status ${task.id}' to monitor progress`));
 
       } catch (error) {
-        console.error(chalk.red('❌ Error creating task:'), error instanceof Error ? error.message : error);
+        console.error(chalk.hex("#FF0000")('❌ Error creating task:'), error instanceof Error ? error.message : error);
       }
     });
 }
@@ -212,7 +212,7 @@ export function createTaskListCommand(context: TaskCommandContext): Command {
     .option('--show-metrics', 'Show performance metrics')
     .action(async (options: any) => {
       try {
-        console.log(chalk.blue('📋 Listing tasks...'));
+        console.log(chalk.hex("#0066CC")('📋 Listing tasks...'));
 
         // Build filter
         const filter: TaskFilter = {};
@@ -265,7 +265,7 @@ export function createTaskListCommand(context: TaskCommandContext): Command {
         );
 
         if (result.tasks.length === 0) {
-          console.log(chalk.yellow('📭 No tasks found matching criteria'));
+          console.log(chalk.hex("#FFAA00")('📭 No tasks found matching criteria'));
           return;
         }
 
@@ -279,7 +279,7 @@ export function createTaskListCommand(context: TaskCommandContext): Command {
           });
         }
 
-        console.log(chalk.green(`✅ Found ${result.total} tasks (showing ${result.tasks.length})`));
+        console.log(chalk.hex("#00AA00")(`✅ Found ${result.total} tasks (showing ${result.tasks.length})`));
 
         if (options.format === 'json') {
           console.log(JSON.stringify(result, null, 2));
@@ -294,11 +294,11 @@ export function createTaskListCommand(context: TaskCommandContext): Command {
         }
 
         if (result.hasMore) {
-          console.log(chalk.blue(`\n💡 Use --offset ${parseInt(options.offset) + parseInt(options.limit)} to see more results`));
+          console.log(chalk.hex("#0066CC")(`\n💡 Use --offset ${parseInt(options.offset) + parseInt(options.limit)} to see more results`));
         }
 
       } catch (error) {
-        console.error(chalk.red('❌ Error listing tasks:'), error instanceof Error ? error.message : error);
+        console.error(chalk.hex("#FF0000")('❌ Error listing tasks:'), error instanceof Error ? error.message : error);
       }
     });
 }
@@ -323,7 +323,7 @@ export function createTaskStatusCommand(context: TaskCommandContext): Command {
           const status = await context.taskEngine.getTaskStatus(taskId);
           
           if (!status) {
-            console.log(chalk.red(`❌ Task ${taskId} not found`));
+            console.log(chalk.hex("#FF0000")(`❌ Task ${taskId} not found`));
             return false;
           }
 
@@ -342,7 +342,7 @@ export function createTaskStatusCommand(context: TaskCommandContext): Command {
           }
 
           console.clear();
-          console.log(chalk.blue(`📊 Task Status: ${taskId}`));
+          console.log(chalk.hex("#0066CC")(`📊 Task Status: ${taskId}`));
           console.log(''.padEnd(60, '='));
 
           const task = status.task;
@@ -374,7 +374,7 @@ export function createTaskStatusCommand(context: TaskCommandContext): Command {
           }
           if (task.schedule?.deadline) {
             const isOverdue = task.schedule.deadline < new Date() && task.status !== 'completed';
-            console.log(chalk.cyan(`⏳ Deadline: ${task.schedule.deadline.toLocaleString()} ${isOverdue ? chalk.red('(OVERDUE)') : ''}`));
+            console.log(chalk.cyan(`⏳ Deadline: ${task.schedule.deadline.toLocaleString()} ${isOverdue ? chalk.hex("#FF0000")('(OVERDUE)') : ''}`));
           }
 
           // Duration
@@ -387,7 +387,7 @@ export function createTaskStatusCommand(context: TaskCommandContext): Command {
 
           // Dependencies
           if (options.showDependencies && status.dependencies.length > 0) {
-            console.log(chalk.yellow('\n🔗 Dependencies:'));
+            console.log(chalk.hex("#FFAA00")('\n🔗 Dependencies:'));
             for (const dep of status.dependencies) {
               const icon = dep.satisfied ? '✅' : '⏳';
               console.log(`  ${icon} ${dep.task.id}: ${dep.task.description} (${dep.task.status})`);
@@ -396,7 +396,7 @@ export function createTaskStatusCommand(context: TaskCommandContext): Command {
 
           // Dependents
           if (options.showDependencies && status.dependents.length > 0) {
-            console.log(chalk.yellow('\n⬆️  Dependents:'));
+            console.log(chalk.hex("#FFAA00")('\n⬆️  Dependents:'));
             for (const dep of status.dependents) {
               console.log(`  📋 ${dep.id}: ${dep.description} (${dep.status})`);
             }
@@ -404,7 +404,7 @@ export function createTaskStatusCommand(context: TaskCommandContext): Command {
 
           // Resources
           if (options.showResources && status.resourceStatus.length > 0) {
-            console.log(chalk.yellow('\n💻 Resources:'));
+            console.log(chalk.hex("#FFAA00")('\n💻 Resources:'));
             for (const resource of status.resourceStatus) {
               const icon = resource.allocated ? '🔒' : resource.available ? '✅' : '❌';
               console.log(`  ${icon} ${resource.required.type}: ${resource.required.amount}${resource.required.unit}`);
@@ -413,7 +413,7 @@ export function createTaskStatusCommand(context: TaskCommandContext): Command {
 
           // Checkpoints
           if (options.showCheckpoints && task.checkpoints.length > 0) {
-            console.log(chalk.yellow('\n📍 Checkpoints:'));
+            console.log(chalk.hex("#FFAA00")('\n📍 Checkpoints:'));
             for (const checkpoint of task.checkpoints) {
               console.log(`  📌 ${checkpoint.timestamp.toLocaleString()}: ${checkpoint.description}`);
             }
@@ -421,7 +421,7 @@ export function createTaskStatusCommand(context: TaskCommandContext): Command {
 
           // Metrics
           if (options.showMetrics && status.execution) {
-            console.log(chalk.yellow('\n📊 Performance Metrics:'));
+            console.log(chalk.hex("#FFAA00")('\n📊 Performance Metrics:'));
             const metrics = status.execution.metrics;
             console.log(`  💻 CPU: ${metrics.cpuUsage.toFixed(2)}%`);
             console.log(`  🧠 Memory: ${(metrics.memoryUsage / 1024 / 1024).toFixed(2)} MB`);
@@ -431,7 +431,7 @@ export function createTaskStatusCommand(context: TaskCommandContext): Command {
 
           // Logs
           if (options.showLogs && status.execution?.logs.length) {
-            console.log(chalk.yellow('\n📝 Recent Logs:'));
+            console.log(chalk.hex("#FFAA00")('\n📝 Recent Logs:'));
             const recentLogs = status.execution.logs.slice(-5);
             for (const log of recentLogs) {
               const levelColor = getLogLevelColor(log.level);
@@ -441,18 +441,18 @@ export function createTaskStatusCommand(context: TaskCommandContext): Command {
 
           // Error info
           if (task.error) {
-            console.log(chalk.red('\n❌ Error:'));
-            console.log(chalk.red(`  ${task.error.message}`));
+            console.log(chalk.hex("#FF0000")('\n❌ Error:'));
+            console.log(chalk.hex("#FF0000")(`  ${task.error.message}`));
           }
 
           console.log(''.padEnd(60, '='));
-          console.log(chalk.blue(`🔄 Last updated: ${new Date().toLocaleTimeString()}`));
+          console.log(chalk.hex("#0066CC")(`🔄 Last updated: ${new Date().toLocaleTimeString()}`));
 
           return true;
         };
 
         if (options.watch) {
-          console.log(chalk.blue('👀 Watching task status (press Ctrl+C to stop)...'));
+          console.log(chalk.hex("#0066CC")('👀 Watching task status (press Ctrl+C to stop)...'));
           
           const interval = setInterval(async () => {
             const success = await displayStatus();
@@ -467,7 +467,7 @@ export function createTaskStatusCommand(context: TaskCommandContext): Command {
           // Handle Ctrl+C
           process.on('SIGINT', () => {
             clearInterval(interval);
-            console.log(chalk.yellow('\n👋 Stopped watching'));
+            console.log(chalk.hex("#FFAA00")('\n👋 Stopped watching'));
             process.exit(0);
           });
         } else {
@@ -475,7 +475,7 @@ export function createTaskStatusCommand(context: TaskCommandContext): Command {
         }
 
       } catch (error) {
-        console.error(chalk.red('❌ Error getting task status:'), error instanceof Error ? error.message : error);
+        console.error(chalk.hex("#FF0000")('❌ Error getting task status:'), error instanceof Error ? error.message : error);
       }
     });
 }
@@ -494,23 +494,23 @@ export function createTaskCancelCommand(context: TaskCommandContext): Command {
     .option('--dry-run', 'Show what would be cancelled without cancelling')
     .action(async (taskId: string, options: any) => {
       try {
-        console.log(chalk.blue(`⏹️  Preparing to cancel task: ${taskId}`));
+        console.log(chalk.hex("#0066CC")(`⏹️  Preparing to cancel task: ${taskId}`));
 
         const status = await context.taskEngine.getTaskStatus(taskId);
         if (!status) {
-          console.log(chalk.red(`❌ Task ${taskId} not found`));
+          console.log(chalk.hex("#FF0000")(`❌ Task ${taskId} not found`));
           return;
         }
 
         const task = status.task;
 
         if (task.status === 'completed' && !options.force) {
-          console.log(chalk.yellow(`⚠️  Task ${taskId} is already completed. Use --force to cancel anyway.`));
+          console.log(chalk.hex("#FFAA00")(`⚠️  Task ${taskId} is already completed. Use --force to cancel anyway.`));
           return;
         }
 
         if (task.status === 'cancelled') {
-          console.log(chalk.yellow(`⚠️  Task ${taskId} is already cancelled`));
+          console.log(chalk.hex("#FFAA00")(`⚠️  Task ${taskId} is already cancelled`));
           return;
         }
 
@@ -530,7 +530,7 @@ export function createTaskCancelCommand(context: TaskCommandContext): Command {
         }
 
         if (options.dryRun) {
-          console.log(chalk.yellow('🔍 Dry run - no actual cancellation performed'));
+          console.log(chalk.hex("#FFAA00")('🔍 Dry run - no actual cancellation performed'));
           return;
         }
 
@@ -546,7 +546,7 @@ export function createTaskCancelCommand(context: TaskCommandContext): Command {
           });
         }
 
-        console.log(chalk.yellow('⏳ Cancelling task...'));
+        console.log(chalk.hex("#FFAA00")('⏳ Cancelling task...'));
 
         await context.taskEngine.cancelTask(
           taskId,
@@ -554,27 +554,27 @@ export function createTaskCancelCommand(context: TaskCommandContext): Command {
           !options.noRollback
         );
 
-        console.log(chalk.green(`✅ Task ${taskId} cancelled successfully`));
+        console.log(chalk.hex("#00AA00")(`✅ Task ${taskId} cancelled successfully`));
         console.log(chalk.cyan(`📝 Reason: ${options.reason}`));
 
         if (!options.noRollback && task.checkpoints.length > 0) {
-          console.log(chalk.green('🔄 Rollback completed'));
+          console.log(chalk.hex("#00AA00")('🔄 Rollback completed'));
         }
 
         if (options.cascade && status.dependents.length > 0) {
-          console.log(chalk.blue('🔗 Cancelling dependent tasks...'));
+          console.log(chalk.hex("#0066CC")('🔗 Cancelling dependent tasks...'));
           for (const dep of status.dependents) {
             try {
               await context.taskEngine.cancelTask(dep.id, `Parent task ${taskId} was cancelled`);
-              console.log(chalk.green(`  ✅ Cancelled: ${dep.id}`));
+              console.log(chalk.hex("#00AA00")(`  ✅ Cancelled: ${dep.id}`));
             } catch (error) {
-              console.log(chalk.red(`  ❌ Failed to cancel: ${dep.id} - ${error}`));
+              console.log(chalk.hex("#FF0000")(`  ❌ Failed to cancel: ${dep.id} - ${error}`));
             }
           }
         }
 
       } catch (error) {
-        console.error(chalk.red('❌ Error cancelling task:'), error instanceof Error ? error.message : error);
+        console.error(chalk.hex("#FF0000")('❌ Error cancelling task:'), error instanceof Error ? error.message : error);
       }
     });
 }
@@ -597,7 +597,7 @@ export function createTaskWorkflowCommand(context: TaskCommandContext): Command 
         .option('--max-retries <number>', 'Maximum workflow retries', '3')
         .action(async (name: string, options: any) => {
           try {
-            console.log(chalk.blue(`🔧 Creating workflow: ${name}`));
+            console.log(chalk.hex("#0066CC")(`🔧 Creating workflow: ${name}`));
 
             let workflowData: Partial<Workflow> = {
               name,
@@ -613,7 +613,7 @@ export function createTaskWorkflowCommand(context: TaskCommandContext): Command 
             };
 
             if (options.file) {
-              const fs = await import('fs/promises');
+              const fs = await import('node:fs/promises');
               const fileContent = await fs.readFile(options.file, 'utf8');
               const fileData = JSON.parse(fileContent);
               workflowData = { ...workflowData, ...fileData };
@@ -621,7 +621,7 @@ export function createTaskWorkflowCommand(context: TaskCommandContext): Command 
 
             const workflow = await context.taskEngine.createWorkflow(workflowData);
 
-            console.log(chalk.green('✅ Workflow created successfully:'));
+            console.log(chalk.hex("#00AA00")('✅ Workflow created successfully:'));
             console.log(chalk.cyan(`📝 ID: ${workflow.id}`));
             console.log(chalk.cyan(`📄 Name: ${workflow.name}`));
             console.log(chalk.cyan(`📋 Tasks: ${workflow.tasks.length}`));
@@ -629,7 +629,7 @@ export function createTaskWorkflowCommand(context: TaskCommandContext): Command 
             console.log(chalk.cyan(`🎯 Strategy: ${workflow.parallelism.strategy}`));
 
           } catch (error) {
-            console.error(chalk.red('❌ Error creating workflow:'), error instanceof Error ? error.message : error);
+            console.error(chalk.hex("#FF0000")('❌ Error creating workflow:'), error instanceof Error ? error.message : error);
           }
         })
     )
@@ -642,25 +642,25 @@ export function createTaskWorkflowCommand(context: TaskCommandContext): Command 
         .option('--monitor', 'Monitor execution progress')
         .action(async (workflowId: string, options: any) => {
           try {
-            console.log(chalk.blue(`🚀 Executing workflow: ${workflowId}`));
+            console.log(chalk.hex("#0066CC")(`🚀 Executing workflow: ${workflowId}`));
 
             // This would need access to workflow storage
             // For now, showing the structure
 
             if (options.dryRun) {
-              console.log(chalk.yellow('🔍 Dry run - execution plan would be shown here'));
+              console.log(chalk.hex("#FFAA00")('🔍 Dry run - execution plan would be shown here'));
               return;
             }
 
             if (options.monitor) {
-              console.log(chalk.blue('👀 Monitoring workflow execution...'));
+              console.log(chalk.hex("#0066CC")('👀 Monitoring workflow execution...'));
               // Would implement real-time monitoring
             }
 
-            console.log(chalk.green('✅ Workflow execution started'));
+            console.log(chalk.hex("#00AA00")('✅ Workflow execution started'));
 
           } catch (error) {
-            console.error(chalk.red('❌ Error executing workflow:'), error instanceof Error ? error.message : error);
+            console.error(chalk.hex("#FF0000")('❌ Error executing workflow:'), error instanceof Error ? error.message : error);
           }
         })
     )
@@ -672,16 +672,16 @@ export function createTaskWorkflowCommand(context: TaskCommandContext): Command 
         .option('--output <file>', 'Output file (for dot/json formats)')
         .action(async (workflowId: string, options: any) => {
           try {
-            console.log(chalk.blue(`📊 Visualizing workflow: ${workflowId}`));
+            console.log(chalk.hex("#0066CC")(`📊 Visualizing workflow: ${workflowId}`));
 
             const graph = context.taskEngine.getDependencyGraph();
 
             if (options.format === 'json') {
               const output = JSON.stringify(graph, null, 2);
               if (options.output) {
-                const fs = await import('fs/promises');
+                const fs = await import('node:fs/promises');
                 await fs.writeFile(options.output, output);
-                console.log(chalk.green(`💾 Graph saved to: ${options.output}`));
+                console.log(chalk.hex("#00AA00")(`💾 Graph saved to: ${options.output}`));
               } else {
                 console.log(output);
               }
@@ -690,7 +690,7 @@ export function createTaskWorkflowCommand(context: TaskCommandContext): Command 
             }
 
           } catch (error) {
-            console.error(chalk.red('❌ Error visualizing workflow:'), error instanceof Error ? error.message : error);
+            console.error(chalk.hex("#FF0000")('❌ Error visualizing workflow:'), error instanceof Error ? error.message : error);
           }
         })
     );
@@ -713,7 +713,7 @@ function getStatusIcon(status: string): string {
 function createProgressBar(percentage: number, width: number = 20): string {
   const filled = Math.round((percentage / 100) * width);
   const empty = width - filled;
-  return chalk.green('█'.repeat(filled)) + chalk.gray('░'.repeat(empty));
+  return chalk.hex("#00AA00")('█'.repeat(filled)) + chalk.gray('░'.repeat(empty));
 }
 
 function formatDuration(ms: number): string {
@@ -737,7 +737,7 @@ function getLogLevelColor(level: string): any {
 }
 
 function displayTaskTable(tasks: WorkflowTask[], options: any): void {
-  console.log(chalk.yellow('\n📋 Tasks:'));
+  console.log(chalk.hex("#FFAA00")('\n📋 Tasks:'));
   console.log('─'.repeat(80));
   
   for (const task of tasks) {
@@ -751,13 +751,13 @@ function displayTaskTable(tasks: WorkflowTask[], options: any): void {
 }
 
 function displayTaskTree(tasks: WorkflowTask[]): void {
-  console.log(chalk.yellow('\n🌳 Task Dependency Tree:'));
+  console.log(chalk.hex("#FFAA00")('\n🌳 Task Dependency Tree:'));
   // Implementation would show hierarchical view of dependencies
   console.log('Tree visualization would be implemented here');
 }
 
 function displayDependencyGraph(graph: { nodes: any[]; edges: any[] }): void {
-  console.log(chalk.yellow('\n🕸️  Dependency Graph:'));
+  console.log(chalk.hex("#FFAA00")('\n🕸️  Dependency Graph:'));
   console.log(`📊 Nodes: ${graph.nodes.length}, Edges: ${graph.edges.length}`);
   
   // Simple ASCII representation

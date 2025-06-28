@@ -2,15 +2,15 @@
  * Terminal manager interface and implementation
  */
 
-import { AgentProfile, AgentSession, TerminalConfig } from '../utils/types.js';
-import { IEventBus } from '../core/event-bus.js';
-import { ILogger } from '../core/logger.js';
-import { TerminalError, TerminalSpawnError } from '../utils/errors.js';
-import { ITerminalAdapter } from './adapters/base.js';
-import { VSCodeAdapter } from './adapters/vscode.js';
-import { NativeAdapter } from './adapters/native.js';
-import { TerminalPool } from './pool.js';
-import { TerminalSession } from './session.js';
+import { AgentProfile, AgentSession, TerminalConfig } from "../utils/types.ts";
+import { IEventBus } from "../core/event-bus.ts";
+import { ILogger } from "../core/logger.ts";
+import { TerminalError, TerminalSpawnError } from "../utils/errors.ts";
+import { ITerminalAdapter } from "./adapters/base.ts";
+import { VSCodeAdapter } from "./adapters/vscode.ts";
+import { NativeAdapter } from "./adapters/native.ts";
+import { TerminalPool } from "./pool.ts";
+import { TerminalSession } from "./session.ts";
 
 export interface ITerminalManager {
   initialize(): Promise<void>;
