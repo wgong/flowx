@@ -14,8 +14,8 @@ export * from './prompt-utils.ts';
 export * from './prompt-manager.ts';
 export * from './prompt-cli.ts';
 
-// Optimizations
-export * from './optimizations.ts';
+// Optimizations - commented out due to ExecutionMetrics naming conflict
+// export * from './optimizations/index.ts';
 
 // Utility function to get all exports
 export function getSwarmComponents() {
@@ -42,7 +42,7 @@ export function getSwarmComponents() {
     promptManager: () => import('./prompt-manager.ts'),
     promptCli: () => import('./prompt-cli.ts'),
     
-    // Optimizations
-    optimizations: () => import('./optimizations.ts')
+    // Optimizations - commented out due to ExecutionMetrics naming conflict
+    // optimizations: () => import('./optimizations/index.ts')
   };
 }

@@ -6,7 +6,7 @@
 import { chalk, fsExtra as fs, path } from "../utils/imports.ts";
 import { getEnv, cwd, exit } from "../utils/runtime-env.ts";
 
-export const VERSION = "1.0.43";
+export const VERSION = "1.1.2";
 
 interface CommandContext {
   args: string[];
@@ -130,8 +130,19 @@ class CLI {
       const arg = args[i];
       
       if (arg.startsWith('--')) {
-        const key = arg.slice(2);
-        if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
+        let key = arg.slice(2);
+        let value = null;
+
+        if (key.includes('=')) {
+          const parts = key.split('=', 2);
+          key = parts[0];
+          value = parts[1];
+        }
+
+        if (value !== null) {
+          result[key] = value;
+          i++;
+        } else if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
           result[key] = args[i + 1];
           i += 2;
         } else {
@@ -252,10 +263,27 @@ Created by rUv - Built with ❤️ for the Claude community
     const commands = Array.from(new Set(this.commands.values()));
     return commands
       .map(cmd => {
-        const name = String(cmd.name || 'unknown');
-        const description = String(cmd.description || '');
+        // Ensure name and description are strings and not function objects
+        let name = 'unknown';
+        let description = '';
+        
+        if (cmd.name && typeof cmd.name === 'string') {
+          name = cmd.name;
+        } else if (cmd.name && typeof cmd.name === 'object') {
+          // Skip malformed commands with object names
+          return null;
+        }
+        
+        if (cmd.description && typeof cmd.description === 'string') {
+          description = cmd.description;
+        } else if (cmd.description && typeof cmd.description === 'object') {
+          // Skip malformed commands with object descriptions
+          return null;
+        }
+        
         return `  ${name.padEnd(20)} ${description}`;
       })
+      .filter(line => line !== null)
       .join("\n");
   }
 

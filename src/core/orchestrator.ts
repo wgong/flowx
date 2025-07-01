@@ -287,9 +287,9 @@ export class Orchestrator implements IOrchestrator {
   private initialized = false;
   private shutdownInProgress = false;
   private sessionManager: ISessionManager;
-  private healthCheckInterval?: number;
-  private maintenanceInterval?: number;
-  private metricsInterval?: number;
+  private healthCheckInterval?: NodeJS.Timeout;
+  private maintenanceInterval?: NodeJS.Timeout;
+  private metricsInterval?: NodeJS.Timeout;
   private agents = new Map<string, AgentProfile>();
   private taskQueue: Task[] = [];
   private taskHistory = new Map<string, Task>();
@@ -297,9 +297,11 @@ export class Orchestrator implements IOrchestrator {
   
   // Metrics tracking
   private metrics = {
-    completedTasks: 0,
-    failedTasks: 0,
+    tasksCompleted: 0,
+    tasksFailed: 0,
     totalTaskDuration: 0,
+    agentsSpawned: 0,
+    agentsTerminated: 0,
   };
   
   // Circuit breakers for critical operations
@@ -634,8 +636,8 @@ export class Orchestrator implements IOrchestrator {
     const memUsage = process.memoryUsage();
     const cpuUsage = process.cpuUsage();
     
-    const avgTaskDuration = this.metrics.completedTasks > 0
-      ? this.metrics.totalTaskDuration / this.metrics.completedTasks
+    const avgTaskDuration = this.metrics.tasksCompleted > 0
+      ? this.metrics.totalTaskDuration / this.metrics.tasksCompleted
       : 0;
 
     return {
@@ -643,8 +645,8 @@ export class Orchestrator implements IOrchestrator {
       totalAgents: this.agents.size,
       activeAgents: this.sessionManager.getActiveSessions().length,
       totalTasks: this.taskHistory.size,
-      completedTasks: this.metrics.completedTasks,
-      failedTasks: this.metrics.failedTasks,
+      completedTasks: this.metrics.tasksCompleted,
+      failedTasks: this.metrics.tasksFailed,
       queuedTasks: this.taskQueue.length,
       avgTaskDuration,
       memoryUsage: memUsage,
@@ -706,7 +708,7 @@ export class Orchestrator implements IOrchestrator {
         }
         
         // Update metrics
-        this.metrics.completedTasks++;
+        this.metrics.tasksCompleted++;
         if (task.startedAt) {
           this.metrics.totalTaskDuration += task.completedAt.getTime() - task.startedAt.getTime();
         }
@@ -724,7 +726,7 @@ export class Orchestrator implements IOrchestrator {
         task.error = error;
         
         // Update metrics
-        this.metrics.failedTasks++;
+        this.metrics.tasksFailed++;
       }
       
       // Retry or requeue based on configuration

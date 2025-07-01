@@ -1,112 +1,200 @@
-# Agent Swarm Benchmarking Tool
+# Claude-Flow Benchmark System
 
-A comprehensive Python-based benchmarking tool for agent swarms that interfaces with the Claude Flow Advanced Swarm System. This tool measures performance, efficiency, and effectiveness of different swarm strategies and coordination modes.
+A comprehensive, modern benchmarking system for claude-flow swarm operations with robust metrics collection, parallel execution, and extensible architecture. This system replaces the previous fragmented implementation with a clean, well-organized TypeScript codebase.
 
-## 🚀 Features
+## Features
 
-- **Complete Strategy Coverage**: Supports all claude-flow swarm strategies (auto, research, development, analysis, testing, optimization, maintenance)
-- **Multiple Coordination Modes**: Tests centralized, distributed, hierarchical, mesh, and hybrid coordination patterns
-- **Comprehensive Metrics**: Tracks performance, resource usage, quality metrics, and coordination efficiency
-- **Multiple Output Formats**: Exports results to JSON, SQLite, CSV, and HTML formats
-- **CLI Interface**: Command-line interface matching claude-flow swarm command structure
-- **Test-Driven Development**: Built using TDD methodology with comprehensive test coverage
-- **Modular Architecture**: Clean, extensible design with pluggable components
+- **Unified Architecture**: Single benchmark engine with pluggable components
+- **Real-Time Metrics**: Detailed performance and resource usage tracking
+- **Parallel Execution**: Efficient multi-agent and multi-task benchmarking
+- **Multiple Output Formats**: JSON, SQLite, and CSV reporting
+- **Robust Error Handling**: Comprehensive error tracking and reporting
+- **CLI Interface**: Easy command-line usage
+- **Integration API**: Seamless integration with claude-flow
+- **TypeScript Support**: Full TypeScript integration with proper types
 
-## 📦 Installation
+## Installation
 
-### Prerequisites
-- Python 3.8 or higher
-- pip package manager
-
-### Install from Source
 ```bash
-# Clone and install
+# From the claude-flow root directory
 cd benchmark
-pip install -r requirements.txt
-pip install -e .
+npm install
+npm run build
 ```
 
-## 🎯 Quick Start
+## Usage
 
-### Basic Usage
-```bash
-# Run a simple research benchmark
-swarm-benchmark run "Research cloud architecture patterns" --strategy research
-
-# Run a development benchmark with distributed coordination
-swarm-benchmark run "Build a REST API" --strategy development --mode distributed
-
-# Run an analysis task with monitoring
-swarm-benchmark run "Analyze user behavior data" --strategy analysis --monitor
-
-# Test different strategies automatically
-swarm-benchmark run "Optimize database performance" --strategy auto
-```
-
-### Example Output
-```bash
-$ swarm-benchmark run "Test research task" --strategy research --verbose
-
-Running benchmark: benchmark-research-centralized
-Objective: Test research task
-Strategy: research
-Mode: centralized
-✅ Benchmark completed successfully!
-📊 Results saved to: ./reports
-📋 Summary: Completed 1 tasks
-```
-
-## 📊 Available Strategies
-
-| Strategy | Description | Best For |
-|----------|-------------|----------|
-| `auto` | Automatically determines best approach | General-purpose tasks |
-| `research` | Information gathering and analysis | Research, documentation |
-| `development` | Software development and coding | Building applications |
-| `analysis` | Data analysis and insights | Data processing, metrics |
-| `testing` | Quality assurance workflows | Testing, validation |
-| `optimization` | Performance improvements | Speed, efficiency gains |
-| `maintenance` | System maintenance tasks | Updates, documentation |
-
-## 🔗 Coordination Modes
-
-| Mode | Description | Coordination Pattern |
-|------|-------------|---------------------|
-| `centralized` | Single coordinator (default) | Simple, reliable |
-| `distributed` | Multiple coordinators | Scalable, fault-tolerant |
-| `hierarchical` | Tree structure | Organized, clear authority |
-| `mesh` | Peer-to-peer | Flexible, dynamic |
-| `hybrid` | Mixed patterns | Adaptive, optimized |
-
-## Development
-
-This project follows the SPARC (Specification, Pseudocode, Architecture, Refinement, Completion) methodology for systematic Test-Driven Development.
-
-### Running Tests
+### Command Line via Claude-Flow
 
 ```bash
-pytest tests/
+# Run a simple benchmark
+npx claude-flow benchmark run "Build a REST API" --strategy development
+
+# Run with detailed options
+npx claude-flow benchmark run "Research microservices architecture" \
+  --strategy research \
+  --mode distributed \
+  --parallel \
+  --output json,sqlite \
+  --output-dir ./benchmark-results
+
+# Run an example benchmark
+npx claude-flow benchmark example
+
+# Run the benchmark system self-test
+npx claude-flow benchmark test
 ```
 
-### Project Structure
+### Standalone Command Line
+
+```bash
+# Run a benchmark directly
+node benchmark/bin/benchmark-cli.js run "Build a REST API" --strategy development
+
+# Run the benchmark system self-test
+node benchmark/bin/benchmark-cli.js test
+```
+
+### JavaScript/TypeScript API
+
+```javascript
+import { runBenchmark } from './benchmark/src/index.ts';
+
+async function main() {
+  const result = await runBenchmark({
+    objective: 'Build a simple REST API with Express',
+    strategy: 'development',
+    mode: 'centralized',
+    maxAgents: 3,
+    parallel: true,
+    outputFormats: ['json', 'sqlite'],
+    outputDirectory: './benchmark-reports'
+  });
+  
+  console.log(`Benchmark completed: ${result.status}`);
+  console.log(`Duration: ${result.duration.toFixed(2)}s`);
+  console.log(`Peak Memory: ${result.metrics.peakMemoryMb.toFixed(2)} MB`);
+}
+
+main().catch(console.error);
+```
+
+## Directory Structure
 
 ```
 benchmark/
-├── src/swarm_benchmark/    # Source code
-│   ├── cli/               # Command-line interface
-│   ├── core/             # Core benchmarking framework
-│   ├── strategies/       # Swarm strategy implementations
-│   ├── modes/           # Coordination mode implementations
-│   ├── metrics/         # Performance metrics collection
-│   ├── output/          # JSON/SQLite output modules
-│   └── utils/           # Utility functions
-├── tests/               # Test suite
-│   ├── unit/           # Unit tests
-│   ├── integration/    # Integration tests
-│   └── performance/    # Performance benchmarks
-└── config/             # Configuration files
+├── src/                        # TypeScript source code
+│   ├── api.ts                  # Public API
+│   ├── index.ts                # Main entry point
+│   └── swarm_benchmark/        # Core benchmark system
+│       ├── core/               # Core functionality
+│       │   ├── benchmark_engine.ts # Unified benchmark engine
+│       │   ├── models.ts       # Data models
+│       │   └── plugins.ts      # Plugin system
+│       ├── strategies/         # Task execution strategies
+│       ├── metrics/            # Metrics collection
+│       ├── output/             # Output formatting
+│       ├── utils/              # Utilities
+│       └── plugins/            # Plugin implementations
+├── bin/                        # CLI tools
+├── examples/                   # Example usage
+├── tests/                      # Tests
+│   ├── unit/                   # Unit tests
+│   └── integration/            # Integration tests
+├── reports/                    # Default location for benchmark reports
+├── simple-benchmark.js         # Simplified JavaScript implementation
+└── package.json                # Dependencies and scripts
 ```
+
+## Benchmark Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `objective` | Main benchmark objective | (required) |
+| `strategy` | Swarm strategy to use | `auto` |
+| `mode` | Coordination mode | `centralized` |
+| `maxAgents` | Maximum number of agents | `3` |
+| `parallel` | Enable parallel execution | `false` |
+| `optimized` | Enable performance optimizations | `true` |
+| `metrics` | Collect detailed metrics | `true` |
+| `outputFormats` | Output formats (`json`, `sqlite`, `csv`) | `['json']` |
+| `outputDirectory` | Directory for benchmark reports | `./benchmark-reports` |
+| `timeout` | Task timeout in seconds | `300` |
+| `logLevel` | Log level (`debug`, `info`, `warn`, `error`) | `info` |
+| `logToFile` | Log to file | `false` |
+
+## Available Strategies
+
+The benchmark system supports the following swarm strategies:
+
+- **Auto**: Automatically select the best strategy
+- **Research**: Information gathering and analysis
+- **Development**: Software development tasks
+- **Analysis**: Code and data analysis
+- **Testing**: Quality assurance workflows
+- **Optimization**: Performance improvements
+- **Maintenance**: System maintenance tasks
+
+## Coordination Modes
+
+The benchmark system supports the following coordination modes:
+
+- **Centralized**: Single coordinator (default)
+- **Distributed**: Multiple coordinators
+- **Hierarchical**: Tree structure
+- **Mesh**: Peer-to-peer
+- **Hybrid**: Mixed patterns
+
+## Plugin System
+
+You can extend the benchmark system with custom plugins:
+
+```javascript
+import { UnifiedBenchmarkEngine, EnginePlugin } from './benchmark/src/index.ts';
+
+// Create custom plugin
+class CustomPlugin extends EnginePlugin {
+  async preBenchmark(benchmark) {
+    console.log('Starting benchmark:', benchmark.name);
+  }
+  
+  async postBenchmark(benchmark) {
+    console.log('Benchmark completed:', benchmark.name);
+    console.log('Duration:', benchmark.duration());
+  }
+}
+
+// Create engine with custom plugin
+const config = new BenchmarkConfig();
+const engine = new UnifiedBenchmarkEngine(config);
+engine.add_plugin(new CustomPlugin());
+
+// Run benchmark
+const result = await engine.run_benchmark('Test objective');
+```
+
+## Running Examples
+
+The repository includes example scripts:
+
+```bash
+# Run the basic example
+npm run example:basic
+
+# Run the advanced example
+npm run example:advanced
+
+# Run the plugin example
+npm run example:plugin
+
+# Run the test example
+npm run example:test
+```
+
+## Contributing
+
+Contributions are welcome! Please make sure tests pass before submitting pull requests.
 
 ## License
 
-MIT License
+This project is licensed under the MIT License.

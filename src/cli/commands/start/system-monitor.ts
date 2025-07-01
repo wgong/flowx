@@ -2,16 +2,35 @@
  * System Monitor - Real-time monitoring of system processes
  */
 
-import { colors } from '@cliffy/ansi/colors';
-import { ProcessManager } from "./process-manager.ts";
-import { SystemEvents } from "../../../utils/types.ts";
-import { eventBus } from "../../../core/event-bus.ts";
+import { Logger } from '../../utils/logger.js';
+import { ProcessUI } from './process-ui.js';
+import { ProcessManager } from "./process-manager.js";
+import { SystemEvents } from "../../../utils/types.js";
+import { eventBus } from "../../../core/event-bus.js";
+
+// Simple color utilities (replacing @cliffy/ansi/colors)
+const colors = {
+  red: (text: string) => `\x1b[31m${text}\x1b[0m`,
+  green: (text: string) => `\x1b[32m${text}\x1b[0m`,
+  yellow: (text: string) => `\x1b[33m${text}\x1b[0m`,
+  blue: (text: string) => `\x1b[34m${text}\x1b[0m`,
+  cyan: (text: string) => `\x1b[36m${text}\x1b[0m`,
+  gray: (text: string) => `\x1b[90m${text}\x1b[0m`,
+  white: (text: string) => `\x1b[37m${text}\x1b[0m`,
+  bold: (text: string) => `\x1b[1m${text}\x1b[0m`,
+};
+
+// Color combination helpers
+const colorCombos = {
+  cyanBold: (text: string) => colors.bold(colors.cyan(text)),
+  whiteBold: (text: string) => colors.bold(colors.white(text)),
+};
 
 export class SystemMonitor {
   private processManager: ProcessManager;
   private events: any[] = [];
   private maxEvents = 100;
-  private metricsInterval?: number;
+  private metricsInterval?: NodeJS.Timeout;
 
   constructor(processManager: ProcessManager) {
     this.processManager = processManager;
@@ -145,7 +164,7 @@ export class SystemMonitor {
   }
 
   printEventLog(count: number = 20): void {
-    console.log(colors.cyan.bold('📊 Recent System Events'));
+    console.log(colorCombos.cyanBold('📊 Recent System Events'));
     console.log(colors.gray('─'.repeat(80)));
     
     const events = this.getRecentEvents(count);
@@ -197,78 +216,75 @@ export class SystemMonitor {
   private formatEventMessage(event: any): string {
     switch (event.type) {
       case 'agent_spawned':
-        return `Agent spawned: ${event.data.agentId} (${event.data.profile?.type || 'unknown'})`;
+        return `Agent spawned: ${event.data.agentId} (${event.data.type})`;
       case 'agent_terminated':
-        return `Agent terminated: ${event.data.agentId} - ${event.data.reason}`;
+        return `Agent terminated: ${event.data.agentId}`;
       case 'task_assigned':
-        return `Task ${event.data.taskId} assigned to ${event.data.agentId}`;
+        return `Task assigned: ${event.data.taskId} → ${event.data.agentId}`;
       case 'task_completed':
-        return `Task completed: ${event.data.taskId}`;
+        return `Task completed: ${event.data.taskId} (${event.data.duration}ms)`;
       case 'task_failed':
-        return `Task failed: ${event.data.taskId} - ${event.data.error?.message}`;
+        return `Task failed: ${event.data.taskId} - ${event.data.error}`;
       case 'system_error':
-        return `System error in ${event.data.component}: ${event.data.error?.message}`;
+        return `System error: ${event.data.message}`;
       case 'process_started':
-        return `Process started: ${event.data.processName}`;
+        return `Process started: ${event.data.processName} (${event.data.processId})`;
       case 'process_stopped':
         return `Process stopped: ${event.data.processId}`;
       case 'process_error':
         return `Process error: ${event.data.processId} - ${event.data.error}`;
       default:
-        return JSON.stringify(event.data);
+        return `${event.type}: ${JSON.stringify(event.data)}`;
     }
   }
 
   printSystemHealth(): void {
-    const stats = this.processManager.getSystemStats();
+    console.log(colorCombos.cyanBold('🏥 System Health'));
+    console.log(colors.gray('─'.repeat(80)));
+    
     const processes = this.processManager.getAllProcesses();
+    const runningProcesses = processes.filter(p => p.status === 'running');
+    const errorProcesses = processes.filter(p => p.status === 'error');
     
-    console.log(colors.cyan.bold('🏥 System Health'));
-    console.log(colors.gray('─'.repeat(60)));
-    
-    // Overall status
-    const healthStatus = stats.errorProcesses === 0 ? 
-      colors.green('● Healthy') : 
-      colors.red(`● Unhealthy (${stats.errorProcesses} errors)`);
-    
-    console.log('Status:', healthStatus);
-    console.log('Uptime:', this.formatUptime(stats.systemUptime));
+    console.log(`${colors.white('Total Processes:')} ${processes.length}`);
+    console.log(`${colors.green('Running:')} ${runningProcesses.length}`);
+    console.log(`${colors.yellow('Stopped:')} ${processes.length - runningProcesses.length - errorProcesses.length}`);
+    console.log(`${colors.red('Errors:')} ${errorProcesses.length}`);
     console.log();
     
-    // Process status
-    console.log(colors.white.bold('Process Status:'));
-    for (const process of processes) {
-      const status = this.getProcessStatusIcon(process.status);
-      const metrics = process.metrics;
-      
-      let line = `  ${status} ${process.name.padEnd(20)}`;
-      
-      if (metrics && process.status === 'running') {
-        line += colors.gray(` CPU: ${metrics.cpu?.toFixed(1)}% `);
-        line += colors.gray(` MEM: ${metrics.memory?.toFixed(0)}MB`);
+    if (runningProcesses.length > 0) {
+      console.log(colors.white('Running Processes:'));
+      for (const process of runningProcesses) {
+        const icon = this.getProcessStatusIcon(process.status);
+        const uptime = this.formatUptime(Date.now() - (process.startTime || Date.now()));
+        console.log(`  ${icon} ${colors.white(process.name)} (${colors.gray(uptime)})`);
+        
+        if (process.metrics) {
+          console.log(`    CPU: ${colors.cyan(process.metrics.cpu?.toFixed(1) || '0')}% | Memory: ${colors.cyan(process.metrics.memory?.toFixed(0) || '0')}MB`);
+        }
       }
-      
-      console.log(line);
+      console.log();
     }
     
-    console.log();
-    
-    // System metrics
-    console.log(colors.white.bold('System Metrics:'));
-    console.log(`  Active Processes: ${stats.runningProcesses}/${stats.totalProcesses}`);
-    console.log(`  Recent Events: ${this.events.length}`);
-    
-    // Recent errors
-    const recentErrors = this.events
-      .filter(e => e.level === 'error')
-      .slice(0, 3);
-    
-    if (recentErrors.length > 0) {
+    if (errorProcesses.length > 0) {
+      console.log(colors.red('Processes with Errors:'));
+      for (const process of errorProcesses) {
+        const icon = this.getProcessStatusIcon(process.status);
+        console.log(`  ${icon} ${colors.white(process.name)}`);
+        if (process.metrics?.lastError) {
+          console.log(`    ${colors.red('Error:')} ${process.metrics.lastError}`);
+        }
+      }
       console.log();
-      console.log(colors.red.bold('Recent Errors:'));
+    }
+    
+    // Recent events summary
+    const recentErrors = this.events.filter(e => e.level === 'error').slice(0, 3);
+    if (recentErrors.length > 0) {
+      console.log(colorCombos.whiteBold('Recent Errors:'));
       for (const error of recentErrors) {
         const time = new Date(error.timestamp).toLocaleTimeString();
-        console.log(colors.red(`  ${time} - ${this.formatEventMessage(error)}`));
+        console.log(`  ${colors.red('❌')} ${colors.gray(time)} ${this.formatEventMessage(error)}`);
       }
     }
   }
@@ -276,17 +292,15 @@ export class SystemMonitor {
   private getProcessStatusIcon(status: string): string {
     switch (status) {
       case 'running':
-        return colors.green('●');
+        return '🟢';
       case 'stopped':
-        return colors.gray('○');
-      case 'starting':
-        return colors.yellow('◐');
-      case 'stopping':
-        return colors.yellow('◑');
+        return '🔴';
       case 'error':
-        return colors.red('✗');
+        return '❌';
+      case 'starting':
+        return '🟡';
       default:
-        return colors.gray('?');
+        return '⚪';
     }
   }
 
@@ -295,15 +309,10 @@ export class SystemMonitor {
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
-
-    if (days > 0) {
-      return `${days}d ${hours % 24}h ${minutes % 60}m`;
-    } else if (hours > 0) {
-      return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${seconds % 60}s`;
-    } else {
-      return `${seconds}s`;
-    }
+    
+    if (days > 0) return `${days}d ${hours % 24}h`;
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    return `${seconds}s`;
   }
 }

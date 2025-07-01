@@ -385,8 +385,8 @@ export class ResourceManager extends EventEmitter {
       this.handleResourceRelease(data);
     });
 
-    this.eventBus.on('resource:usage-update', (data) => {
-      this.updateResourceUsage(data.resourceId, data.usage);
+    this.eventBus.on('resource:usage-update', (data: any) => {
+      this.updateResourceUsage((data as any).resourceId, (data as any).usage);
     });
 
     this.eventBus.on('resource:failure', (data) => {
@@ -588,7 +588,7 @@ export class ResourceManager extends EventEmitter {
       this.logger.error('Resource reservation failed', {
         reservationId,
         agentId: agentId.id,
-        error
+        error: (error as any).error || (error as any)
       });
       throw error;
     }
@@ -1599,18 +1599,18 @@ export class ResourceManager extends EventEmitter {
       // Record failure
       resource.metadata.reliability.failureHistory.push({
         timestamp: new Date(),
-        type: data.type || 'unknown',
-        duration: data.duration || 0,
-        impact: data.impact || 'medium',
+        type: (data as any).type || 'unknown',
+        duration: (data as any).duration || 0,
+        impact: (data as any).impact || 'medium',
         resolved: false
       });
 
       this.logger.error('Resource failure detected', {
         resourceId: data.resourceId,
-        type: data.type
+        type: (data as any).type
       });
 
-      this.emit('resource:failed', { resource, failure: data });
+      this.emit('resource:failed', { resource, failure: (data as any).data || (data as any) });
     }
   }
 

@@ -4,11 +4,11 @@
 
 import { EventEmitter } from 'node:events';
 import { spawn, ChildProcess } from 'node:child_process';
-import { TaskDefinition, TaskResult, TaskStatus, AgentState, TaskError } from "../swarm/types.ts";
-import { ILogger } from "../core/logger.ts";
-import { IEventBus } from "../core/event-bus.ts";
-import { CircuitBreaker, CircuitBreakerManager } from "./circuit-breaker.ts";
-import { generateId } from "../utils/helpers.ts";
+import { TaskDefinition, TaskResult, TaskStatus, AgentState, TaskError } from "../swarm/types.js";
+import { ILogger } from "../core/logger.js";
+import { IEventBus } from "../core/event-bus.js";
+import { CircuitBreaker, CircuitBreakerManager } from "./circuit-breaker.js";
+import { generateId } from "../utils/helpers.js";
 
 export interface TaskExecutorConfig {
   maxConcurrentTasks: number;
@@ -219,10 +219,13 @@ export class AdvancedTaskExecutor extends EventEmitter {
 
         // Check if we should retry
         if (retryCount > maxRetries) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          const errorStack = error instanceof Error ? error.stack : '';
+          
           const taskError: TaskError = {
             type: 'execution_failed',
-            message: error.message,
-            stack: error.stack,
+            message: errorMessage,
+            stack: errorStack,
             context: {
               retryCount,
               maxRetries,
@@ -281,7 +284,7 @@ export class AdvancedTaskExecutor extends EventEmitter {
       const timeoutPromise = new Promise<never>((_, reject) => {
         executionContext.timeout = setTimeout(() => {
           reject(new Error(`Task timeout after ${timeout}ms`));
-        }, timeout);
+        }, timeout) as NodeJS.Timeout;
       });
 
       // Set up circuit breaker if enabled
@@ -394,29 +397,82 @@ export class AdvancedTaskExecutor extends EventEmitter {
           completeness: output.completeness || 1.0,
           accuracy: output.accuracy || 0.9,
           executionTime,
-          resourcesUsed: context.resources,
+          resourcesUsed: {
+            memory: context.resources.memory,
+            cpu: context.resources.cpu,
+            disk: context.resources.disk,
+            network: context.resources.network,
+            lastUpdated: context.resources.lastUpdated.getTime()
+          },
           validated: false
         };
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : '';
+        
+        this.logger.error('Task execution failed:', error instanceof Error ? error.message : String(error));
+
+        // Initialize taskResult for error case
         taskResult = {
-          output: stdout,
+          output: null,
           artifacts: {},
-          metadata: { stderr },
-          quality: 0.5,
-          completeness: 1.0,
-          accuracy: 0.7,
+          metadata: { error: errorMessage },
+          quality: 0,
+          completeness: 0,
+          accuracy: 0,
           executionTime,
-          resourcesUsed: context.resources,
+          resourcesUsed: {
+            memory: context.resources.memory,
+            cpu: context.resources.cpu,
+            disk: context.resources.disk,
+            network: context.resources.network,
+            lastUpdated: context.resources.lastUpdated.getTime()
+          },
           validated: false
+        };
+
+        return {
+          result: taskResult,
+          resourcesUsed: {
+            memory: context.resources.memory,
+            cpu: context.resources.cpu,
+            disk: context.resources.disk,
+            network: context.resources.network,
+            lastUpdated: context.resources.lastUpdated.getTime()
+          }
         };
       }
     } else {
+      // Initialize taskResult for failed exit code
+      taskResult = {
+        output: null,
+        artifacts: {},
+        metadata: { exitCode, stderr },
+        quality: 0,
+        completeness: 0,
+        accuracy: 0,
+        executionTime,
+        resourcesUsed: {
+          memory: context.resources.memory,
+          cpu: context.resources.cpu,
+          disk: context.resources.disk,
+          network: context.resources.network,
+          lastUpdated: context.resources.lastUpdated.getTime()
+        },
+        validated: false
+      };
       throw new Error(`Task execution failed with exit code ${exitCode}: ${stderr}`);
     }
 
     return {
       result: taskResult,
-      resourcesUsed: context.resources
+      resourcesUsed: {
+        memory: context.resources.memory,
+        cpu: context.resources.cpu,
+        disk: context.resources.disk,
+        network: context.resources.network,
+        lastUpdated: context.resources.lastUpdated.getTime()
+      }
     };
   }
 
@@ -483,26 +539,26 @@ export class AdvancedTaskExecutor extends EventEmitter {
   private startResourceMonitoring(): void {
     this.resourceMonitor = setInterval(() => {
       this.updateResourceUsage();
-    }, 5000); // Update every 5 seconds
+    }, 5000) as NodeJS.Timeout; // Update every 5 seconds
   }
 
   private async updateResourceUsage(): Promise<void> {
-    for (const [taskId, context] of this.runningTasks) {
+    for (const [taskId, context] of Array.from(this.runningTasks.entries())) {
       if (context.process) {
         try {
           const usage = await this.getProcessResourceUsage(context.process.pid!);
           context.resources = {
-            ...usage,
-            lastUpdated: new Date()
+            memory: usage.memory,
+            cpu: usage.cpu,
+            disk: usage.disk,
+            network: usage.network,
+            lastUpdated: usage.lastUpdated
           };
 
           // Check resource limits
           this.checkResourceLimits(taskId, context);
         } catch (error) {
-          this.logger.warn('Failed to get resource usage', {
-            taskId,
-            error: error.message
-          });
+          this.logger.error('Resource monitoring failed', { error: error as Error });
         }
       }
     }
@@ -516,7 +572,7 @@ export class AdvancedTaskExecutor extends EventEmitter {
       cpu: Math.random() * 100,
       disk: Math.random() * this.config.resourceLimits.disk,
       network: Math.random() * 1024 * 1024,
-      lastUpdated: new Date()
+      lastUpdated: Date.now()
     };
   }
 
@@ -549,13 +605,13 @@ export class AdvancedTaskExecutor extends EventEmitter {
       cpu: 0,
       disk: 0,
       network: 0,
-      lastUpdated: new Date()
+      lastUpdated: Date.now()
     };
   }
 
   private async waitForCapacity(): Promise<void> {
-    return new Promise((resolve) => {
-      const check = () => {
+    return new Promise<void>((resolve) => {
+      const check = (): void => {
         if (this.runningTasks.size < this.config.maxConcurrentTasks) {
           resolve();
         } else {
@@ -627,5 +683,17 @@ export class AdvancedTaskExecutor extends EventEmitter {
   updateConfig(newConfig: Partial<TaskExecutorConfig>): void {
     this.config = { ...this.config, ...newConfig };
     this.logger.info('Task executor configuration updated', { newConfig });
+  }
+
+  private async collectResourceUsage(taskId: string): Promise<ResourceUsage> {
+    const context = this.runningTasks.get(taskId);
+    if (context && context.process) {
+      try {
+        return await this.getProcessResourceUsage(context.process.pid!);
+      } catch (error) {
+        this.logger.error('Failed to collect resource usage', { error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return this.getDefaultResourceUsage();
   }
 }

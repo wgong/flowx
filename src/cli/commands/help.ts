@@ -2,19 +2,122 @@
  * Comprehensive help system for Claude-Flow CLI
  */
 
-import { Command } from '@cliffy/command';
-import { colors } from '@cliffy/ansi/colors';
-import { Table } from '@cliffy/table';
-import { Select } from '@cliffy/prompt';
+import { Command } from 'commander';
+import * as readline from 'readline';
+
+// Simple color utilities with bold combinations
+const colors = {
+  red: (text: string) => `\x1b[31m${text}\x1b[0m`,
+  green: (text: string) => `\x1b[32m${text}\x1b[0m`,
+  yellow: (text: string) => `\x1b[33m${text}\x1b[0m`,
+  blue: (text: string) => `\x1b[34m${text}\x1b[0m`,
+  cyan: (text: string) => `\x1b[36m${text}\x1b[0m`,
+  white: (text: string) => `\x1b[37m${text}\x1b[0m`,
+  gray: (text: string) => `\x1b[90m${text}\x1b[0m`,
+  bold: (text: string) => `\x1b[1m${text}\x1b[0m`,
+};
+
+// Color combination helpers
+const colorCombos = {
+  cyanBold: (text: string) => `\x1b[1;36m${text}\x1b[0m`,
+  whiteBold: (text: string) => `\x1b[1;37m${text}\x1b[0m`,
+  greenBold: (text: string) => `\x1b[1;32m${text}\x1b[0m`,
+  yellowBold: (text: string) => `\x1b[1;33m${text}\x1b[0m`,
+};
+
+// Extend colors with bold combinations
+Object.assign(colors, {
+  cyan: Object.assign(colors.cyan, { bold: colorCombos.cyanBold }),
+  white: Object.assign(colors.white, { bold: colorCombos.whiteBold }),
+  green: Object.assign(colors.green, { bold: colorCombos.greenBold }),
+  yellow: Object.assign(colors.yellow, { bold: colorCombos.yellowBold }),
+});
+
+// Simple table utility
+class Table {
+  private headers: string[] = [];
+  private rows: string[][] = [];
+  private hasBorder: boolean = false;
+
+  constructor() {}
+
+  header(headers: string[]): this {
+    this.headers = headers;
+    return this;
+  }
+
+  push(row: string[]): this {
+    this.rows.push(row);
+    return this;
+  }
+
+  border(enabled: boolean): this {
+    this.hasBorder = enabled;
+    return this;
+  }
+
+  render(): void {
+    console.log(this.toString());
+  }
+
+  toString(): string {
+    if (this.headers.length === 0 && this.rows.length === 0) {
+      return '';
+    }
+
+    const allRows = this.headers.length > 0 ? [this.headers, ...this.rows] : this.rows;
+    const colWidths = this.headers.map((_, i) => 
+      Math.max(...allRows.map(row => (row[i] || '').length))
+    );
+
+    let result = '';
+    
+    if (this.headers.length > 0) {
+      result += this.headers.map((header, i) => header.padEnd(colWidths[i])).join(' | ') + '\n';
+      result += colWidths.map(width => '-'.repeat(width)).join('-+-') + '\n';
+    }
+
+    for (const row of this.rows) {
+      result += row.map((cell, i) => (cell || '').padEnd(colWidths[i])).join(' | ') + '\n';
+    }
+
+    return result;
+  }
+}
+
+// Simple select prompt
+async function Select(options: { message: string; options: string[] }): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    console.log(options.message);
+    options.options.forEach((option, i) => {
+      console.log(`${i + 1}. ${option}`);
+    });
+    
+    rl.question('Select option (number): ', (answer) => {
+      rl.close();
+      const index = parseInt(answer) - 1;
+      if (index >= 0 && index < options.options.length) {
+        resolve(options.options[index]);
+      } else {
+        resolve(options.options[0]);
+      }
+    });
+  });
+}
 
 export const helpCommand = new Command()
   .description('Comprehensive help system with examples and tutorials')
-  .arguments('[topic:string]')
+  .argument('[topic]', 'Help topic to display')
   .option('-i, --interactive', 'Start interactive help mode')
   .option('-e, --examples', 'Show examples for the topic')
   .option('--tutorial', 'Show tutorial for the topic')
   .option('--all', 'Show all available help topics')
-  .action(async (options: any, topic: string | undefined) => {
+  .action(async (topic: string | undefined, options: any) => {
     if (options.interactive) {
       await startInteractiveHelp();
     } else if (options.all) {
@@ -609,218 +712,269 @@ const HELP_TOPICS: HelpTopic[] = [
 ];
 
 function showMainHelp(): void {
-  console.log(colors.cyan.bold('Claude-Flow Help System'));
-  console.log('─'.repeat(50));
-  console.log();
-  
-  console.log(colors.white('Claude-Flow is an advanced AI agent orchestration system.'));
-  console.log(colors.white('Use this help system to learn about features and best practices.'));
-  console.log();
-  
-  console.log(colors.yellow.bold('Quick Start:'));
-  console.log(colors.gray('  claude-flow help getting-started    # Beginner tutorial'));
-  console.log(colors.gray('  claude-flow help --interactive      # Interactive help mode'));
-  console.log(colors.gray('  claude-flow help <topic>            # Specific topic help'));
-  console.log();
-  
-  console.log(colors.yellow.bold('Help Categories:'));
-  
-  const categories = {
-    basic: 'Essential concepts and commands',
-    workflow: 'Building and managing workflows',
-    configuration: 'System configuration and profiles',
-    advanced: 'Advanced features and monitoring',
-    troubleshooting: 'Problem diagnosis and solutions'
-  };
-  
-  for (const [category, description] of Object.entries(categories)) {
-    console.log();
-    console.log(colors.cyan.bold(`${category.toUpperCase()}:`));
-    console.log(colors.white(`  ${description}`));
-    
-    const topics = HELP_TOPICS.filter(t => t.category === category);
-    for (const topic of topics) {
-      console.log(colors.gray(`    ${topic.name.padEnd(20)} ${topic.description}`));
-    }
-  }
-  
-  console.log();
-  console.log(colors.gray('Use "claude-flow help <topic>" for detailed information.'));
-  console.log(colors.gray('Use "claude-flow help --all" to see all topics.'));
+  console.log(colorCombos.cyanBold('🧠 Claude-Flow Help System'));
+  console.log('');
+  console.log('Claude-Flow is an advanced AI agent orchestration platform that enables');
+  console.log('sophisticated multi-agent workflows with Claude AI.');
+  console.log('');
+  console.log('Quick Start:');
+  console.log('  claude-flow help getting-started    # Complete beginner tutorial');
+  console.log('  claude-flow config init             # Initialize configuration');
+  console.log('  claude-flow start                   # Start the orchestration system');
+  console.log('  claude-flow agent spawn researcher  # Spawn your first agent');
+  console.log('');
+  console.log('Common Commands:');
+  console.log('  claude-flow start                   # Start orchestration system');
+  console.log('  claude-flow agent <subcommand>      # Manage agents');
+  console.log('  claude-flow task <subcommand>       # Manage tasks');
+  console.log('  claude-flow status                  # Show system status');
+  console.log('  claude-flow monitor                 # Live monitoring dashboard');
+  console.log('  claude-flow repl                    # Interactive REPL mode');
+  console.log('');
+  console.log('Get Detailed Help:');
+  console.log('  claude-flow help <topic>            # Show help for specific topic');
+  console.log('  claude-flow help --all              # List all available topics');
+  console.log('  claude-flow help --interactive      # Start interactive help mode');
+  console.log('  claude-flow <command> --help        # Show help for specific command');
+  console.log('');
+  console.log('Popular Topics:');
+  console.log('  agents, tasks, workflows, configuration, troubleshooting');
 }
 
 function showAllTopics(): void {
-  console.log(colors.cyan.bold('All Help Topics'));
-  console.log('─'.repeat(50));
+  console.log(colorCombos.cyanBold('📚 All Help Topics'));
+  console.log('');
   
-  const table = new Table()
-    .header(['Topic', 'Category', 'Description'])
-    .border(true);
+  const categories = {
+    basic: 'Basic Usage',
+    advanced: 'Advanced Features', 
+    workflow: 'Workflow Management',
+    configuration: 'Configuration',
+    troubleshooting: 'Troubleshooting'
+  };
 
-  for (const topic of HELP_TOPICS) {
-    table.push([
-      colors.cyan(topic.name),
-      colors.yellow(topic.category),
-      topic.description
-    ]);
+  for (const [categoryKey, categoryName] of Object.entries(categories)) {
+    const topicsInCategory = HELP_TOPICS.filter(t => t.category === categoryKey);
+    if (topicsInCategory.length > 0) {
+      console.log(colors.yellow(categoryName + ':'));
+      for (const topic of topicsInCategory) {
+        console.log(`  ${colors.cyan(topic.name.padEnd(20))} ${topic.description}`);
+      }
+      console.log('');
+    }
   }
   
-  table.render();
-  
-  console.log();
-  console.log(colors.gray('Use "claude-flow help <topic>" for detailed information.'));
+  console.log('Usage: claude-flow help <topic-name>');
+  console.log('       claude-flow help <topic-name> --examples');
+  console.log('       claude-flow help <topic-name> --tutorial');
 }
 
 async function showTopicHelp(topicName: string, options: any): Promise<void> {
   const topic = HELP_TOPICS.find(t => t.name === topicName);
   
   if (!topic) {
-    console.log(colors.red(`Help topic '${topicName}' not found.`));
-    console.log();
-    
-    // Suggest similar topics
-    const similar = HELP_TOPICS.filter(t => 
-      t.name.includes(topicName) || 
-      t.description.toLowerCase().includes(topicName.toLowerCase())
-    );
-    
-    if (similar.length > 0) {
-      console.log(colors.gray('Did you mean:'));
-      for (const suggestion of similar) {
-        console.log(colors.cyan(`  ${suggestion.name}`));
-      }
-    } else {
-      console.log(colors.gray('Use "claude-flow help --all" to see all topics.'));
+    console.log(colors.red(`❌ Help topic "${topicName}" not found.`));
+    console.log('');
+    console.log('Available topics:');
+    for (const t of HELP_TOPICS) {
+      console.log(`  ${colors.cyan(t.name)}`);
     }
     return;
   }
-  
-  console.log(colors.cyan.bold(`Help: ${topic.name}`));
-  console.log('─'.repeat(50));
-  console.log(colors.white(topic.description));
-  console.log();
-  
+
+  console.log(colorCombos.cyanBold(`📖 Help: ${topic.name}`));
+  console.log('');
+  console.log(topic.description);
+  console.log('');
+
   if (options.tutorial && topic.tutorial) {
-    console.log(colors.yellow.bold('Tutorial:'));
-    console.log('─'.repeat(20));
-    for (const line of topic.tutorial) {
-      if (line.trim().startsWith('claude-flow')) {
-        console.log(colors.cyan(`  ${line}`));
-      } else if (line.trim() === '') {
-        console.log();
-      } else {
-        console.log(colors.white(line));
-      }
+    console.log(colorCombos.yellowBold('📚 Tutorial:'));
+    console.log('');
+    for (const step of topic.tutorial) {
+      console.log(step);
     }
-    console.log();
+    console.log('');
   }
-  
+
   if (options.examples && topic.examples) {
-    console.log(colors.yellow.bold('Examples:'));
-    console.log('─'.repeat(20));
+    console.log(colorCombos.greenBold('💡 Examples:'));
+    console.log('');
     for (const example of topic.examples) {
-      console.log(colors.white.bold(`${example.description}:`));
-      console.log(colors.cyan(`  ${example.command}`));
+      console.log(colorCombos.whiteBold(example.description + ':'));
+      console.log(colors.gray('  $ ') + colors.cyan(example.command));
       if (example.explanation) {
-        console.log(colors.gray(`  ${example.explanation}`));
+        console.log('  ' + example.explanation);
       }
-      console.log();
+      console.log('');
     }
   }
-  
-  if (!options.examples && !options.tutorial) {
+
+  if (!options.tutorial && !options.examples) {
     // Show both by default
-    if (topic.tutorial) {
-      console.log(colors.yellow.bold('Overview:'));
-      console.log('─'.repeat(20));
-      const overview = topic.tutorial.slice(0, 5);
-      for (const line of overview) {
-        if (line.trim() === '') {
-          console.log();
-        } else {
-          console.log(colors.white(line));
-        }
-      }
-      console.log();
-      console.log(colors.gray('Use --tutorial for complete tutorial.'));
-      console.log();
-    }
-    
     if (topic.examples) {
-      console.log(colors.yellow.bold('Common Examples:'));
-      console.log('─'.repeat(20));
-      const commonExamples = topic.examples.slice(0, 3);
-      for (const example of commonExamples) {
-        console.log(colors.cyan(`  ${example.command}`));
-        console.log(colors.gray(`    ${example.description}`));
+      console.log(colorCombos.greenBold('💡 Examples:'));
+      console.log('');
+      for (const example of topic.examples.slice(0, 3)) { // Show first 3
+        console.log(colorCombos.whiteBold(example.description + ':'));
+        console.log(colors.gray('  $ ') + colors.cyan(example.command));
+        if (example.explanation) {
+          console.log('  ' + example.explanation);
+        }
+        console.log('');
       }
+      
       if (topic.examples.length > 3) {
-        console.log(colors.gray(`    ... and ${topic.examples.length - 3} more`));
+        console.log(colors.gray(`  ... and ${topic.examples.length - 3} more examples`));
+        console.log(colors.gray(`  Use --examples to see all examples`));
+        console.log('');
       }
-      console.log();
-      console.log(colors.gray('Use --examples for all examples.'));
-      console.log();
+    }
+
+    if (topic.tutorial) {
+      console.log(colors.gray('💡 Tip: Use --tutorial to see step-by-step tutorial'));
+      console.log('');
     }
   }
-  
+
   if (topic.related && topic.related.length > 0) {
-    console.log(colors.yellow.bold('Related Topics:'));
-    console.log('─'.repeat(20));
+    console.log(colorCombos.cyanBold('🔗 Related Topics:'));
+    console.log('');
     for (const related of topic.related) {
-      console.log(colors.cyan(`  claude-flow help ${related}`));
+      console.log(`  claude-flow help ${colors.cyan(related)}`);
     }
-    console.log();
+    console.log('');
   }
 }
 
 async function startInteractiveHelp(): Promise<void> {
-  console.log(colors.cyan.bold('Interactive Help Mode'));
-  console.log('─'.repeat(30));
-  console.log();
-  
+  console.log(colorCombos.cyanBold('🧠 Claude-Flow Interactive Help'));
+  console.log('');
+  console.log('Welcome to the interactive help system!');
+  console.log('You can browse topics by category or search for specific information.');
+  console.log('');
+
   while (true) {
-    const categories = [
-      { name: 'Getting Started', value: 'getting-started' },
-      { name: 'Agents', value: 'agents' },
-      { name: 'Tasks', value: 'tasks' },
-      { name: 'Workflows', value: 'workflows' },
-      { name: 'Configuration', value: 'configuration' },
-      { name: 'Monitoring', value: 'monitoring' },
-      { name: 'Sessions', value: 'sessions' },
-      { name: 'REPL Mode', value: 'repl' },
-      { name: 'Troubleshooting', value: 'troubleshooting' },
-      { name: 'Browse All Topics', value: 'all' },
-      { name: 'Exit', value: 'exit' }
-    ];
-    
-    const result = await Select.prompt({
-      message: 'What would you like help with?',
-      options: categories,
+    const choice = await Select({
+      message: 'What would you like to do?',
+      options: [
+        'Browse help topics by category',
+        'Search for a specific topic',
+        'Show getting started tutorial',
+        'Show all available commands',
+        'Exit interactive help'
+      ]
     });
-    
-    const choice = typeof result === 'string' ? result : result.value;
-    
-    if (choice === 'exit') {
-      console.log(colors.gray('Goodbye!'));
-      break;
+
+    switch (choice) {
+      case 'Browse help topics by category':
+        await browseByCategory();
+        break;
+      case 'Search for a specific topic':
+        await searchTopics();
+        break;
+      case 'Show getting started tutorial':
+        await showTopicHelp('getting-started', { tutorial: true });
+        break;
+      case 'Show all available commands':
+        showAllTopics();
+        break;
+      case 'Exit interactive help':
+        console.log('');
+        console.log(colors.gray('Thanks for using Claude-Flow help! 👋'));
+        return;
     }
-    
-    console.log();
-    
-    if (choice === 'all') {
-      showAllTopics();
-    } else {
-      await showTopicHelp(choice, { tutorial: true, examples: true });
-    }
-    
-    console.log();
+
+    console.log('');
     console.log(colors.gray('Press Enter to continue...'));
     await new Promise(resolve => {
-      const stdin = Deno.stdin;
-      const buffer = new Uint8Array(1);
-      stdin.read(buffer).then(() => resolve(undefined));
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+      rl.question('', () => {
+        rl.close();
+        resolve(void 0);
+      });
     });
-    
     console.clear();
+  }
+}
+
+async function browseByCategory(): Promise<void> {
+  const categories = {
+    basic: 'Basic Usage',
+    advanced: 'Advanced Features', 
+    workflow: 'Workflow Management',
+    configuration: 'Configuration',
+    troubleshooting: 'Troubleshooting'
+  };
+
+  const categoryChoice = await Select({
+    message: 'Select a category to browse:',
+    options: Object.values(categories)
+  });
+
+  const categoryKey = Object.keys(categories).find(key => categories[key as keyof typeof categories] === categoryChoice);
+  const topicsInCategory = HELP_TOPICS.filter(t => t.category === categoryKey);
+
+  if (topicsInCategory.length === 0) {
+    console.log(colors.yellow('No topics found in this category.'));
+    return;
+  }
+
+  const topicChoice = await Select({
+    message: 'Select a topic to view:',
+    options: topicsInCategory.map(t => `${t.name} - ${t.description}`)
+  });
+
+  const selectedTopic = topicsInCategory.find(t => topicChoice.startsWith(t.name));
+  if (selectedTopic) {
+    await showTopicHelp(selectedTopic.name, {});
+  }
+}
+
+async function searchTopics(): Promise<void> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  const searchTerm = await new Promise<string>((resolve) => {
+    rl.question('Enter search term: ', (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+
+  const matchingTopics = HELP_TOPICS.filter(topic => 
+    topic.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    topic.description.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (matchingTopics.length === 0) {
+    console.log(colors.yellow(`No topics found matching "${searchTerm}"`));
+    return;
+  }
+
+  console.log(colors.green(`Found ${matchingTopics.length} matching topics:`));
+  console.log('');
+
+  for (const topic of matchingTopics) {
+    console.log(`${colors.cyan(topic.name)} - ${topic.description}`);
+  }
+
+  if (matchingTopics.length === 1) {
+    console.log('');
+    await showTopicHelp(matchingTopics[0].name, {});
+  } else {
+    const topicChoice = await Select({
+      message: 'Select a topic to view:',
+      options: matchingTopics.map(t => `${t.name} - ${t.description}`)
+    });
+
+    const selectedTopic = matchingTopics.find(t => topicChoice.startsWith(t.name));
+    if (selectedTopic) {
+      await showTopicHelp(selectedTopic.name, {});
+    }
   }
 }

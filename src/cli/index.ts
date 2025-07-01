@@ -6,13 +6,14 @@
 
 // Import and run the simple CLI which doesn't have external dependencies
 import "./simple-cli.ts";
-// Spinner import removed - not available in current cliffy version
+import { Command } from 'commander';
+import { colors } from "../utils/colors.ts";
 import { logger } from "../core/logger.ts";
 import { configManager } from "../core/config.ts";
 import { startCommand } from "./commands/start.ts";
 import { agentCommand } from "./commands/agent.ts";
 import { taskCommand } from "./commands/task.ts";
-import { memoryCommand } from "./commands/memory.ts";
+import { createMemoryCommands, memoryCommand } from "./commands/memory.ts";
 import { configCommand } from "./commands/config.ts";
 import { statusCommand } from "./commands/status.ts";
 import { monitorCommand } from "./commands/monitor.ts";
@@ -25,7 +26,7 @@ import { startREPL } from "./repl.ts";
 import { CompletionGenerator } from "./completion.ts";
 
 // Version information
-const VERSION = '1.0.73';
+const VERSION = '1.1.2';
 const BUILD_DATE = new Date().toISOString().split('T')[0];
 
 // Main CLI command
@@ -33,20 +34,14 @@ const cli = new Command()
   .name('claude-flow')
   .version(VERSION)
   .description('Claude-Flow: Advanced AI agent orchestration system for multi-agent coordination')
-  .meta('Build', BUILD_DATE)
-  .meta('Runtime', 'Deno')
-  .globalOption('-c, --config <path:string>', 'Path to configuration file', {
-    default: './claude-flow.config.json',
-  })
-  .globalOption('-v, --verbose', 'Enable verbose logging')
-  .globalOption('-q, --quiet', 'Suppress non-essential output')
-  .globalOption('--log-level <level:string>', 'Set log level (debug, info, warn, error)', {
-    default: 'info',
-  })
-  .globalOption('--no-color', 'Disable colored output')
-  .globalOption('--json', 'Output in JSON format where applicable')
-  .globalOption('--profile <profile:string>', 'Use named configuration profile')
-  .action(async (options) => {
+  .option('-c, --config <path>', 'Path to configuration file', './claude-flow.config.json')
+  .option('-v, --verbose', 'Enable verbose logging')
+  .option('-q, --quiet', 'Suppress non-essential output')
+  .option('--log-level <level>', 'Set log level (debug, info, warn, error)', 'info')
+  .option('--no-color', 'Disable colored output')
+  .option('--json', 'Output in JSON format where applicable')
+  .option('--profile <profile>', 'Use named configuration profile')
+  .action(async (options: any) => {
     // If no subcommand, show banner and start REPL
     await setupLogging(options);
     
@@ -60,49 +55,115 @@ const cli = new Command()
 
 // Add subcommands
 cli
-  .command('start', startCommand)
-  .command('agent', agentCommand)
-  .command('task', taskCommand)
-  .command('memory', memoryCommand)
-  .command('config', configCommand)
-  .command('status', statusCommand)
-  .command('monitor', monitorCommand)
-  .command('session', sessionCommand)
-  .command('workflow', workflowCommand)
-  .command('mcp', mcpCommand)
-  .command('help', helpCommand)
-  .command('repl', new Command()
-    .description('Start interactive REPL mode with command completion')
-    .option('--no-banner', 'Skip welcome banner')
-    .option('--history-file <path:string>', 'Custom history file path')
-    .action(async (options) => {
-      await setupLogging(options);
-      if (options.banner !== false) {
-        displayBanner(VERSION);
-      }
-      await startREPL(options);
-    }),
-  )
-  .command('version', new Command()
-    .description('Show detailed version information')
-    .option('--short', 'Show version number only')
-    .action(async (options) => {
-      if (options.short) {
-        console.log(VERSION);
-      } else {
-        displayVersion(VERSION, BUILD_DATE);
-      }
-    }),
-  )
-  .command('completion', new Command()
-    .description('Generate shell completion scripts')
-    .arguments('[shell:string]')
-    .option('--install', 'Install completion script automatically')
-    .action(async (options, shell) => {
-      const generator = new CompletionGenerator();
-      await generator.generate(shell || 'detect', options.install === true);
-    }),
-  );
+  .command('start')
+  .description('Start the Claude-Flow system')
+  .action(async (options: any) => {
+    await startCommand.action(options);
+  });
+
+cli
+  .command('agent')
+  .description('Manage AI agents')
+  .action(async (options: any) => {
+    await agentCommand.action(options);
+  });
+
+cli
+  .command('task')
+  .description('Manage tasks')
+  .action(async (options: any) => {
+    await taskCommand.action(options);
+  });
+
+cli
+  .command('memory')
+  .description('Manage memory')
+  .action(async (options: any) => {
+    await memoryCommand.action(options);
+  });
+
+cli
+  .command('config')
+  .description('Manage configuration')
+  .action(async (options: any) => {
+    await configCommand.action(options);
+  });
+
+cli
+  .command('status')
+  .description('Check system status')
+  .action(async (options: any) => {
+    await statusCommand.action(options);
+  });
+
+cli
+  .command('monitor')
+  .description('Monitor system activity')
+  .action(async (options: any) => {
+    await monitorCommand.action(options);
+  });
+
+cli
+  .command('session')
+  .description('Manage sessions')
+  .action(async (options: any) => {
+    await sessionCommand.action(options);
+  });
+
+cli
+  .command('workflow')
+  .description('Manage workflows')
+  .action(async (options: any) => {
+    await workflowCommand.action(options);
+  });
+
+cli
+  .command('mcp')
+  .description('Manage multi-agent coordination')
+  .action(async (options: any) => {
+    await mcpCommand.action(options);
+  });
+
+cli
+  .command('help')
+  .description('Show help for a command')
+  .action(async (options: any) => {
+    await helpCommand.action(options);
+  });
+
+cli
+  .command('repl')
+  .description('Start interactive REPL mode with command completion')
+  .option('--no-banner', 'Skip welcome banner')
+  .option('--history-file <path>', 'Custom history file path')
+  .action(async (options: any) => {
+    await setupLogging(options);
+    if (options.banner !== false) {
+      displayBanner(VERSION);
+    }
+    await startREPL(options);
+  });
+
+cli
+  .command('version')
+  .description('Show detailed version information')
+  .option('--short', 'Show version number only')
+  .action(async (options: any) => {
+    if (options.short) {
+      console.log(VERSION);
+    } else {
+      displayVersion(VERSION, BUILD_DATE);
+    }
+  });
+
+cli
+  .command('completion [shell]')
+  .description('Generate shell completion scripts')
+  .option('--install', 'Install completion script automatically')
+  .action(async (shell: string | undefined, options: any) => {
+    const generator = new CompletionGenerator();
+    await generator.generate(shell || 'detect', options.install === true);
+  });
 
 // Global error handler
 async function handleError(error: unknown, options?: any): Promise<void> {
@@ -178,12 +239,12 @@ function setupSignalHandlers(): void {
     Deno.exit(0);
   };
   
-  Deno.addSignalListener('SIGINT', gracefulShutdown);
-  Deno.addSignalListener('SIGTERM', gracefulShutdown);
+  // Note: Deno signal handling would need to be implemented differently
+  // This is a placeholder for the signal handling logic
 }
 
-// Main entry point
-if (import.meta.main) {
+// Main execution function
+async function main(): Promise<void> {
   let globalOptions: any = {};
   
   try {
@@ -191,7 +252,7 @@ if (import.meta.main) {
     setupSignalHandlers();
     
     // Pre-parse global options for error handling
-    const args = Deno.args;
+    const args = process.argv.slice(2);
     globalOptions = {
       verbose: args.includes('-v') || args.includes('--verbose'),
       quiet: args.includes('-q') || args.includes('--quiet'),
@@ -199,13 +260,18 @@ if (import.meta.main) {
       noColor: args.includes('--no-color'),
     };
     
-    // Configure colors based on options
-    if (globalOptions.noColor) {
-      colors.setColorEnabled(false);
-    }
+    // Parse and execute
+    await cli.parseAsync(args, { from: 'user' });
     
-    await cli.parse(args);
-  } catch (error) {
+  } catch (error: unknown) {
     await handleError(error, globalOptions);
   }
+}
+
+// Check if this module is being run directly
+if (require.main === module) {
+  main().catch((error: unknown) => {
+    console.error('CLI Error:', error);
+    process.exit(1);
+  });
 }

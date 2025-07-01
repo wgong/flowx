@@ -6,6 +6,73 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+
+// Helper function to check if path exists
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Helper function to ensure directory exists
+async function ensureDir(dirPath: string): Promise<void> {
+  try {
+    await fs.mkdir(dirPath, { recursive: true });
+  } catch (error) {
+    // Ignore error if directory already exists
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+      throw error;
+    }
+  }
+}
+
+// Helper function to copy files/directories
+async function copyRecursive(src: string, dest: string, options: { overwrite?: boolean } = {}): Promise<void> {
+  const stat = await fs.stat(src);
+  
+  if (stat.isDirectory()) {
+    await ensureDir(dest);
+    const entries = await fs.readdir(src);
+    
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry);
+      const destPath = path.join(dest, entry);
+      await copyRecursive(srcPath, destPath, options);
+    }
+  } else {
+    if (options.overwrite || !(await pathExists(dest))) {
+      await fs.copyFile(src, dest);
+    }
+  }
+}
+
+// Helper function to remove files/directories recursively
+async function removeRecursive(targetPath: string): Promise<void> {
+  try {
+    await fs.rm(targetPath, { recursive: true, force: true });
+  } catch (error) {
+    // Ignore error if path doesn't exist
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
+  }
+}
+
+// Helper function to read JSON files
+async function readJson(filePath: string): Promise<any> {
+  const content = await fs.readFile(filePath, 'utf-8');
+  return JSON.parse(content);
+}
+
+// Helper function to write JSON files
+async function writeJson(filePath: string, data: any, options: { spaces?: number } = {}): Promise<void> {
+  const content = JSON.stringify(data, null, options.spaces || 2);
+  await fs.writeFile(filePath, content, 'utf-8');
+}
+
 import { 
   MigrationOptions, 
   MigrationResult, 
@@ -19,9 +86,9 @@ import { MigrationAnalyzer } from './migration-analyzer.ts';
 import { logger } from './logger.ts';
 import { ProgressReporter } from './progress-reporter.ts';
 import { MigrationValidator } from './migration-validator.ts';
-import globPkg from 'npm:glob';
+import globPkg from 'glob';
 const { glob } = globPkg;
-import * as inquirer from 'npm:inquirer';
+import * as inquirer from 'inquirer';
 import { colors } from '../utils/colors.ts';
 
 export class MigrationRunner {
@@ -105,7 +172,9 @@ export class MigrationRunner {
       this.printSummary(result);
 
     } catch (error) {
-      result.errors.push({ error: error.message, stack: error.stack });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      result.errors.push({ error: errorMessage, stack: errorStack });
       this.progress.error('Migration failed');
       
       // Attempt rollback on failure
@@ -115,7 +184,8 @@ export class MigrationRunner {
           await this.rollback(result.rollbackPath);
           logger.success('Rollback completed');
         } catch (rollbackError) {
-          logger.error('Rollback failed:', rollbackError);
+          const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          logger.error('Rollback failed:', rollbackMessage);
         }
       }
     }
@@ -133,12 +203,12 @@ export class MigrationRunner {
     }
 
     // Remove existing .claude folder
-    if (await fs.pathExists(targetPath)) {
-      await fs.remove(targetPath);
+    if (await pathExists(targetPath)) {
+      await removeRecursive(targetPath);
     }
 
     // Copy new .claude folder
-    await fs.copy(sourcePath, targetPath);
+    await copyRecursive(sourcePath, targetPath);
     result.filesCreated.push('.claude');
 
     // Copy other required files
@@ -150,15 +220,15 @@ export class MigrationRunner {
     const targetPath = path.join(this.options.projectPath, '.claude');
 
     // Ensure target directory exists
-    await fs.ensureDir(targetPath);
+    await ensureDir(targetPath);
 
     // Migrate commands selectively
     const commandsSource = path.join(sourcePath, 'commands');
     const commandsTarget = path.join(targetPath, 'commands');
-    await fs.ensureDir(commandsTarget);
+    await ensureDir(commandsTarget);
 
     // Copy optimized commands
-    for (const command of this.manifest.files.commands) {
+    for (const command of Object.values(this.manifest.files.commands)) {
       const sourceFile = path.join(commandsSource, command.source);
       const targetFile = path.join(commandsTarget, command.target);
 
@@ -170,7 +240,7 @@ export class MigrationRunner {
       if (this.options.dryRun) {
         logger.info(`[DRY RUN] Would copy ${command.source} to ${command.target}`);
       } else {
-        await fs.copy(sourceFile, targetFile, { overwrite: true });
+        await copyRecursive(sourceFile, targetFile, { overwrite: true });
         result.filesCreated.push(command.target);
       }
     }
@@ -187,11 +257,11 @@ export class MigrationRunner {
       const sourceFile = path.join(sourcePath, guide);
       const targetFile = path.join(targetPath, guide);
 
-      if (await fs.pathExists(sourceFile)) {
+      if (await pathExists(sourceFile)) {
         if (this.options.dryRun) {
           logger.info(`[DRY RUN] Would copy ${guide}`);
         } else {
-          await fs.copy(sourceFile, targetFile, { overwrite: true });
+          await copyRecursive(sourceFile, targetFile, { overwrite: true });
           result.filesCreated.push(guide);
         }
       }
@@ -214,7 +284,7 @@ export class MigrationRunner {
   private async mergeConfigurations(result: MigrationResult, analysis: any): Promise<void> {
     // Merge CLAUDE.md
     const claudeMdPath = path.join(this.options.projectPath, 'CLAUDE.md');
-    if (await fs.pathExists(claudeMdPath)) {
+    if (await pathExists(claudeMdPath)) {
       const existingContent = await fs.readFile(claudeMdPath, 'utf-8');
       const newContent = await this.getMergedClaudeMd(existingContent);
       
@@ -224,11 +294,11 @@ export class MigrationRunner {
 
     // Merge .roomodes
     const roomodesPath = path.join(this.options.projectPath, '.roomodes');
-    if (await fs.pathExists(roomodesPath)) {
-      const existing = await fs.readJson(roomodesPath);
+    if (await pathExists(roomodesPath)) {
+      const existing = await readJson(roomodesPath);
       const updated = await this.getMergedRoomodes(existing);
       
-      await fs.writeJson(roomodesPath, updated, { spaces: 2 });
+      await writeJson(roomodesPath, updated, { spaces: 2 });
       result.filesModified.push('.roomodes');
     }
   }
@@ -243,11 +313,11 @@ export class MigrationRunner {
       const sourcePath = path.join(__dirname, '../../', file.source);
       const targetPath = path.join(this.options.projectPath, file.target);
 
-      if (await fs.pathExists(sourcePath)) {
+      if (await pathExists(sourcePath)) {
         if (this.options.dryRun) {
           logger.info(`[DRY RUN] Would copy ${file.source}`);
         } else {
-          await fs.copy(sourcePath, targetPath, { overwrite: true });
+          await copyRecursive(sourcePath, targetPath, { overwrite: true });
           result.filesCreated.push(file.target);
         }
       }
@@ -257,8 +327,8 @@ export class MigrationRunner {
   private async updateConfigurations(result: MigrationResult): Promise<void> {
     // Update package.json scripts if needed
     const packageJsonPath = path.join(this.options.projectPath, 'package.json');
-    if (await fs.pathExists(packageJsonPath)) {
-      const packageJson = await fs.readJson(packageJsonPath);
+    if (await pathExists(packageJsonPath)) {
+      const packageJson = await readJson(packageJsonPath);
       
       if (!packageJson.scripts) {
         packageJson.scripts = {};
@@ -279,7 +349,7 @@ export class MigrationRunner {
       }
 
       if (modified && !this.options.dryRun) {
-        await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
+        await writeJson(packageJsonPath, packageJson, { spaces: 2 });
         result.filesModified.push('package.json');
       }
     }
@@ -290,7 +360,7 @@ export class MigrationRunner {
     const timestamp = new Date();
     const backupPath = path.join(backupDir, timestamp.toISOString().replace(/:/g, '-'));
 
-    await fs.ensureDir(backupPath);
+    await ensureDir(backupPath);
 
     const backup: MigrationBackup = {
       timestamp,
@@ -304,11 +374,16 @@ export class MigrationRunner {
 
     // Backup .claude folder
     const claudePath = path.join(this.options.projectPath, '.claude');
-    if (await fs.pathExists(claudePath)) {
-      await fs.copy(claudePath, path.join(backupPath, '.claude'));
+    if (await pathExists(claudePath)) {
+      await copyRecursive(claudePath, path.join(backupPath, '.claude'));
       
       // Record backed up files
-      const files = await glob('**/*', { cwd: claudePath, nodir: true });
+      const files = await new Promise<string[]>((resolve, reject) => {
+        glob('**/*', { cwd: claudePath, nodir: true }, (err, matches) => {
+          if (err) reject(err);
+          else resolve(matches);
+        });
+      });
       for (const file of files) {
         const content = await fs.readFile(path.join(claudePath, file), 'utf-8');
         backup.files.push({
@@ -323,8 +398,8 @@ export class MigrationRunner {
     const importantFiles = ['CLAUDE.md', '.roomodes', 'package.json'];
     for (const file of importantFiles) {
       const filePath = path.join(this.options.projectPath, file);
-      if (await fs.pathExists(filePath)) {
-        await fs.copy(filePath, path.join(backupPath, file));
+      if (await pathExists(filePath)) {
+        await copyRecursive(filePath, path.join(backupPath, file));
         const content = await fs.readFile(filePath, 'utf-8');
         backup.files.push({
           path: file,
@@ -335,7 +410,8 @@ export class MigrationRunner {
     }
 
     // Save backup manifest
-    await fs.writeJson(path.join(backupPath, 'backup.json'), backup, { spaces: 2 });
+    const manifestPath = path.join(backupPath, 'backup-manifest.json');
+    await writeJson(manifestPath, backup, { spaces: 2 });
 
     logger.success(`Backup created at ${backupPath}`);
     return backup;
@@ -344,7 +420,7 @@ export class MigrationRunner {
   async rollback(timestamp?: string): Promise<void> {
     const backupDir = path.join(this.options.projectPath, this.options.backupDir || '.claude-backup');
     
-    if (!await fs.pathExists(backupDir)) {
+    if (!await pathExists(backupDir)) {
       throw new Error('No backups found');
     }
 
@@ -362,7 +438,7 @@ export class MigrationRunner {
       backupPath = path.join(backupDir, backups[0]);
     }
 
-    if (!await fs.pathExists(backupPath)) {
+    if (!await pathExists(backupPath)) {
       throw new Error(`Backup not found: ${backupPath}`);
     }
 
@@ -370,7 +446,7 @@ export class MigrationRunner {
 
     // Confirm rollback
     if (!this.options.force) {
-      const confirm = await inquirer.prompt([{
+      const confirm = await inquirer.default.prompt([{
         type: 'confirm',
         name: 'proceed',
         message: 'Are you sure you want to rollback? This will overwrite current files.',
@@ -384,11 +460,11 @@ export class MigrationRunner {
     }
 
     // Restore files
-    const backup = await fs.readJson(path.join(backupPath, 'backup.json'));
+    const backup = await readJson(path.join(backupPath, 'backup-manifest.json'));
     
     for (const file of backup.files) {
       const targetPath = path.join(this.options.projectPath, file.path);
-      await fs.ensureDir(path.dirname(targetPath));
+      await ensureDir(path.dirname(targetPath));
       await fs.writeFile(targetPath, file.content);
     }
 
@@ -408,7 +484,7 @@ export class MigrationRunner {
   async listBackups(): Promise<void> {
     const backupDir = path.join(this.options.projectPath, this.options.backupDir || '.claude-backup');
     
-    if (!await fs.pathExists(backupDir)) {
+    if (!await pathExists(backupDir)) {
       logger.info('No backups found');
       return;
     }
@@ -425,7 +501,7 @@ export class MigrationRunner {
     for (const backup of backups.sort().reverse()) {
       const backupPath = path.join(backupDir, backup);
       const stats = await fs.stat(backupPath);
-      const manifest = await fs.readJson(path.join(backupPath, 'backup.json')).catch(() => null);
+      const manifest = await readJson(path.join(backupPath, 'backup-manifest.json')).catch(() => null);
 
       console.log(`\n${colors.bold(backup)}`);
       console.log(`  Created: ${stats.mtime.toLocaleString()}`);
@@ -434,7 +510,7 @@ export class MigrationRunner {
       if (manifest) {
         console.log(`  Version: ${manifest.version}`);
         console.log(`  Strategy: ${manifest.metadata.strategy}`);
-        console.log(`  Files: ${manifest.files.length}`);
+        console.log(`  Files: ${manifest.files.length.toString()}`);
       }
     }
 
@@ -460,7 +536,7 @@ export class MigrationRunner {
       });
     }
 
-    const answers = await inquirer.prompt(questions);
+    const answers = await inquirer.default.prompt(questions);
     
     if (answers.preserveCustom) {
       this.options.preserveCustom = true;
@@ -474,15 +550,15 @@ export class MigrationRunner {
     return {
       version: '1.0.0',
       files: {
-        commands: [
-          { source: 'sparc.md', target: 'sparc.md' },
-          { source: 'sparc/architect.md', target: 'sparc-architect.md' },
-          { source: 'sparc/code.md', target: 'sparc-code.md' },
-          { source: 'sparc/tdd.md', target: 'sparc-tdd.md' },
-          { source: 'claude-flow-help.md', target: 'claude-flow-help.md' },
-          { source: 'claude-flow-memory.md', target: 'claude-flow-memory.md' },
-          { source: 'claude-flow-swarm.md', target: 'claude-flow-swarm.md' }
-        ],
+        commands: {
+          'sparc': { source: 'sparc.md', target: 'sparc.md' },
+          'sparc-architect': { source: 'sparc/architect.md', target: 'sparc-architect.md' },
+          'sparc-code': { source: 'sparc/code.md', target: 'sparc-code.md' },
+          'sparc-tdd': { source: 'sparc/tdd.md', target: 'sparc-tdd.md' },
+          'claude-flow-help': { source: 'claude-flow-help.md', target: 'claude-flow-help.md' },
+          'claude-flow-memory': { source: 'claude-flow-memory.md', target: 'claude-flow-memory.md' },
+          'claude-flow-swarm': { source: 'claude-flow-swarm.md', target: 'claude-flow-swarm.md' }
+        },
         configurations: {},
         templates: {}
       }
@@ -504,7 +580,7 @@ export class MigrationRunner {
 
   private async getMergedRoomodes(existing: any): Promise<any> {
     const templatePath = path.join(__dirname, '../../.roomodes');
-    const template = await fs.readJson(templatePath);
+    const template = await readJson(templatePath);
 
     // Merge custom modes with template
     const merged = { ...template };
@@ -525,19 +601,19 @@ export class MigrationRunner {
     console.log(`\n${colors.bold('Status:')} ${result.success ? colors.hex("#00AA00")('Success') : colors.hex("#FF0000")('Failed')}`);
     
     if (result.filesCreated.length > 0) {
-      console.log(`\n${colors.bold('Files Created:')} ${colors.hex("#00AA00")(result.filesCreated.length)}`);
+      console.log(`\n${colors.bold('Files Created:')} ${colors.hex("#00AA00")(result.filesCreated.length.toString())}`);
       if (result.filesCreated.length <= 10) {
         result.filesCreated.forEach(file => console.log(`  • ${file}`));
       }
     }
 
     if (result.filesModified.length > 0) {
-      console.log(`\n${colors.bold('Files Modified:')} ${colors.hex("#FFAA00")(result.filesModified.length)}`);
+      console.log(`\n${colors.bold('Files Modified:')} ${colors.hex("#FFAA00")(result.filesModified.length.toString())}`);
       result.filesModified.forEach(file => console.log(`  • ${file}`));
     }
 
     if (result.filesBackedUp.length > 0) {
-      console.log(`\n${colors.bold('Files Backed Up:')} ${colors.hex("#0066CC")(result.filesBackedUp.length)}`);
+      console.log(`\n${colors.bold('Files Backed Up:')} ${colors.hex("#0066CC")(result.filesBackedUp.length.toString())}`);
     }
 
     if (result.warnings.length > 0) {

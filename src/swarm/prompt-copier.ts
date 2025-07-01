@@ -3,7 +3,14 @@ import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { Worker } from 'node:worker_threads';
 import { EventEmitter } from 'node:events';
-import { logger } from '../logger.ts';
+
+// Simple logger for this module
+const logger = {
+  info: (msg: string, ...args: any[]) => console.log(`[INFO] ${msg}`, ...args),
+  error: (msg: string, ...args: any[]) => console.error(`[ERROR] ${msg}`, ...args),
+  warn: (msg: string, ...args: any[]) => console.warn(`[WARN] ${msg}`, ...args),
+  debug: (msg: string, ...args: any[]) => console.log(`[DEBUG] ${msg}`, ...args)
+};
 
 export interface CopyOptions {
   source: string;
@@ -96,6 +103,7 @@ export class PromptCopier extends EventEmitter {
           copiedFiles: 0,
           failedFiles: 0,
           skippedFiles: 0,
+          errors: [],
           duration: Date.now() - startTime
         };
       }
@@ -137,7 +145,8 @@ export class PromptCopier extends EventEmitter {
       return result;
 
     } catch (error) {
-      logger.error('Copy operation failed', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Copy operation failed', errorMessage);
       
       if (!this.options.dryRun) {
         await this.rollback();
@@ -368,54 +377,57 @@ export class PromptCopier extends EventEmitter {
     logger.info('Verifying copied files...');
     
     for (const file of this.fileQueue) {
-      if (!this.copiedFiles.has(file.path)) continue;
+      if (!this.copiedFiles.has(file.path)) {
+        continue; // Skip files that weren't copied
+      }
       
       try {
         const destPath = path.join(this.options.destination, file.relativePath);
         
         // Verify file exists
-        if (!await this.fileExists(destPath)) {
-          throw new Error('Destination file not found');
+        if (!(await this.fileExists(destPath))) {
+          this.errors.push({
+            file: file.path,
+            error: 'File does not exist after copy',
+            phase: 'verify'
+          });
+          continue;
         }
         
-        // Verify size
-        const destStats = await fs.stat(destPath);
-        const sourceStats = await fs.stat(file.path);
-        
-        if (destStats.size !== sourceStats.size) {
-          throw new Error(`Size mismatch: ${destStats.size} != ${sourceStats.size}`);
-        }
-        
-        // Verify hash if available
+        // Verify file hash if available
         if (file.hash) {
           const destHash = await this.calculateFileHash(destPath);
           if (destHash !== file.hash) {
-            throw new Error(`Hash mismatch: ${destHash} != ${file.hash}`);
+            this.errors.push({
+              file: file.path,
+              error: 'File hash mismatch after copy',
+              phase: 'verify'
+            });
           }
         }
         
       } catch (error) {
         this.errors.push({
           file: file.path,
-          error: error.message,
+          error: `Verification failed: ${(error as Error).message}`,
           phase: 'verify'
         });
       }
     }
   }
 
-  private async calculateFileHash(filePath: string): Promise<string> {
-    const content = await fs.readFile(filePath);
-    return createHash('sha256').update(content).digest('hex');
-  }
-
-  private async fileExists(filePath: string): Promise<boolean> {
+  protected async fileExists(filePath: string): Promise<boolean> {
     try {
       await fs.access(filePath);
       return true;
     } catch {
       return false;
     }
+  }
+
+  protected async calculateFileHash(filePath: string): Promise<string> {
+    const content = await fs.readFile(filePath);
+    return createHash('sha256').update(content).digest('hex');
   }
 
   private async createBackupManifest(): Promise<string> {

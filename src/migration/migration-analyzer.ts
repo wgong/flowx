@@ -5,11 +5,27 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
-import { MigrationAnalysis, MigrationRisk, MigrationConfig } from './types.ts';
+import { MigrationAnalysis, MigrationRisk } from './types.ts';
 import { logger } from './logger.ts';
 import { colors } from '../utils/colors.ts';
-import globPkg from 'npm:glob';
-const { glob } = globPkg;
+import { glob } from 'glob';
+
+// Migration config interface (local definition)
+interface MigrationConfig {
+  strategy: 'replace' | 'merge' | 'preserve';
+  backupEnabled: boolean;
+  preserveCustom: boolean;
+}
+
+// Helper function to check if path exists
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export class MigrationAnalyzer {
   private optimizedCommands = [
@@ -34,7 +50,7 @@ export class MigrationAnalyzer {
 
     // Check for .claude folder
     const claudePath = path.join(projectPath, '.claude');
-    if (await fs.pathExists(claudePath)) {
+    if (await pathExists(claudePath)) {
       analysis.hasClaudeFolder = true;
       
       // Analyze existing commands
@@ -60,8 +76,14 @@ export class MigrationAnalyzer {
   private async analyzeCommands(claudePath: string, analysis: MigrationAnalysis): Promise<void> {
     const commandsPath = path.join(claudePath, 'commands');
     
-    if (await fs.pathExists(commandsPath)) {
-      const files = await glob('**/*.md', { cwd: commandsPath });
+    if (await pathExists(commandsPath)) {
+      // Use proper glob with Promise wrapper
+      const files = await new Promise<string[]>((resolve, reject) => {
+        glob('**/*.md', { cwd: commandsPath }, (err, matches) => {
+          if (err) reject(err);
+          else resolve(matches);
+        });
+      });
       
       for (const file of files) {
         const commandName = path.basename(file, '.md');
@@ -84,7 +106,7 @@ export class MigrationAnalyzer {
 
     let hasOptimized = 0;
     for (const file of optimizedFiles) {
-      if (await fs.pathExists(path.join(claudePath, file))) {
+      if (await pathExists(path.join(claudePath, file))) {
         hasOptimized++;
       }
     }
@@ -95,7 +117,7 @@ export class MigrationAnalyzer {
   private async analyzeConfigurations(projectPath: string, analysis: MigrationAnalysis): Promise<void> {
     // Check for CLAUDE.md
     const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
-    if (await fs.pathExists(claudeMdPath)) {
+    if (await pathExists(claudeMdPath)) {
       const content = await fs.readFile(claudeMdPath, 'utf-8');
       analysis.customConfigurations['CLAUDE.md'] = {
         exists: true,
@@ -106,9 +128,10 @@ export class MigrationAnalyzer {
 
     // Check for .roomodes
     const roomodesPath = path.join(projectPath, '.roomodes');
-    if (await fs.pathExists(roomodesPath)) {
+    if (await pathExists(roomodesPath)) {
       try {
-        const roomodes = await fs.readJson(roomodesPath);
+        const content = await fs.readFile(roomodesPath, 'utf-8');
+        const roomodes = JSON.parse(content);
         analysis.customConfigurations['.roomodes'] = {
           exists: true,
           modeCount: Object.keys(roomodes).length,
@@ -138,7 +161,7 @@ export class MigrationAnalyzer {
 
     for (const file of potentialConflicts) {
       const filePath = path.join(projectPath, file);
-      if (await fs.pathExists(filePath)) {
+      if (await pathExists(filePath)) {
         const content = await fs.readFile(filePath, 'utf-8');
         const checksum = crypto.createHash('md5').update(content).digest('hex');
         
@@ -239,8 +262,8 @@ export class MigrationAnalyzer {
     console.log(colors.bold('\n📋 Current Status:'));
     console.log(`  • .claude folder: ${analysis.hasClaudeFolder ? colors.hex("#00AA00")('✓') : colors.hex("#FF0000")('✗')}`);
     console.log(`  • Optimized prompts: ${analysis.hasOptimizedPrompts ? colors.hex("#00AA00")('✓') : colors.hex("#FF0000")('✗')}`);
-    console.log(`  • Custom commands: ${analysis.customCommands.length > 0 ? colors.hex("#FFAA00")(analysis.customCommands.length) : colors.hex("#00AA00")('0')}`);
-    console.log(`  • Conflicts: ${analysis.conflictingFiles.length > 0 ? colors.hex("#FFAA00")(analysis.conflictingFiles.length) : colors.hex("#00AA00")('0')}`);
+    console.log(`  • Custom commands: ${analysis.customCommands.length > 0 ? colors.hex("#FFAA00")(String(analysis.customCommands.length)) : colors.hex("#00AA00")('0')}`);
+    console.log(`  • Conflicts: ${analysis.conflictingFiles.length > 0 ? colors.hex("#FFAA00")(String(analysis.conflictingFiles.length)) : colors.hex("#00AA00")('0')}`);
     
     // Risks
     if (analysis.migrationRisks.length > 0) {
@@ -290,6 +313,6 @@ export class MigrationAnalyzer {
   }
 
   async saveAnalysis(analysis: MigrationAnalysis, outputPath: string): Promise<void> {
-    await fs.writeJson(outputPath, analysis, { spaces: 2 });
+    await fs.writeFile(outputPath, JSON.stringify(analysis, null, 2), 'utf-8');
   }
 }

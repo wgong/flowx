@@ -266,6 +266,7 @@ export class ConfigManager {
   private encryptionKey?: Buffer;
   private validationRules: Map<string, ValidationRule> = new Map();
   private formatParsers = FORMAT_PARSERS;
+  private trackChanges = true;
 
   private constructor() {
     this.config = deepClone(DEFAULT_CONFIG);
@@ -422,18 +423,31 @@ export class ConfigManager {
    * Gets the current configuration with optional security masking
    */
   get(maskSensitive = false): Config {
-    const config = deepClone(this.config);
-    
-    if (maskSensitive && this.config.security?.maskSensitiveValues) {
-      return this.maskSensitiveValues(config);
+    if (maskSensitive) {
+      return this.maskSensitiveValues(deepClone(this.config));
     }
-    
-    return config;
+    return deepClone(this.config);
   }
 
-  /**
-   * Gets configuration with security masking applied
-   */
+  private maskSensitiveValues(config: any): any {
+    const mask = (obj: any, currentPath = ''): any => {
+      if (typeof obj !== 'object' || obj === null) {
+        return this.isSensitivePath(currentPath) ? '****' : obj;
+      }
+
+      const result: any = Array.isArray(obj) ? [] : {};
+      
+      for (const [key, value] of Object.entries(obj)) {
+        const path = currentPath ? `${currentPath}.${key}` : key;
+        result[key] = mask(value, path);
+      }
+      
+      return result;
+    };
+
+    return mask(config);
+  }
+
   getSecure(): Config {
     return this.get(true);
   }
@@ -442,18 +456,13 @@ export class ConfigManager {
    * Updates configuration values with change tracking
    */
   update(updates: Partial<Config>, options: { user?: string, reason?: string, source?: 'cli' | 'api' | 'file' | 'env' } = {}): Config {
-    const oldConfig = deepClone(this.config);
-    
-    // Track changes before applying
-    this.trackChanges(oldConfig, updates, options);
-    
-    // Apply updates
+    if (this.trackChanges) {
+      this.recordChange('root', this.config, { ...this.config, ...updates }, options);
+    }
+
     this.config = deepMergeConfig(this.config, updates);
-    
-    // Validate the updated configuration
     this.validateWithDependencies(this.config);
-    
-    return this.get();
+    return this.config;
   }
 
   /**
@@ -486,13 +495,7 @@ export class ConfigManager {
     await fs.writeFile(savePath, content, 'utf8');
     
     // Record the save operation
-    this.recordChange({
-      timestamp: new Date().toISOString(),
-      path: 'CONFIG_SAVED',
-      oldValue: null,
-      newValue: savePath,
-      source: 'file'
-    });
+    this.recordChange('CONFIG_SAVED', null, savePath, { source: 'file' });
   }
   
   /**
@@ -640,68 +643,73 @@ export class ConfigManager {
    * Sets a configuration value by path with change tracking and validation
    */
   set(path: string, value: any, options: { user?: string, reason?: string, source?: 'cli' | 'api' | 'file' | 'env' } = {}): void {
-    const oldValue = this.getValue(path);
-    
-    // Record the change
-    this.recordChange({
-      timestamp: new Date().toISOString(),
-      path,
-      oldValue,
-      newValue: value,
-      user: options.user,
-      reason: options.reason,
-      source: options.source || 'cli'
-    });
+    const oldValue = this.getValue(path, false);
     
     // Encrypt sensitive values
-    if (this.isSensitivePath(path) && this.config.security?.encryptionEnabled) {
+    if (this.isSensitivePath(path)) {
       value = this.encryptValue(value);
     }
+
+    this.setValueByPath(this.config, path, value);
     
-    const keys = path.split('.');
-    let current: any = this.config;
-    
-    for (let i = 0; i < keys.length - 1; i++) {
-      const key = keys[i];
-      if (!(key in current)) {
-        current[key] = {};
-      }
-      current = current[key];
+    if (this.trackChanges) {
+      this.recordChange(path, oldValue, value, options);
     }
-    
-    current[keys[keys.length - 1]] = value;
-    
-    // Validate the path-specific rule and dependencies
-    this.validatePath(path, value);
+
     this.validateWithDependencies(this.config);
   }
 
-  /**
-   * Gets a configuration value by path with decryption for sensitive values
-   */
+  private isSensitivePath(path: string): boolean {
+    return SENSITIVE_PATHS.some(sensitive => 
+      path.toLowerCase().includes(sensitive.toLowerCase())
+    );
+  }
+
+  private encryptValue(value: string): string {
+    if (!this.encryptionKey) {
+      return value; // Return as-is if no encryption key
+    }
+
+    try {
+      const cipher = createCipher('aes-256-cbc', this.encryptionKey);
+      let encrypted = cipher.update(value, 'utf8', 'hex');
+      encrypted += cipher.final('hex');
+      return `encrypted:${encrypted}`;
+    } catch (error) {
+      console.warn('Failed to encrypt value, storing as plain text');
+      return value;
+    }
+  }
+
   getValue(path: string, decrypt = true): any {
-    const keys = path.split('.');
-    let current: any = this.config;
+    const value = this.getValueByPath(this.config, path);
     
-    for (const key of keys) {
-      if (current && typeof current === 'object' && key in current) {
-        current = current[key];
-      } else {
-        return undefined;
-      }
+    if (decrypt && this.isSensitivePath(path) && this.isEncryptedValue(value)) {
+      return this.decryptValue(value);
     }
     
-    // Decrypt sensitive values if requested
-    if (decrypt && this.isSensitivePath(path) && this.isEncryptedValue(current)) {
-      try {
-        return this.decryptValue(current);
-      } catch (error) {
-        console.warn(`Failed to decrypt value at path ${path}:`, (error as Error).message);
-        return current;
-      }
+    return value;
+  }
+
+  private isEncryptedValue(value: any): boolean {
+    return typeof value === 'string' && value.startsWith('encrypted:');
+  }
+
+  private decryptValue(encryptedValue: string): string {
+    if (!this.encryptionKey || !encryptedValue.startsWith('encrypted:')) {
+      return encryptedValue;
     }
-    
-    return current;
+
+    try {
+      const encrypted = encryptedValue.substring('encrypted:'.length);
+      const decipher = createDecipher('aes-256-cbc', this.encryptionKey);
+      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      return decrypted;
+    } catch (error) {
+      console.warn('Failed to decrypt value, returning as-is');
+      return encryptedValue;
+    }
   }
 
   /**
@@ -843,22 +851,24 @@ export class ConfigManager {
    * Imports configuration from export
    */
   import(data: any): void {
-    if (!data.config) {
-      throw new ConfigError('Invalid configuration export format');
+    if (data.config) {
+      if (this.trackChanges) {
+        this.recordChange('root', this.config, data.config, { source: 'file', reason: 'Import operation' });
+      }
+      
+      this.config = deepMergeConfig(this.config, data.config);
+      this.validateWithDependencies(this.config);
     }
-    
-    this.validateWithDependencies(data.config);
-    this.config = data.config;
-    this.currentProfile = data.profile;
-    
-    // Record the import operation
-    this.recordChange({
-      timestamp: new Date().toISOString(),
-      path: 'CONFIG_IMPORTED',
-      oldValue: null,
-      newValue: data.version || 'unknown',
-      source: 'file'
-    });
+
+    if (data.profiles) {
+      for (const [name, profile] of Object.entries(data.profiles)) {
+        this.profiles.set(name, profile as Partial<Config>);
+      }
+    }
+
+    if (data.changeHistory) {
+      this.changeHistory.push(...data.changeHistory);
+    }
   }
 
   /**
@@ -1106,6 +1116,40 @@ export class ConfigManager {
    */
   private validate(config: Config): void {
     this.validateWithDependencies(config);
+  }
+
+  private recordChange(path: string, oldValue: any, newValue: any, options: { user?: string, reason?: string, source?: 'cli' | 'api' | 'file' | 'env' } = {}): void {
+    const change: ConfigChange = {
+      timestamp: new Date().toISOString(),
+      path,
+      oldValue: deepClone(oldValue),
+      newValue: deepClone(newValue),
+      ...(options.user && { user: options.user }),
+      ...(options.reason && { reason: options.reason }),
+      source: options.source || 'api'
+    };
+
+    this.changeHistory.push(change);
+    
+    // Keep only last 1000 changes
+    if (this.changeHistory.length > 1000) {
+      this.changeHistory = this.changeHistory.slice(-1000);
+    }
+  }
+
+  private setValueByPath(obj: any, path: string, value: any): void {
+    const keys = path.split('.');
+    let current = obj;
+
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i];
+      if (!(key in current) || typeof current[key] !== 'object') {
+        current[key] = {};
+      }
+      current = current[key];
+    }
+
+    current[keys[keys.length - 1]] = value;
   }
 }
 

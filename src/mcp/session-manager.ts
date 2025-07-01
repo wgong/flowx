@@ -39,7 +39,7 @@ export class SessionManager implements ISessionManager {
   private authConfig: MCPAuthConfig;
   private sessionTimeout: number;
   private maxSessions: number;
-  private cleanupInterval?: number;
+  private cleanupInterval?: NodeJS.Timeout;
 
   constructor(
     private config: MCPConfig,
@@ -49,7 +49,7 @@ export class SessionManager implements ISessionManager {
     this.sessionTimeout = config.sessionTimeout || 3600000; // 1 hour default
     this.maxSessions = config.maxSessions || 100;
 
-    // Start cleanup timer
+    // Start session cleanup interval
     this.cleanupInterval = setInterval(() => {
       this.cleanupExpiredSessions();
     }, 60000); // Clean up every minute

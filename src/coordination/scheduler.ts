@@ -24,6 +24,7 @@ export class TaskScheduler {
   protected agentTasks = new Map<string, Set<string>>(); // agentId -> taskIds
   protected taskDependencies = new Map<string, Set<string>>(); // taskId -> dependent taskIds
   protected completedTasks = new Set<string>();
+  private cleanupInterval?: number;
 
   constructor(
     protected config: CoordinationConfig,
@@ -35,7 +36,9 @@ export class TaskScheduler {
     this.logger.info('Initializing task scheduler');
     
     // Set up periodic cleanup
-    setInterval(() => this.cleanup(), 60000); // Every minute
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupCompletedTasks();
+    }, 60000) as unknown as number; // Every minute
   }
 
   async shutdown(): Promise<void> {
@@ -353,7 +356,7 @@ export class TaskScheduler {
     const timeoutMs = this.config.resourceTimeout;
     scheduled.timeout = setTimeout(() => {
       this.failTask(taskId, new TaskTimeoutError(taskId, timeoutMs));
-    }, timeoutMs);
+    }, timeoutMs) as unknown as number;
   }
 
   private canStartTask(task: Task): boolean {
@@ -384,6 +387,27 @@ export class TaskScheduler {
           this.completedTasks.delete(result.value);
           this.taskDependencies.delete(result.value);
         }
+      }
+    }
+  }
+
+  private cleanupCompletedTasks(): void {
+    // Clean up completed tasks older than a certain threshold
+    // Since completedTasks is a Set<string> and we don't store completion times,
+    // we'll just limit the size of the set instead of time-based cleanup
+    const maxCompletedTasks = 1000;
+    
+    if (this.completedTasks.size > maxCompletedTasks) {
+      const tasksToRemove = this.completedTasks.size - maxCompletedTasks;
+      const taskIds = Array.from(this.completedTasks);
+      
+      // Remove oldest tasks (first in the array)
+      for (let i = 0; i < tasksToRemove; i++) {
+        this.completedTasks.delete(taskIds[i]);
+      }
+      
+      if (tasksToRemove > 0) {
+        this.logger.debug(`Cleaned up ${tasksToRemove} completed tasks`);
       }
     }
   }

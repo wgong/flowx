@@ -2,13 +2,23 @@
  * Rollback Manager - Handles rollback operations and backup management
  */
 
-import * as fs from 'npm:fs-extra';
+import * as fs from 'fs-extra';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { MigrationBackup, BackupFile } from './types.ts';
 import { logger } from './logger.ts';
-import * as chalk from 'npm:chalk';
-import * as inquirer from 'npm:inquirer';
+import * as chalk from 'chalk';
+import inquirer from 'inquirer';
+
+// Helper function to check if path exists
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export class RollbackManager {
   private projectPath: string;
@@ -53,7 +63,7 @@ export class RollbackManager {
       const sourcePath = path.join(this.projectPath, target);
       const targetPath = path.join(backupPath, target);
 
-      if (await fs.pathExists(sourcePath)) {
+      if (await pathExists(sourcePath)) {
         const stats = await fs.stat(sourcePath);
 
         if (stats.isDirectory()) {
@@ -112,7 +122,7 @@ export class RollbackManager {
   }
 
   async listBackups(): Promise<MigrationBackup[]> {
-    if (!await fs.pathExists(this.backupDir)) {
+    if (!await pathExists(this.backupDir)) {
       return [];
     }
 
@@ -122,12 +132,12 @@ export class RollbackManager {
     for (const folder of backupFolders.sort().reverse()) {
       const manifestPath = path.join(this.backupDir, folder, 'backup-manifest.json');
       
-      if (await fs.pathExists(manifestPath)) {
+      if (await pathExists(manifestPath)) {
         try {
           const backup = await fs.readJson(manifestPath);
           backups.push(backup);
         } catch (error) {
-          logger.warn(`Invalid backup manifest in ${folder}: ${error.message}`);
+          logger.warn(`Invalid backup manifest in ${folder}: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
     }
@@ -142,7 +152,7 @@ export class RollbackManager {
       throw new Error('No backups found');
     }
 
-    let selectedBackup: MigrationBackup;
+    let selectedBackup: MigrationBackup | undefined;
 
     if (backupId) {
       selectedBackup = backups.find(b => b.metadata.backupId === backupId);
@@ -155,18 +165,22 @@ export class RollbackManager {
       selectedBackup = backups[0]; // Most recent
     }
 
+    if (!selectedBackup) {
+      throw new Error('No backup selected');
+    }
+
     logger.info(`Rolling back to backup from ${selectedBackup.timestamp.toISOString()}...`);
 
     // Confirm rollback
     if (interactive) {
-      const confirm = await inquirer.prompt([{
+      const { proceed } = await inquirer.prompt([{
         type: 'confirm',
         name: 'proceed',
         message: `Are you sure you want to rollback? This will overwrite current files.`,
         default: false
       }]);
 
-      if (!confirm.proceed) {
+      if (!proceed) {
         logger.info('Rollback cancelled');
         return;
       }
@@ -204,20 +218,18 @@ export class RollbackManager {
 
   private async selectBackupInteractively(backups: MigrationBackup[]): Promise<MigrationBackup> {
     const choices = backups.map(backup => ({
-      name: `${backup.timestamp.toLocaleString()} - ${backup.files.length} files (${backup.metadata.type || 'migration'})`,
-      value: backup,
-      short: backup.metadata.backupId
+      name: `${backup.timestamp.toISOString()} - ${backup.files.length} files`,
+      value: backup
     }));
 
-    const answer = await inquirer.prompt([{
+    const { selectedBackup } = await inquirer.prompt([{
       type: 'list',
-      name: 'backup',
-      message: 'Select backup to rollback to:',
-      choices,
-      pageSize: 10
+      name: 'selectedBackup',
+      message: 'Select backup to restore:',
+      choices
     }]);
 
-    return answer.backup;
+    return selectedBackup;
   }
 
   private async restoreFiles(backup: MigrationBackup): Promise<void> {
@@ -236,7 +248,7 @@ export class RollbackManager {
         try {
           await fs.chmod(targetPath, parseInt(file.permissions, 8));
         } catch (error) {
-          logger.warn(`Could not restore permissions for ${file.path}: ${error.message}`);
+          logger.warn(`Could not restore permissions for ${file.path}: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
     }
@@ -250,7 +262,7 @@ export class RollbackManager {
     for (const file of backup.files) {
       const filePath = path.join(this.projectPath, file.path);
       
-      if (!await fs.pathExists(filePath)) {
+      if (!await pathExists(filePath)) {
         errors.push(`Missing file: ${file.path}`);
         continue;
       }
@@ -326,7 +338,7 @@ export class RollbackManager {
   async importBackup(importPath: string): Promise<MigrationBackup> {
     const manifestPath = path.join(importPath, 'backup-manifest.json');
     
-    if (!await fs.pathExists(manifestPath)) {
+    if (!await pathExists(manifestPath)) {
       throw new Error('Invalid backup: missing manifest');
     }
 
@@ -344,7 +356,7 @@ export class RollbackManager {
     const indexPath = path.join(this.backupDir, 'backup-index.json');
     
     let index: Record<string, any> = {};
-    if (await fs.pathExists(indexPath)) {
+    if (await pathExists(indexPath)) {
       index = await fs.readJson(indexPath);
     }
 

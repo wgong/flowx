@@ -3,7 +3,7 @@
  * Provides alternative UI when Ink/raw mode isn't supported
  */
 
-import chalk from 'npm:chalk';
+import chalk from 'chalk';
 import { createCompatibleUI } from './compatible-ui.ts';
 
 export interface FallbackOptions {
@@ -53,7 +53,7 @@ export async function handleRawModeError(
       const ui = createCompatibleUI();
       await ui.start();
     } catch (fallbackError) {
-      console.log(chalk.hex("#FF0000")('❌ Fallback UI also failed:'), fallbackError.message);
+      console.error('Complete UI failure:', (fallbackError as Error).message);
       await showBasicInterface(options);
     }
   } else {

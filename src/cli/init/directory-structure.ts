@@ -28,8 +28,8 @@ export async function createDirectoryStructure(): Promise<void> {
       await fs.mkdir(dir, { recursive: true });
       console.log(`  ✅ Created ${dir}/ directory`);
     } catch (error) {
-      if (error.code !== 'EEXIST') {
-        throw error;
+      if ((error as any).code !== 'EEXIST') {
+        console.warn(`Failed to create directory ${dir}:`, (error as Error).message);
       }
     }
   }
@@ -53,7 +53,7 @@ export async function createDirectoryStructure(): Promise<void> {
     tasks: [],
     swarms: [],
     lastUpdated: Date.now(),
-    version: "1.0.73"
+    version: "1.1.2"
   };
   
   await fs.writeFile('memory/claude-flow-data.json', JSON.stringify(initialData, null, 2));

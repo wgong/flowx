@@ -6,8 +6,8 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { Buffer } from 'node:buffer';
 import process from 'node:process';
-import { LoggingConfig } from "../utils/types.ts";
-import { formatBytes } from "../utils/helpers.ts";
+import { LoggingConfig } from "../utils/types.js";
+import { formatBytes } from "../utils/helpers.js";
 
 export interface ILogger {
   debug(message: string, meta?: unknown): void;
@@ -162,7 +162,8 @@ export class Logger implements ILogger {
   }
 
   private shouldLog(level: LogLevel): boolean {
-    const configLevel = LogLevel[this.config.level.toUpperCase() as keyof typeof LogLevel];
+    const levelStr = this.config.level || 'info';
+    const configLevel = LogLevel[levelStr.toUpperCase() as keyof typeof LogLevel];
     return level >= configLevel;
   }
 

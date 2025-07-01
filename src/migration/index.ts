@@ -4,16 +4,19 @@
  * Helps existing projects migrate to optimized prompts and configurations
  */
 
-import { Command } from 'npm:commander';
+import { Command } from 'commander';
 import { MigrationRunner } from './migration-runner.ts';
 import { MigrationAnalyzer } from './migration-analyzer.ts';
 import { MigrationStrategy } from './types.ts';
 import { logger } from './logger.ts';
 import { ProgressReporter } from './progress-reporter.ts';
-import { ValidationError, MigrationError } from './errors.ts';
+import { ValidationError } from '../utils/errors.ts';
 import { MigrationValidator } from './migration-validator.ts';
 import { colors } from '../utils/colors.ts';
 import * as path from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { mkdir } from 'node:fs/promises';
 
 const program = new Command();
 

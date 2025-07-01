@@ -25,12 +25,22 @@ let agentManager: AgentManager | null = null;
 async function initializeAgentManager(): Promise<AgentManager> {
   if (agentManager) return agentManager;
   
-  const logger = new Logger({ level: 'info' });
-  const eventBus = new EventBus();
-  const memorySystem = new DistributedMemorySystem({
-    backend: 'sqlite',
-    path: './memory/agents.db'
+  const logger = new Logger({
+    level: 'info',
+    format: 'json',
+    destination: 'console'
   });
+  const eventBus = EventBus.getInstance();
+  const memorySystem = new DistributedMemorySystem({
+    namespace: 'agents',
+    distributed: false,
+    consistency: 'strong',
+    replicationFactor: 1,
+    syncInterval: 5000,
+    maxMemorySize: 512 * 1024 * 1024,
+    cacheSize: 10000,
+    compressionEnabled: true
+  }, logger, eventBus);
   
   await memorySystem.initialize();
   
@@ -45,6 +55,11 @@ async function initializeAgentManager(): Promise<AgentManager> {
         memory: 1024 * 1024 * 1024, // 1GB
         cpu: 2.0,
         disk: 2 * 1024 * 1024 * 1024 // 2GB
+      },
+      agentDefaults: {
+        autonomyLevel: 0.8,
+        learningEnabled: true,
+        adaptationEnabled: true
       }
     },
     logger,
@@ -101,308 +116,201 @@ export const agentCommand = new Command()
     console.log('  logs     - View agent logs and activity history');
     console.log('');
     console.log('Use --help with any command for detailed options.');
-    agentCommand.showHelp();
-  })
-  .command('terminate', new Command()
-    .description('Safely terminate agents with cleanup and state preservation')
-    .arguments('<agent-id:string>')
-    .option('--force', 'Force termination without graceful shutdown')
-    .option('--preserve-state', 'Preserve agent state in memory for later revival')
-    .option('--cleanup', 'Remove all agent data and logs')
-    .option('--reason <reason:string>', 'Termination reason for logging')
-    .action(async (options, agentId: string) => {
-      try {
-        const manager = await initializeAgentManager();
-        const agent = manager.getAgent(agentId);
+    agentCommand.help();
+  });
+
+agentCommand
+  .command('terminate <agent-id>')
+  .description('Safely terminate agents with cleanup and state preservation')
+  .option('--force', 'Force termination without graceful shutdown')
+  .option('--preserve-state', 'Preserve agent state in memory for later revival')
+  .option('--cleanup', 'Remove all agent data and logs')
+  .option('--reason <reason>', 'Termination reason for logging')
+  .action(async (agentId: string, options: any) => {
+    try {
+      const manager = await initializeAgentManager();
+      const agent = manager.getAgent(agentId);
+      
+      if (!agent) {
+        console.error(colors.red(`Agent '${agentId}' not found`));
+        return;
+      }
+      
+      console.log(colors.cyan(`\n🛑 Terminating agent: ${agent.name} (${agentId})`));
+      console.log(`Current status: ${getStatusDisplay(agent.status)}${agent.status}${colors.reset}`);
+      
+      // Confirm termination if agent is busy
+      if (agent.status === 'busy' && agent.workload > 0) {
+        const confirm = await inquirer.prompt([
+          { type: 'confirm', name: 'confirm', message: `Agent has ${agent.workload} active tasks. Continue with termination?`, default: false }
+        ]);
         
-        if (!agent) {
-          console.error(colors.red(`Agent '${agentId}' not found`));
+        if (!confirm.confirm) {
+          console.log(colors.yellow('Termination cancelled'));
           return;
         }
-        
-        console.log(colors.cyan(`\n🛑 Terminating agent: ${agent.name} (${agentId})`));
-        console.log(`Current status: ${getStatusDisplay(agent.status)}${agent.status}${colors.reset}`);
-        
-        // Confirm termination if agent is busy
-        if (agent.status === 'busy' && agent.workload > 0) {
-          const confirm = await inquirer.prompt([
-            { type: 'confirm', name: 'confirm', message: `Agent has ${agent.workload} active tasks. Continue with termination?`, default: false }
-          ]);
-          
-          if (!confirm.confirm) {
-            console.log(colors.yellow('Termination cancelled'));
-            return;
-          }
-        }
-        
-        const reason = options.reason || 'user_request';
-        
-        // Preserve state if requested
-        if (options.preserveState) {
-          console.log(colors.blue('📦 Preserving agent state...'));
-          await manager.memory.store(`agent_state:${agentId}`, {
-            agent,
-            terminationTime: new Date(),
-            reason,
-            preservedBy: 'user'
-          }, {
-            type: 'preserved-agent-state',
-            tags: ['terminated', 'preserved'],
-            partition: 'archived'
-          });
-        }
-        
-        // Terminate the agent
-        if (options.force) {
-          console.log(colors.red('⚡ Force terminating agent...'));
-          // Force termination would be implemented
-        } else {
-          console.log(colors.yellow('🔄 Gracefully shutting down agent...'));
-        }
-        
-        await manager.stopAgent(agentId, reason);
-        
-        if (options.cleanup) {
-          console.log(colors.blue('🧹 Cleaning up agent data...'));
-          await manager.removeAgent(agentId);
-        }
-        
-        console.log(colors.green('✅ Agent terminated successfully'));
-        
-        // Show final stats
-        if (agent.metrics) {
-          console.log('\n' + colors.dim('Final Statistics:'));
-          console.log(`  Tasks Completed: ${agent.metrics.tasksCompleted}`);
-          console.log(`  Success Rate: ${formatPercentage(agent.metrics.successRate)}`);
-          console.log(`  Uptime: ${formatDuration(agent.metrics.totalUptime)}`);
-        }
-        
-      } catch (error) {
-        console.error(colors.red('Error terminating agent:'), error.message);
-        process.exit(1);
       }
-    })
-  )
-  .command('info', new Command()
-    .description('Get comprehensive information about a specific agent')
-    .arguments('<agent-id:string>')
-    .option('--logs', 'Include recent log entries')
-    .option('--metrics', 'Show detailed performance metrics')
-    .option('--health', 'Include health diagnostic information')
-    .option('--tasks', 'Show task history')
-    .option('--config', 'Display agent configuration')
-    .option('--json', 'Output in JSON format')
-    .action(async (options, agentId: string) => {
-      try {
-        const manager = await initializeAgentManager();
-        const agent = manager.getAgent(agentId);
-        
-        if (!agent) {
-          console.error(colors.red(`Agent '${agentId}' not found`));
-          
-          // Suggest similar agent IDs
-          const allAgents = manager.getAllAgents();
-          const similar = allAgents.filter(a => 
-            a.id.id.includes(agentId) || 
-            a.name.toLowerCase().includes(agentId.toLowerCase())
-          );
-          
-          if (similar.length > 0) {
-            console.log('\nDid you mean one of these agents?');
-            similar.forEach(a => console.log(`  ${a.id.id} - ${a.name}`));
-          }
-          return;
-        }
-        
-        if (options.json) {
-          const fullInfo = {
-            agent,
-            health: manager.getAgentHealth(agentId),
-            logs: options.logs ? await getAgentLogs(agentId) : undefined,
-            metrics: options.metrics ? await getDetailedMetrics(agentId, manager) : undefined
-          };
-          console.log(JSON.stringify(fullInfo, null, 2));
-          return;
-        }
-        
-        console.log(colors.cyan(`\n🤖 Agent Information: ${agent.name}`));
-        console.log('=' .repeat(60));
-        
-        // Basic info
-        displayAgentBasicInfo(agent);
-        
-        // Status and health
-        displayAgentStatusHealth(agent, manager);
-        
-        // Configuration
-        if (options.config) {
-          displayAgentConfiguration(agent);
-        }
-        
-        // Metrics
-        if (options.metrics) {
-          await displayAgentMetrics(agent, manager);
-        }
-        
-        // Health details
-        if (options.health) {
-          displayAgentHealthDetails(agentId, manager);
-        }
-        
-        // Task history
-        if (options.tasks) {
-          displayAgentTaskHistory(agent);
-        }
-        
-        // Logs
-        if (options.logs) {
-          await displayAgentLogs(agentId);
-        }
-        
-      } catch (error) {
-        console.error(colors.red('Error getting agent info:'), error.message);
-        process.exit(1);
+      
+      const reason = options.reason || 'user_request';
+      
+      // Preserve state if requested
+      if (options.preserveState) {
+        console.log(colors.blue('📦 Preserving agent state...'));
+        const memoryManager = (manager as any).getMemoryManager();
+        await memoryManager.store(`agent_state:${agentId}`, {
+          agent,
+          terminationTime: new Date(),
+          reason,
+          preservedBy: 'user'
+        }, {
+          type: 'preserved-agent-state',
+          tags: ['terminated', 'preserved'],
+          partition: 'archived'
+        });
       }
-    })
-  )
-  
-  // Additional commands
-  .command('start', new Command()
-    .description('Start a created agent')
-    .arguments('<agent-id:string>')
-    .action(async (options, agentId: string) => {
-      try {
-        const manager = await initializeAgentManager();
-        console.log(colors.cyan(`🚀 Starting agent ${agentId}...`));
-        await manager.startAgent(agentId);
-        console.log(colors.green('✅ Agent started successfully'));
-      } catch (error) {
-        console.error(colors.red('Error starting agent:'), error.message);
+      
+      // Terminate the agent
+      if (options.force) {
+        console.log(colors.red('⚡ Force terminating agent...'));
+        // Force termination would be implemented
+      } else {
+        console.log(colors.yellow('🔄 Gracefully shutting down agent...'));
       }
-    })
-  )
-  
-  .command('restart', new Command()
-    .description('Restart an agent')
-    .arguments('<agent-id:string>')
-    .option('--reason <reason:string>', 'Restart reason')
-    .action(async (options, agentId: string) => {
-      try {
-        const manager = await initializeAgentManager();
-        console.log(colors.cyan(`🔄 Restarting agent ${agentId}...`));
-        await manager.restartAgent(agentId, options.reason);
-        console.log(colors.green('✅ Agent restarted successfully'));
-      } catch (error) {
-        console.error(colors.red('Error restarting agent:'), error.message);
+      
+      await manager.stopAgent(agentId, reason);
+      
+      if (options.cleanup) {
+        console.log(colors.blue('🧹 Cleaning up agent data...'));
+        await manager.removeAgent(agentId);
       }
-    })
-  )
-  
-  .command('pool', new Command()
-    .description('Manage agent pools')
-    .option('--create <name:string>', 'Create a new pool')
-    .option('--template <template:string>', 'Template for pool agents')
-    .option('--min-size <min:number>', 'Minimum pool size', { default: 1 })
-    .option('--max-size <max:number>', 'Maximum pool size', { default: 10 })
-    .option('--auto-scale', 'Enable auto-scaling')
-    .option('--list', 'List all pools')
-    .option('--scale <pool:string>', 'Scale a pool')
-    .option('--size <size:number>', 'Target size for scaling')
-    .action(async (options) => {
-      try {
-        const manager = await initializeAgentManager();
-        
-        if (options.create) {
-          if (!options.template) {
-            console.error(colors.red('Template is required for pool creation'));
-            return;
-          }
-          
-          const poolId = await manager.createAgentPool(options.create, options.template, {
-            minSize: options.minSize,
-            maxSize: options.maxSize,
-            autoScale: options.autoScale
-          });
-          
-          console.log(colors.green(`✅ Pool '${options.create}' created with ID: ${poolId}`));
-        }
-        
-        if (options.scale && options.size !== undefined) {
-          const pools = manager.getAllPools();
-          const pool = pools.find(p => p.name === options.scale || p.id === options.scale);
-          
-          if (!pool) {
-            console.error(colors.red(`Pool '${options.scale}' not found`));
-            return;
-          }
-          
-          await manager.scalePool(pool.id, options.size);
-          console.log(colors.green(`✅ Pool scaled to ${options.size} agents`));
-        }
-        
-        if (options.list) {
-          const pools = manager.getAllPools();
-          if (pools.length === 0) {
-            console.log(colors.yellow('No pools found'));
-            return;
-          }
-          
-          console.log(colors.cyan('\n🏊 Agent Pools'));
-          const table = new Table()
-            .header(['Name', 'Type', 'Size', 'Available', 'Busy', 'Auto-Scale'])
-            .border(true);
-          
-          pools.forEach(pool => {
-            table.push([
-              pool.name,
-              pool.type,
-              pool.currentSize.toString(),
-              pool.availableAgents.length.toString(),
-              pool.busyAgents.length.toString(),
-              pool.autoScale ? '✅' : '❌'
-            ]);
-          });
-          
-          table.render();
-        }
-        
-      } catch (error) {
-        console.error(colors.red('Error managing pools:'), error.message);
+      
+      console.log(colors.green('✅ Agent terminated successfully'));
+      
+      // Show final stats
+      if (agent.metrics) {
+        console.log('\n' + colors.dim('Final Statistics:'));
+        console.log(`  Tasks Completed: ${agent.metrics.tasksCompleted}`);
+        console.log(`  Success Rate: ${formatPercentage(agent.metrics.successRate)}`);
+        console.log(`  Uptime: ${formatDuration(agent.metrics.totalUptime)}`);
       }
-    })
-  )
-  
-  .command('health', new Command()
-    .description('Monitor agent health and performance')
-    .option('--watch', 'Continuously monitor health')
-    .option('--threshold <threshold:number>', 'Health threshold for alerts', { default: 0.7 })
-    .option('--agent <agent-id:string>', 'Monitor specific agent')
-    .action(async (options) => {
-      try {
-        const manager = await initializeAgentManager();
+      
+    } catch (error) {
+      console.error(colors.red('Error terminating agent:'), (error as Error).message);
+      process.exit(1);
+    }
+  });
+
+agentCommand
+  .command('info <agent-id>')
+  .description('Get comprehensive information about a specific agent')
+  .option('--logs', 'Include recent log entries')
+  .option('--metrics', 'Show detailed performance metrics')
+  .option('--health', 'Include health diagnostic information')
+  .option('--tasks', 'Show task history')
+  .option('--config', 'Display agent configuration')
+  .option('--json', 'Output in JSON format')
+  .action(async (agentId: string, options: any) => {
+    try {
+      const manager = await initializeAgentManager();
+      const agent = manager.getAgent(agentId);
+      
+      if (!agent) {
+        console.error(colors.red(`Agent '${agentId}' not found`));
         
-        if (options.watch) {
-          console.log(colors.cyan('🔍 Monitoring agent health (Ctrl+C to stop)...'));
-          
-          const monitor = setInterval(() => {
-            console.clear();
-            displayHealthDashboard(manager, options.threshold, options.agent);
-          }, 3000);
-          
-          process.on('SIGINT', () => {
-            clearInterval(monitor);
-            console.log(colors.yellow('\nHealth monitoring stopped'));
-            process.exit(0);
-          });
-        } else {
-          displayHealthDashboard(manager, options.threshold, options.agent);
+        // Suggest similar agent IDs
+        const allAgents = manager.getAllAgents();
+        const similar = allAgents.filter(a => 
+          a.id.id.includes(agentId) || 
+          a.name.toLowerCase().includes(agentId.toLowerCase())
+        );
+        
+        if (similar.length > 0) {
+          console.log('\nDid you mean one of these agents?');
+          similar.forEach(a => console.log(`  ${a.id.id} - ${a.name}`));
         }
-        
-      } catch (error) {
-        console.error(colors.red('Error monitoring health:'), error.message);
+        return;
       }
-    })
-  );
+      
+      if (options.json) {
+        const fullInfo = {
+          agent,
+          health: manager.getAgentHealth(agentId),
+          logs: options.logs ? await getAgentLogs(agentId) : undefined,
+          metrics: options.metrics ? await getDetailedMetrics(agentId, manager) : undefined
+        };
+        console.log(JSON.stringify(fullInfo, null, 2));
+        return;
+      }
+      
+      console.log(colors.cyan(`\n🤖 Agent Information: ${agent.name}`));
+      console.log('=' .repeat(60));
+      
+      // Basic info
+      displayAgentBasicInfo(agent);
+      
+      // Status and health
+      displayAgentStatusHealth(agent, manager);
+      
+      // Configuration
+      if (options.config) {
+        displayAgentConfiguration(agent);
+      }
+      
+      // Metrics
+      if (options.metrics) {
+        await displayAgentMetrics(agent, manager);
+      }
+      
+      // Health details
+      if (options.health) {
+        displayAgentHealthDetails(agentId, manager);
+      }
+      
+      // Task history
+      if (options.tasks) {
+        displayAgentTaskHistory(agent);
+      }
+      
+      // Logs
+      if (options.logs) {
+        await displayAgentLogs(agentId);
+      }
+      
+    } catch (error) {
+      console.error(colors.red('Error getting agent info:'), (error as Error).message);
+      process.exit(1);
+    }
+  });
+
+// Additional commands
+agentCommand
+  .command('start <agent-id>')
+  .description('Start a created agent')
+  .action(async (agentId: string) => {
+    try {
+      const manager = await initializeAgentManager();
+      console.log(colors.cyan(`🚀 Starting agent ${agentId}...`));
+      await manager.startAgent(agentId);
+      console.log(colors.green('✅ Agent started successfully'));
+    } catch (error) {
+      console.error(colors.red('Error starting agent:'), (error as Error).message);
+    }
+  });
+
+agentCommand
+  .command('restart <agent-id>')
+  .description('Restart an agent')
+  .option('--reason <reason>', 'Restart reason')
+  .action(async (agentId: string, options: any) => {
+    try {
+      const manager = await initializeAgentManager();
+      console.log(colors.cyan(`🔄 Restarting agent ${agentId}...`));
+      await manager.restartAgent(agentId, options.reason);
+      console.log(colors.green('✅ Agent restarted successfully'));
+    } catch (error) {
+      console.error(colors.red('Error restarting agent:'), (error as Error).message);
+    }
+  });
 
 // === HELPER FUNCTIONS ===
 
@@ -447,9 +355,9 @@ async function interactiveAgentConfiguration(manager: AgentManager): Promise<any
 }
 
 function displayCompactAgentList(agents: any[]): void {
-  const table = new Table()
-    .header(['ID', 'Name', 'Type', 'Status', 'Health', 'Workload', 'Last Activity'])
-    .border(true);
+  const table = new Table({
+    head: ['ID', 'Name', 'Type', 'Status', 'Health', 'Workload', 'Last Activity']
+  });
   
   agents.forEach(agent => {
     table.push([
@@ -463,7 +371,7 @@ function displayCompactAgentList(agents: any[]): void {
     ]);
   });
   
-  table.render();
+  console.log(table.toString());
 }
 
 function displayDetailedAgentList(agents: any[], manager: AgentManager): void {
@@ -601,11 +509,13 @@ function displayHealthDashboard(manager: AgentManager, threshold: number, specif
   console.log(`Total Agents: ${stats.totalAgents} | Active: ${stats.activeAgents} | Healthy: ${stats.healthyAgents}`);
   console.log(`Average Health: ${formatPercentage(stats.averageHealth)}`);
   
-  const unhealthyAgents = agents.filter(a => a.health < threshold);
+  const unhealthyAgents = agents.filter((a: any) => a && a.health < threshold);
   if (unhealthyAgents.length > 0) {
     console.log(colors.red(`\n⚠️  ${unhealthyAgents.length} agents below health threshold:`));
-    unhealthyAgents.forEach(agent => {
-      console.log(`  ${agent.name}: ${getHealthDisplay(agent.health)}`);
+    unhealthyAgents.forEach((agent: any) => {
+      if (agent && agent.name && typeof agent.health === 'number') {
+        console.log(`  ${agent.name}: ${getHealthDisplay(agent.health)}`);
+      }
     });
   }
   
@@ -632,14 +542,14 @@ async function getDetailedMetrics(agentId: string, manager: AgentManager): Promi
 
 function getStatusColor(status: string): string {
   switch (status) {
-    case 'idle': return colors.green;
-    case 'busy': return colors.blue;
-    case 'error': return colors.red;
-    case 'offline': return colors.gray;
-    case 'initializing': return colors.yellow;
-    case 'terminating': return colors.yellow;
-    case 'terminated': return colors.gray;
-    default: return colors.white;
+    case 'idle': return colors.green('');
+    case 'busy': return colors.blue('');
+    case 'error': return colors.red('');
+    case 'offline': return colors.gray('');
+    case 'initializing': return colors.yellow('');
+    case 'terminating': return colors.yellow('');
+    case 'terminated': return colors.gray('');
+    default: return '';
   }
 }
 
@@ -650,39 +560,39 @@ function getStatusDisplay(status: string): string {
 
 function getHealthDisplay(health: number): string {
   const percentage = Math.round(health * 100);
-  let color = colors.green;
+  let color = colors.green('');
   
-  if (health < 0.3) color = colors.red;
-  else if (health < 0.7) color = colors.yellow;
+  if (health < 0.3) color = colors.red('');
+  else if (health < 0.7) color = colors.yellow('');
   
   return `${color}${percentage}%${colors.reset}`;
 }
 
 function getHealthTrendDisplay(trend: string): string {
   switch (trend) {
-    case 'improving': return `${colors.green}↗ Improving${colors.reset}`;
-    case 'degrading': return `${colors.red}↘ Degrading${colors.reset}`;
-    default: return `${colors.blue}→ Stable${colors.reset}`;
+    case 'improving': return `${colors.green('↗ Improving')}${colors.reset}`;
+    case 'degrading': return `${colors.red('↘ Degrading')}${colors.reset}`;
+    default: return `${colors.blue('→ Stable')}${colors.reset}`;
   }
 }
 
 function getSeverityColor(severity: string): string {
   switch (severity) {
-    case 'critical': return colors.red;
-    case 'high': return colors.red;
-    case 'medium': return colors.yellow;
-    case 'low': return colors.blue;
-    default: return colors.white;
+    case 'critical': return colors.red('');
+    case 'high': return colors.red('');
+    case 'medium': return colors.yellow('');
+    case 'low': return colors.blue('');
+    default: return '';
   }
 }
 
 function getLogLevelColor(level: string): string {
   switch (level.toLowerCase()) {
-    case 'error': return colors.red;
-    case 'warn': return colors.yellow;
-    case 'info': return colors.blue;
-    case 'debug': return colors.gray;
-    default: return colors.white;
+    case 'error': return colors.red('');
+    case 'warn': return colors.yellow('');
+    case 'info': return colors.blue('');
+    case 'debug': return colors.gray('');
+    default: return '';
   }
 }
 

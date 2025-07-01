@@ -2,16 +2,87 @@
  * Status command for Claude-Flow
  */
 
-import { Command } from '@cliffy/command';
-import { colors } from '@cliffy/ansi/colors';
-import { Table } from '@cliffy/table';
-import { formatHealthStatus, formatDuration, formatStatusIndicator } from "../formatter.ts";
+import { Command } from 'commander';
+import { formatHealthStatus, formatDuration, formatStatusIndicator, formatProgressBar } from "../formatter.ts";
 
-export const statusCommand = new Command()
+// Color utilities
+const colors = {
+  red: (text: string) => `\x1b[31m${text}\x1b[0m`,
+  green: (text: string) => `\x1b[32m${text}\x1b[0m`,
+  yellow: (text: string) => `\x1b[33m${text}\x1b[0m`,
+  blue: (text: string) => `\x1b[34m${text}\x1b[0m`,
+  magenta: (text: string) => `\x1b[35m${text}\x1b[0m`,
+  cyan: (text: string) => `\x1b[36m${text}\x1b[0m`,
+  white: (text: string) => `\x1b[37m${text}\x1b[0m`,
+  gray: (text: string) => `\x1b[90m${text}\x1b[0m`,
+  bold: (text: string) => `\x1b[1m${text}\x1b[0m`,
+  dim: (text: string) => `\x1b[2m${text}\x1b[0m`,
+};
+
+// Color combination helpers
+const colorCombinations = {
+  cyanBold: (text: string) => `\x1b[1;36m${text}\x1b[0m`,
+  redBold: (text: string) => `\x1b[1;31m${text}\x1b[0m`,
+  yellowBold: (text: string) => `\x1b[1;33m${text}\x1b[0m`,
+};
+
+// Simple table utility
+class Table {
+  private headers: string[] = [];
+  private rows: string[][] = [];
+  private hasBorder: boolean = false;
+
+  constructor() {}
+
+  header(headers: string[]): this {
+    this.headers = headers;
+    return this;
+  }
+
+  push(row: string[]): this {
+    this.rows.push(row);
+    return this;
+  }
+
+  border(enabled: boolean): this {
+    this.hasBorder = enabled;
+    return this;
+  }
+
+  render(): void {
+    console.log(this.toString());
+  }
+
+  toString(): string {
+    if (this.headers.length === 0 && this.rows.length === 0) {
+      return '';
+    }
+
+    const allRows = this.headers.length > 0 ? [this.headers, ...this.rows] : this.rows;
+    const colWidths = this.headers.map((_, i) => 
+      Math.max(...allRows.map(row => (row[i] || '').length))
+    );
+
+    let result = '';
+    
+    if (this.headers.length > 0) {
+      result += this.headers.map((header, i) => header.padEnd(colWidths[i])).join(' | ') + '\n';
+      result += colWidths.map(width => '-'.repeat(width)).join('-+-') + '\n';
+    }
+
+    for (const row of this.rows) {
+      result += row.map((cell, i) => (cell || '').padEnd(colWidths[i])).join(' | ') + '\n';
+    }
+
+    return result;
+  }
+}
+
+export const statusCommand = new Command('status')
   .description('Show Claude-Flow system status')
   .option('-w, --watch', 'Watch mode - continuously update status')
-  .option('-i, --interval <seconds:number>', 'Update interval in seconds', { default: 5 })
-  .option('-c, --component <name:string>', 'Show status for specific component')
+  .option('-i, --interval <seconds>', 'Update interval in seconds', '5')
+  .option('-c, --component <name>', 'Show status for specific component')
   .option('--json', 'Output in JSON format')
   .action(async (options: any) => {
     if (options.watch) {
@@ -24,7 +95,7 @@ export const statusCommand = new Command()
 async function showStatus(options: any): Promise<void> {
   try {
     // In a real implementation, this would connect to the running orchestrator
-    const status = await getSystemStatus();
+    const status = await getSystemStatus(options);
     
     if (options.json) {
       console.log(JSON.stringify(status, null, 2));
@@ -47,7 +118,7 @@ async function showStatus(options: any): Promise<void> {
 }
 
 async function watchStatus(options: any): Promise<void> {
-  const interval = options.interval * 1000;
+  const interval = parseInt(options.interval) * 1000;
   
   console.log(colors.cyan('Watching Claude-Flow status...'));
   console.log(colors.gray(`Update interval: ${options.interval}s`));
@@ -57,7 +128,7 @@ async function watchStatus(options: any): Promise<void> {
   while (true) {
     // Clear screen and show status
     console.clear();
-    console.log(colors.cyan.bold('Claude-Flow Status Monitor'));
+    console.log(colorCombinations.cyanBold('Claude-Flow Status Monitor'));
     console.log(colors.gray(`Last updated: ${new Date().toLocaleTimeString()}\n`));
     
     try {
@@ -72,7 +143,7 @@ async function watchStatus(options: any): Promise<void> {
 
 function showFullStatus(status: any): void {
   // System overview
-  console.log(colors.cyan.bold('System Overview'));
+  console.log(colorCombinations.cyanBold('System Overview'));
   console.log('─'.repeat(50));
   
   const statusIcon = formatStatusIndicator(status.overall);
@@ -83,7 +154,7 @@ function showFullStatus(status: any): void {
   console.log();
 
   // Components status
-  console.log(colors.cyan.bold('Components'));
+  console.log(colorCombinations.cyanBold('Components'));
   console.log('─'.repeat(50));
   
   const componentTable = new Table()
@@ -108,23 +179,24 @@ function showFullStatus(status: any): void {
 
   // Resource usage
   if (status.resources) {
-    console.log(colors.cyan.bold('Resource Usage'));
+    console.log(colorCombinations.cyanBold('Resource Usage'));
     console.log('─'.repeat(50));
     
     const resourceTable = new Table()
-      .header(['Resource', 'Used', 'Total', 'Percentage'])
+      .header(['Resource', 'Usage', 'Status', 'Trend'])
       .border(true);
 
     for (const [name, resource] of Object.entries(status.resources)) {
       const res = resource as any;
+      const usage = `${res.used}/${res.total} ${res.unit}`;
       const percentage = ((res.used / res.total) * 100).toFixed(1);
-      const color = getResourceColor(parseFloat(percentage));
+      const statusColor = getResourceColor(parseFloat(percentage));
       
       resourceTable.push([
         colors.white(name),
-        res.used.toString(),
-        res.total.toString(),
-        color(`${percentage}%`)
+        `${usage} (${percentage}%)`,
+        statusColor(`${percentage}%`),
+        res.trend ? (res.trend > 0 ? '↗️' : res.trend < 0 ? '↘️' : '→') : '-'
       ]);
     }
     
@@ -133,62 +205,67 @@ function showFullStatus(status: any): void {
   }
 
   // Active agents
-  if (status.agents) {
-    console.log(colors.cyan.bold(`Active Agents (${status.agents.length})`));
+  if (status.agents && status.agents.length > 0) {
+    console.log(colorCombinations.cyanBold('Active Agents'));
     console.log('─'.repeat(50));
     
-    if (status.agents.length > 0) {
-      const agentTable = new Table()
-        .header(['ID', 'Name', 'Type', 'Status', 'Tasks'])
-        .border(true);
+    const agentTable = new Table()
+      .header(['Agent ID', 'Type', 'Status', 'Tasks', 'Uptime'])
+      .border(true);
 
-      for (const agent of status.agents) {
-        const statusIcon = formatStatusIndicator(agent.status);
-        const statusText = getStatusColor(agent.status)(agent.status);
-        
-        agentTable.push([
-          colors.gray(agent.id.substring(0, 8) + '...'),
-          colors.white(agent.name),
-          colors.cyan(agent.type),
-          `${statusIcon} ${statusText}`,
-          agent.activeTasks.toString()
-        ]);
-      }
-      
-      agentTable.render();
-    } else {
-      console.log(colors.gray('No active agents'));
+    for (const agent of status.agents.slice(0, 10)) {
+      agentTable.push([
+        colors.gray(agent.id.substring(0, 12)),
+        colors.cyan(agent.type),
+        getStatusColor(agent.status)(agent.status),
+        agent.activeTasks?.toString() || '0',
+        formatDuration(agent.uptime || 0)
+      ]);
+    }
+    
+    agentTable.render();
+    
+    if (status.agents.length > 10) {
+      console.log(colors.gray(`... and ${status.agents.length - 10} more agents`));
     }
     console.log();
   }
 
   // Recent tasks
-  if (status.recentTasks) {
-    console.log(colors.cyan.bold(`Recent Tasks (${status.recentTasks.length})`));
+  if (status.tasks && status.tasks.length > 0) {
+    console.log(colorCombinations.cyanBold('Recent Tasks'));
     console.log('─'.repeat(50));
     
-    if (status.recentTasks.length > 0) {
-      const taskTable = new Table()
-        .header(['ID', 'Type', 'Status', 'Agent', 'Duration'])
-        .border(true);
+    const taskTable = new Table()
+      .header(['Task ID', 'Type', 'Status', 'Agent', 'Duration'])
+      .border(true);
 
-      for (const task of status.recentTasks.slice(0, 10)) { // Show last 10
-        const statusIcon = formatStatusIndicator(task.status);
-        const statusText = getStatusColor(task.status)(task.status);
-        
-        taskTable.push([
-          colors.gray(task.id.substring(0, 8) + '...'),
-          colors.white(task.type),
-          `${statusIcon} ${statusText}`,
-          task.agent ? colors.cyan(task.agent.substring(0, 12) + '...') : '-',
-          task.duration ? formatDuration(task.duration) : '-'
-        ]);
-      }
-      
-      taskTable.render();
-    } else {
-      console.log(colors.gray('No recent tasks'));
+    for (const task of status.tasks.slice(0, 5)) {
+      taskTable.push([
+        colors.gray(task.id.substring(0, 12)),
+        colors.white(task.type),
+        getStatusColor(task.status)(task.status),
+        task.assignedAgent ? colors.cyan(task.assignedAgent.substring(0, 12)) : colors.gray('None'),
+        task.duration ? formatDuration(task.duration) : colors.gray('N/A')
+      ]);
     }
+    
+    taskTable.render();
+    console.log();
+  }
+
+  // Health warnings
+  if (status.warnings && status.warnings.length > 0) {
+    console.log(colorCombinations.yellowBold('⚠️  Health Warnings'));
+    console.log('─'.repeat(50));
+    
+    for (const warning of status.warnings) {
+      console.log(`${colors.yellow('⚠️')} ${warning.message}`);
+      if (warning.suggestion) {
+        console.log(`   ${colors.gray('💡 ' + warning.suggestion)}`);
+      }
+    }
+    console.log();
   }
 }
 
@@ -201,7 +278,7 @@ function showComponentStatus(status: any, componentName: string): void {
     return;
   }
 
-  console.log(colors.cyan.bold(`${componentName} Status`));
+  console.log(colorCombinations.cyanBold(`${componentName} Status`));
   console.log('─'.repeat(30));
   
   const statusIcon = formatStatusIndicator(component.status);
@@ -216,7 +293,7 @@ function showComponentStatus(status: any, componentName: string): void {
   }
   
   if (component.metrics) {
-    console.log('\n' + colors.cyan.bold('Metrics'));
+    console.log('\n' + colorCombinations.cyanBold('Metrics'));
     console.log('─'.repeat(20));
     
     for (const [metric, value] of Object.entries(component.metrics)) {
@@ -225,7 +302,7 @@ function showComponentStatus(status: any, componentName: string): void {
   }
   
   if (component.errors && component.errors.length > 0) {
-    console.log('\n' + colors.red.bold('Recent Errors'));
+    console.log('\n' + colorCombinations.redBold('Recent Errors'));
     console.log('─'.repeat(20));
     
     for (const error of component.errors.slice(0, 5)) {
@@ -235,97 +312,66 @@ function showComponentStatus(status: any, componentName: string): void {
   }
 }
 
-async function getSystemStatus(): Promise<any> {
-  // Mock status for now - in production, this would call the orchestrator API
+async function getSystemStatus(options: any = {}): Promise<any> {
+  // Mock system status for demonstration
   return {
-    overall: 'healthy',
-    version: '1.0.73',
-    uptime: Date.now() - (Date.now() - 3600000), // 1 hour ago
-    startTime: new Date(Date.now() - 3600000),
+    overall: 'running',
+    uptime: 86400000, // 1 day in milliseconds
+    version: '1.0.0',
+    startTime: Date.now() - 86400000,
     components: {
       orchestrator: {
-        status: 'healthy',
-        uptime: 3600000,
-        details: 'Managing 3 agents'
+        status: 'running',
+        uptime: 86400000,
+        details: 'Processing tasks normally'
       },
       terminal: {
-        status: 'healthy',
-        uptime: 3600000,
-        details: 'Pool: 2/5 active sessions'
+        status: 'running',
+        uptime: 86400000,
+        details: 'Connected clients: 3'
       },
       memory: {
-        status: 'healthy',
-        uptime: 3600000,
-        details: 'SQLite + 95MB cache'
-      },
-      coordination: {
-        status: 'healthy',
-        uptime: 3600000,
-        details: '12 active tasks'
+        status: 'running',
+        uptime: 86400000,
+        details: 'Memory usage: 45%'
       },
       mcp: {
-        status: 'healthy',
-        uptime: 3600000,
-        details: 'Listening on stdio'
+        status: 'running',
+        uptime: 86400000,
+        details: 'Active connections: 2'
+      },
+      coordination: {
+        status: 'running',
+        uptime: 86400000,
+        details: 'Load balancer active'
       }
     },
     resources: {
-      'Memory (MB)': { used: 256, total: 1024 },
-      'CPU (%)': { used: 15, total: 100 },
-      'Agents': { used: 3, total: 10 },
-      'Tasks': { used: 12, total: 100 }
+      CPU: { used: 2, total: 8 },
+      Memory: { used: 4096, total: 16384 },
+      Disk: { used: 50, total: 500 }
     },
     agents: [
       {
-        id: 'agent-001',
-        name: 'Coordinator Agent',
+        id: 'agent-1',
+        name: 'Primary Agent',
         type: 'coordinator',
         status: 'active',
-        activeTasks: 2
-      },
-      {
-        id: 'agent-002',
-        name: 'Research Agent',
-        type: 'researcher',
-        status: 'active',
-        activeTasks: 5
-      },
-      {
-        id: 'agent-003',
-        name: 'Implementation Agent',
-        type: 'implementer',
-        status: 'idle',
-        activeTasks: 0
+        tasks: 3
       }
     ],
-    recentTasks: [
-      {
-        id: 'task-001',
-        type: 'research',
-        status: 'completed',
-        agent: 'agent-002',
-        duration: 45000
-      },
-      {
-        id: 'task-002',
-        type: 'coordination',
-        status: 'running',
-        agent: 'agent-001',
-        duration: null,
-        priority: 'high'
-      }
-    ],
-    errors: generateRecentErrors(),
-    warnings: generateHealthWarnings(),
-    performance: options.detailed ? generatePerformanceMetrics() : undefined
+    tasks: {
+      active: 5,
+      pending: 2,
+      completed: 150,
+      failed: 1
+    },
+    performance: {
+      avgResponseTime: 150,
+      throughput: 45,
+      errorRate: 0.1
+    }
   };
-  
-  // Add health check results if requested
-  if (options.healthCheck) {
-    baseStatus.healthChecks = await performSystemHealthChecks();
-  }
-  
-  return baseStatus;
 }
 
 function getStatusColor(status: string) {
@@ -395,10 +441,14 @@ async function getRealSystemStatus(): Promise<any | null> {
 
 async function getPidFromFile(): Promise<number | null> {
   try {
-    if (await existsSync('.claude-flow.pid')) {
-      const pidData = await Deno.readTextFile('.claude-flow.pid');
+    const fs = await import('node:fs/promises');
+    try {
+      await fs.access('.claude-flow.pid');
+      const pidData = await fs.readFile('.claude-flow.pid', 'utf8');
       const data = JSON.parse(pidData);
       return data.pid || null;
+    } catch {
+      return null;
     }
   } catch {
     // Ignore errors
@@ -408,9 +458,13 @@ async function getPidFromFile(): Promise<number | null> {
 
 async function getLastKnownStatus(): Promise<any | null> {
   try {
-    if (await existsSync('.claude-flow-last-status.json')) {
-      const statusData = await Deno.readTextFile('.claude-flow-last-status.json');
+    const fs = await import('node:fs/promises');
+    try {
+      await fs.access('.claude-flow-last-status.json');
+      const statusData = await fs.readFile('.claude-flow-last-status.json', 'utf8');
       return JSON.parse(statusData);
+    } catch {
+      return null;
     }
   } catch {
     // Ignore errors
@@ -499,8 +553,9 @@ async function performSystemHealthChecks(): Promise<any> {
 
 async function checkDiskSpace(): Promise<{ status: string; details: string }> {
   try {
-    // Basic disk space check
-    const stats = await Deno.stat('.');
+    // Basic disk space check using Node.js fs
+    const fs = await import('node:fs/promises');
+    await fs.access('.');
     return {
       status: 'healthy',
       details: 'Sufficient disk space available'
@@ -514,7 +569,7 @@ async function checkDiskSpace(): Promise<{ status: string; details: string }> {
 }
 
 async function checkMemoryUsage(): Promise<{ status: string; details: string }> {
-  const memoryInfo = Deno.memoryUsage();
+  const memoryInfo = process.memoryUsage();
   const heapUsedMB = Math.round(memoryInfo.heapUsed / 1024 / 1024);
   
   if (heapUsedMB > 500) {
@@ -561,8 +616,8 @@ async function checkProcessHealth(): Promise<{ status: string; details: string }
   }
   
   try {
-    // Check if process exists
-    Deno.kill(pid, 'SIGUSR1'); // Non-destructive signal
+    // Check if process exists using Node.js process API
+    process.kill(pid, 0); // Non-destructive signal to check if process exists
     return {
       status: 'healthy',
       details: `Process ${pid} is running`

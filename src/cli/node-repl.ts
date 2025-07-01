@@ -7,9 +7,9 @@ import readline from 'node:readline';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import colors from 'npm:chalk';
-import Table from 'npm:cli-table3';
-import inquirer from 'npm:inquirer';
+import colors from 'chalk';
+import Table from 'cli-table3';
+import inquirer from 'inquirer';
 
 interface REPLCommand {
   name: string;
@@ -383,10 +383,10 @@ export async function startNodeREPL(options: any = {}): Promise<void> {
   // Set up command completion
   completer.setCommands(commands);
   
-  // Set completer function
-  rl.completer = (line: string) => {
-    return completer.complete(line);
-  };
+  // Set up completion after interface creation
+  if ('completer' in rl) {
+    (rl as any).completer = completer;
+  }
   
   // Show initial status
   if (options.banner !== false) {

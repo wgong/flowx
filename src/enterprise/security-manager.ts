@@ -529,7 +529,7 @@ export class SecurityManager extends EventEmitter {
 
       this.addAuditEntry(scan, 'system', 'scan_failed', 'scan', {
         scanId,
-        error: error.message
+        error: (error as Error).message
       });
 
       await this.saveScan(scan);
@@ -1077,7 +1077,7 @@ export class SecurityManager extends EventEmitter {
           const findings = this.parseNpmAuditResults(auditResult);
           resolve(findings);
         } catch (error) {
-          reject(new Error(`Failed to parse npm audit results: ${error.message}`));
+          reject(new Error(`Failed to parse npm audit results: ${(error as Error).message}`));
         }
       });
 
@@ -1164,7 +1164,7 @@ export class SecurityManager extends EventEmitter {
           remediation: {
             description: vuln.recommendation || 'Update to a secure version',
             effort: 'low' as const,
-            priority: vuln.severity as SecuritySeverity,
+            priority: (vuln.severity as 'low' | 'medium' | 'high' | 'critical'),
             autoFixable: true,
             steps: [`npm update ${packageName}`],
             references: vuln.url ? [vuln.url] : []

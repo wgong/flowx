@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { logger } from '../logger.ts';
+import { Logger } from '../core/logger.js';
 
 export interface PromptConfig {
   sourceDirectories: string[];
@@ -62,10 +62,15 @@ export const DEFAULT_CONFIG: PromptConfig = {
 export class PromptConfigManager {
   private configPath: string;
   private config: PromptConfig;
+  private logger: Logger;
 
   constructor(configPath?: string) {
     this.configPath = configPath || path.join(process.cwd(), '.prompt-config.json');
     this.config = { ...DEFAULT_CONFIG };
+    this.logger = new Logger(
+      { level: 'info', format: 'text', destination: 'console' },
+      { component: 'PromptConfigManager' }
+    );
   }
 
   async loadConfig(): Promise<PromptConfig> {
@@ -75,9 +80,9 @@ export class PromptConfigManager {
       
       // Merge with defaults
       this.config = this.mergeConfig(DEFAULT_CONFIG, userConfig);
-      logger.info(`Loaded config from ${this.configPath}`);
+      this.logger.info(`Loaded config from ${this.configPath}`);
     } catch (error) {
-      logger.info('Using default configuration');
+      this.logger.info('Using default configuration');
     }
     
     return this.config;
@@ -89,7 +94,7 @@ export class PromptConfigManager {
     }
     
     await fs.writeFile(this.configPath, JSON.stringify(this.config, null, 2));
-    logger.info(`Saved config to ${this.configPath}`);
+    this.logger.info(`Saved config to ${this.configPath}`);
   }
 
   getConfig(): PromptConfig {
@@ -262,7 +267,7 @@ export class PromptValidator {
     } catch (error) {
       return {
         valid: false,
-        issues: [`Failed to read file: ${error.message}`]
+        issues: [`Failed to read file: ${(error as Error).message}`]
       };
     }
   }

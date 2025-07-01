@@ -76,7 +76,7 @@ export class TaskExecutor extends EventEmitter {
     
     this.config = this.mergeWithDefaults(config);
     this.logger = new Logger(
-      { level: this.config.logLevel || 'info', format: 'text', destination: 'console' },
+      { level: (this.config.logLevel as 'error' | 'debug' | 'info' | 'warn') || 'info', format: 'text', destination: 'console' },
       { component: 'TaskExecutor' }
     );
     this.resourceMonitor = new ResourceMonitor();
@@ -155,10 +155,13 @@ export class TaskExecutor extends EventEmitter {
       return result;
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      
       this.logger.error('Task execution failed', {
         sessionId,
-        error: error.message,
-        stack: error.stack
+        error: errorMessage,
+        stack: errorStack
       });
 
       await this.cleanupExecution(session);
@@ -181,7 +184,8 @@ export class TaskExecutor extends EventEmitter {
     try {
       await session.stop(reason);
     } catch (error) {
-      this.logger.error('Error stopping execution', { sessionId, error });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error stopping execution', { sessionId, error: errorMessage });
     }
   }
 
@@ -208,9 +212,10 @@ export class TaskExecutor extends EventEmitter {
         claudeOptions
       );
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Claude task execution failed', {
         sessionId,
-        error: error.message
+        error: errorMessage
       });
       throw error;
     }
@@ -650,10 +655,7 @@ export class TaskExecutor extends EventEmitter {
       await session.cleanup();
       this.logger.debug('Execution cleanup completed', { sessionId: session.id });
     } catch (error) {
-      this.logger.warn('Error during execution cleanup', {
-        sessionId: session.id,
-        error: error.message
-      });
+      this.logger.error('Task cleanup failed:', (error as Error).message);
     }
   }
 
@@ -676,7 +678,7 @@ export class TaskExecutor extends EventEmitter {
     } catch (error) {
       this.logger.warn('Error collecting artifacts', {
         workingDir: context.workingDirectory,
-        error: error.message
+        error: (error as Error).message
       });
     }
 

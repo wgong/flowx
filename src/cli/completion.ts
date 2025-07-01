@@ -2,7 +2,14 @@
  * Shell completion generator for Claude-Flow CLI
  */
 
-import { colors } from '@cliffy/ansi/colors';
+// Simple color utilities (replacing Cliffy)
+const colors = {
+  red: (text: string) => `\x1b[31m${text}\x1b[0m`,
+  green: (text: string) => `\x1b[32m${text}\x1b[0m`,
+  yellow: (text: string) => `\x1b[33m${text}\x1b[0m`,
+  white: (text: string) => `\x1b[37m${text}\x1b[0m`,
+  gray: (text: string) => `\x1b[90m${text}\x1b[0m`,
+};
 
 export class CompletionGenerator {
   private commands = [
@@ -40,7 +47,7 @@ export class CompletionGenerator {
   }
 
   private async detectShell(): Promise<string> {
-    const shell = Deno.env.get('SHELL') || '';
+    const shell = process.env.SHELL || '';
     
     if (shell.includes('bash')) return 'bash';
     if (shell.includes('zsh')) return 'zsh';
@@ -473,8 +480,8 @@ complete -f -c claude-flow -n '__fish_claude_flow_using_command completion' -a '
     const possiblePaths = [
       '/etc/bash_completion.d/claude-flow',
       '/usr/local/etc/bash_completion.d/claude-flow',
-      `${Deno.env.get('HOME')}/.local/share/bash-completion/completions/claude-flow`,
-      `${Deno.env.get('HOME')}/.bash_completion.d/claude-flow`
+      `${process.env.HOME}/.local/share/bash-completion/completions/claude-flow`,
+      `${process.env.HOME}/.bash_completion.d/claude-flow`
     ];
 
     for (const path of possiblePaths) {
@@ -499,7 +506,7 @@ complete -f -c claude-flow -n '__fish_claude_flow_using_command completion' -a '
 
   private async installZshCompletion(script: string): Promise<void> {
     const possiblePaths = [
-      `${Deno.env.get('HOME')}/.zsh/completions/_claude-flow`,
+      `${process.env.HOME}/.zsh/completions/_claude-flow`,
       '/usr/local/share/zsh/site-functions/_claude-flow',
       '/usr/share/zsh/site-functions/_claude-flow'
     ];
@@ -526,7 +533,7 @@ complete -f -c claude-flow -n '__fish_claude_flow_using_command completion' -a '
 
   private async installFishCompletion(script: string): Promise<void> {
     const possiblePaths = [
-      `${Deno.env.get('HOME')}/.config/fish/completions/claude-flow.fish`,
+      `${process.env.HOME}/.config/fish/completions/claude-flow.fish`,
       '/usr/local/share/fish/completions/claude-flow.fish',
       '/usr/share/fish/completions/claude-flow.fish'
     ];

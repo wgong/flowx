@@ -77,7 +77,7 @@ export class DirectTaskExecutor {
     } catch (error) {
       this.logger.error('Task execution failed', {
         taskId: task.id.id,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       });
       throw error;
     }
@@ -163,7 +163,11 @@ export class DirectTaskExecutor {
     return analysis;
   }
 
-  private async createRestAPI(targetDir: string, task: TaskDefinition): Promise<any> {
+  private async createRestAPI(targetDir: string | undefined, task: TaskDefinition): Promise<any> {
+    if (!targetDir) {
+      throw new Error('Target directory is required for REST API creation');
+    }
+    
     this.logger.info('Creating REST API', { targetDir });
 
     const files = {
@@ -197,7 +201,11 @@ export class DirectTaskExecutor {
     };
   }
 
-  private async createTodoApp(targetDir: string, task: TaskDefinition): Promise<any> {
+  private async createTodoApp(targetDir: string | undefined, task: TaskDefinition): Promise<any> {
+    if (!targetDir) {
+      throw new Error('Target directory is required for Todo app creation');
+    }
+    
     this.logger.info('Creating Todo App', { targetDir });
 
     const files = {
@@ -218,7 +226,11 @@ export class DirectTaskExecutor {
     };
   }
 
-  private async createChatApp(targetDir: string, task: TaskDefinition): Promise<any> {
+  private async createChatApp(targetDir: string | undefined, task: TaskDefinition): Promise<any> {
+    if (!targetDir) {
+      throw new Error('Target directory is required for Chat app creation');
+    }
+    
     this.logger.info('Creating Chat Application', { targetDir });
 
     const files = {
@@ -244,7 +256,11 @@ export class DirectTaskExecutor {
     };
   }
 
-  private async createAuthService(targetDir: string, task: TaskDefinition): Promise<any> {
+  private async createAuthService(targetDir: string | undefined, task: TaskDefinition): Promise<any> {
+    if (!targetDir) {
+      throw new Error('Target directory is required for Auth service creation');
+    }
+    
     this.logger.info('Creating Auth Service', { targetDir });
 
     const files = {
@@ -270,7 +286,11 @@ export class DirectTaskExecutor {
     };
   }
 
-  private async createCalculator(targetDir: string, task: TaskDefinition): Promise<any> {
+  private async createCalculator(targetDir: string | undefined, task: TaskDefinition): Promise<any> {
+    if (!targetDir) {
+      throw new Error('Target directory is required for Calculator creation');
+    }
+    
     this.logger.info('Creating Calculator', { targetDir });
 
     const files = {
@@ -479,8 +499,12 @@ Created by Claude Flow Swarm
     };
   }
 
-  private async createHelloWorld(targetDir: string, task: TaskDefinition): Promise<any> {
-    this.logger.info('Creating Hello World', { targetDir });
+  private async createHelloWorld(targetDir: string | undefined, task: TaskDefinition): Promise<any> {
+    if (!targetDir) {
+      throw new Error('Target directory is required for Hello World creation');
+    }
+    
+    this.logger.info('Creating Hello World app', { targetDir });
 
     const files = {
       'index.js': `#!/usr/bin/env node
@@ -502,7 +526,11 @@ console.log('Created by Claude Flow Swarm');
     };
   }
 
-  private async createGenericApp(targetDir: string, task: TaskDefinition): Promise<any> {
+  private async createGenericApp(targetDir: string | undefined, task: TaskDefinition): Promise<any> {
+    if (!targetDir) {
+      throw new Error('Target directory is required for Generic app creation');
+    }
+    
     this.logger.info('Creating generic application', { targetDir });
 
     const files = {

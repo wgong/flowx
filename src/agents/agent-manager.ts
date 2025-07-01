@@ -3,8 +3,7 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { childProcess } from '../utils/imports.ts';
-const { spawn, ChildProcess } = childProcess;
+import { ChildProcess, spawn } from 'child_process';
 import { ILogger } from "../core/logger.ts";
 import { IEventBus } from "../core/event-bus.ts";
 import { 
@@ -192,25 +191,32 @@ export class AgentManager extends EventEmitter {
   }
 
   private setupEventHandlers(): void {
-    this.eventBus.on('agent:heartbeat', (data) => {
-      this.handleHeartbeat(data);
+    this.eventBus.on('agent:heartbeat', (data: unknown) => {
+      const heartbeatData = data as { agentId: string; timestamp: Date; metrics?: AgentMetrics };
+      this.handleHeartbeat(heartbeatData);
     });
 
-    this.eventBus.on('agent:error', (data) => {
-      this.handleAgentError(data);
+    this.eventBus.on('agent:error', (data: unknown) => {
+      const errorData = data as { agentId: string; error: AgentError };
+      this.handleAgentError(errorData);
     });
 
-    this.eventBus.on('task:assigned', (data) => {
-      this.updateAgentWorkload(data.agentId, 1);
+    this.eventBus.on('task:assigned', (data: unknown) => {
+      const taskData = data as { agentId: string };
+      this.updateAgentWorkload(taskData.agentId, 1);
     });
 
-    this.eventBus.on('task:completed', (data) => {
-      this.updateAgentWorkload(data.agentId, -1);
-      this.updateAgentMetrics(data.agentId, data.metrics);
+    this.eventBus.on('task:completed', (data: unknown) => {
+      const taskData = data as { agentId: string; metrics?: AgentMetrics };
+      this.updateAgentWorkload(taskData.agentId, -1);
+      if (taskData.metrics) {
+        this.updateAgentMetrics(taskData.agentId, taskData.metrics);
+      }
     });
 
-    this.eventBus.on('resource:usage', (data) => {
-      this.updateResourceUsage(data.agentId, data.usage);
+    this.eventBus.on('resource:usage', (data: unknown) => {
+      const resourceData = data as { agentId: string; usage: { cpu: number; memory: number; disk: number } };
+      this.updateResourceUsage(resourceData.agentId, resourceData.usage);
     });
   }
 
@@ -296,7 +302,7 @@ export class AgentManager extends EventEmitter {
         quality: 0.95
       },
       config: {
-        autonomyLevel: 0.6,
+        autonomyLevel: 0.8,
         learningEnabled: true,
         adaptationEnabled: true,
         maxTasksPerHour: 10,
@@ -449,8 +455,35 @@ export class AgentManager extends EventEmitter {
       metrics: this.createDefaultMetrics(),
       workload: 0,
       health: 1.0,
-      config: { ...template.config, ...overrides.config },
-      environment: { ...template.environment, ...overrides.environment },
+      config: { 
+        autonomyLevel: template.config.autonomyLevel ?? this.config.agentDefaults.autonomyLevel,
+        learningEnabled: true,
+        adaptationEnabled: true,
+        maxTasksPerHour: 100,
+        maxConcurrentTasks: 5,
+        timeoutThreshold: 30000,
+        reportingInterval: 60000,
+        heartbeatInterval: 30000,
+        permissions: [],
+        trustedAgents: [],
+        expertise: {},
+        preferences: {},
+        ...template.config, 
+        ...overrides.config 
+      },
+      environment: { 
+        runtime: 'node' as const,
+        version: '18.0.0',
+        workingDirectory: process.cwd(),
+        tempDirectory: '/tmp',
+        logDirectory: './logs',
+        apiEndpoints: {},
+        credentials: {},
+        availableTools: [],
+        toolConfigs: {},
+        ...template.environment, 
+        ...overrides.environment 
+      },
       endpoints: [],
       lastHeartbeat: new Date(),
       taskHistory: [],
@@ -510,16 +543,17 @@ export class AgentManager extends EventEmitter {
 
     } catch (error) {
       agent.status = 'error';
+      const errorObj = error as Error;
       this.addAgentError(agentId, {
         timestamp: new Date(),
-        type: 'startup_failed',
-        message: error.message,
+        type: 'PROCESS_EXIT',
+        message: errorObj.message,
         context: { agentId },
         severity: 'critical',
         resolved: false
       });
 
-      this.logger.error('Failed to start agent', { agentId, error });
+      this.logger.error('Failed to start agent', { agentId, error: errorObj });
       throw error;
     }
   }
@@ -910,50 +944,50 @@ export class AgentManager extends EventEmitter {
   // === UTILITY METHODS ===
 
   private async spawnAgentProcess(agent: AgentState): Promise<ChildProcess> {
-    const env = {
+    const processEnv = {
       ...process.env,
       AGENT_ID: agent.id.id,
-      AGENT_TYPE: agent.type,
       AGENT_NAME: agent.name,
-      WORKING_DIR: agent.environment.workingDirectory,
-      LOG_DIR: agent.environment.logDirectory
+      AGENT_TYPE: agent.type
     };
 
-    const args = [
-      'run',
-      '--allow-all',
-      agent.environment.availableTools[0] || './agents/generic-agent.ts',
-      '--config',
-      JSON.stringify(agent.config)
-    ];
-
-    const process = spawn(agent.environment.runtime, args, {
-      env,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: agent.environment.workingDirectory
+    const childProcess = spawn('deno', ['run', '--allow-all', (agent.environment as any).startupScript || './scripts/default-agent.ts'], {
+      env: processEnv,
+      cwd: agent.environment.workingDirectory,
+      stdio: ['pipe', 'pipe', 'pipe']
     });
 
     // Handle process events
-    process.on('exit', (code) => {
+    childProcess.stdout?.on('data', (data: Buffer) => {
+      this.logger.debug(`Agent ${agent.id.id} stdout: ${data.toString()}`);
+    });
+
+    childProcess.stderr?.on('data', (data: Buffer) => {
+      this.logger.error(`Agent ${agent.id.id} stderr: ${data.toString()}`);
+    });
+
+    childProcess.on('exit', (code: number | null) => {
       this.handleProcessExit(agent.id.id, code);
     });
 
-    process.on('error', (error) => {
+    childProcess.on('error', (error: Error) => {
       this.handleProcessError(agent.id.id, error);
     });
 
-    return process;
+    return childProcess;
   }
 
   private async waitForAgentReady(agentId: string, timeout: number): Promise<void> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error(`Agent ${agentId} startup timeout`));
+      const timeoutId = setTimeout(() => {
+        this.eventBus.off('agent:ready', handler);
+        reject(new Error(`Agent ${agentId} failed to start within ${timeout}ms`));
       }, timeout);
 
-      const handler = (data: { agentId: string }) => {
-        if (data.agentId === agentId) {
-          clearTimeout(timer);
+      const handler = (data: unknown) => {
+        const typedData = data as { agentId: string };
+        if (typedData.agentId === agentId) {
+          clearTimeout(timeoutId);
           this.eventBus.off('agent:ready', handler);
           resolve();
         }
@@ -964,21 +998,22 @@ export class AgentManager extends EventEmitter {
   }
 
   private async waitForProcessExit(agentId: string, timeout: number): Promise<void> {
-    return new Promise((resolve) => {
-      const process = this.processes.get(agentId);
-      if (!process || process.killed) {
-        resolve();
-        return;
-      }
-
-      const timer = setTimeout(() => {
-        resolve(); // Timeout, continue anyway
+    return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        this.eventBus.off('agent:stopped', handler);
+        reject(new Error(`Agent ${agentId} failed to stop within ${timeout}ms`));
       }, timeout);
 
-      process.on('exit', () => {
-        clearTimeout(timer);
-        resolve();
-      });
+      const handler = (data: unknown) => {
+        const eventData = data as { agentId: string };
+        if (eventData.agentId === agentId) {
+          clearTimeout(timeoutId);
+          this.eventBus.off('agent:stopped', handler);
+          resolve();
+        }
+      };
+
+      this.eventBus.on('agent:stopped', handler);
     });
   }
 
@@ -986,36 +1021,40 @@ export class AgentManager extends EventEmitter {
     const agent = this.agents.get(agentId);
     if (!agent) return;
 
-    this.logger.info('Agent process exited', { agentId, exitCode: code });
+    this.logger.info(`Agent ${agentId} process exited with code ${code}`);
 
-    if (code !== 0 && code !== null) {
+    if (code === 0) {
+      this.updateAgentStatus(agentId, 'terminated');
+    } else {
+      this.updateAgentStatus(agentId, 'error');
       this.addAgentError(agentId, {
+        type: 'PROCESS_EXIT',
+        message: `Process exited with code ${code}`,
         timestamp: new Date(),
-        type: 'process_exit',
-        message: `Agent process exited with code ${code}`,
-        context: { exitCode: code },
         severity: 'high',
+        context: { exitCode: code },
         resolved: false
       });
     }
 
-    agent.status = 'offline';
-    this.emit('agent:process-exit', { agentId, exitCode: code });
+    this.processes.delete(agentId);
+    this.eventBus.emit('agent:stopped', { agentId });
   }
 
   private handleProcessError(agentId: string, error: Error): void {
-    this.logger.error('Agent process error', { agentId, error });
-    
+    this.logger.error(`Agent ${agentId} process error:`, error);
+
+    this.updateAgentStatus(agentId, 'error');
     this.addAgentError(agentId, {
+      type: 'PROCESS_ERROR',
+      message: (error as Error).message,
       timestamp: new Date(),
-      type: 'process_error',
-      message: error.message,
-      context: { error: error.toString() },
       severity: 'critical',
+      context: { error: error.stack },
       resolved: false
     });
 
-    this.emit('agent:process-error', { agentId, error });
+    this.eventBus.emit('agent:error', { agentId, error });
   }
 
   private handleHeartbeat(data: { agentId: string; timestamp: Date; metrics?: AgentMetrics }): void {

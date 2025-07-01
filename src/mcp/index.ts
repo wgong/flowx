@@ -35,11 +35,8 @@ export {
 export { 
   AuthManager,
   type IAuthManager,
-  type AuthContext,
   type AuthResult,
-  type TokenInfo,
-  type TokenGenerationOptions,
-  type AuthSession,
+  type TokenValidation,
   Permissions 
 } from "./auth.ts";
 
@@ -79,6 +76,15 @@ export { LoadBalancer, type ILoadBalancer, RequestQueue } from "./load-balancer.
 export { createClaudeFlowTools, type ClaudeFlowToolContext } from "./claude-flow-tools.ts";
 export { createSwarmTools, type SwarmToolContext } from "./swarm-tools.ts";
 
+// Import the types and classes we need for the factory
+import { MCPOrchestrationIntegration, type MCPOrchestrationConfig, type OrchestrationComponents } from "./orchestration-integration.ts";
+import { MCPServer } from "./server.ts";
+import { MCPLifecycleManager } from "./lifecycle-manager.ts";
+import { MCPPerformanceMonitor } from "./performance-monitor.ts";
+import { MCPProtocolManager } from "./protocol-manager.ts";
+import type { MCPConfig } from "../utils/types.ts";
+import type { ILogger } from "../core/logger.ts";
+
 /**
  * MCP Integration Factory
  * Provides a simple way to create a complete MCP integration
@@ -88,10 +94,10 @@ export class MCPIntegrationFactory {
    * Create a complete MCP integration with all components
    */
   static async createIntegration(config: {
-    mcpConfig: import("../utils/types.ts").MCPConfig;
+    mcpConfig: MCPConfig;
     orchestrationConfig?: Partial<MCPOrchestrationConfig>;
     components?: Partial<OrchestrationComponents>;
-    logger: import("../core/logger.ts").ILogger;
+    logger: ILogger;
   }): Promise<MCPOrchestrationIntegration> {
     const { mcpConfig, orchestrationConfig = {}, components = {}, logger } = config;
 
@@ -126,8 +132,8 @@ export class MCPIntegrationFactory {
    * Create a standalone MCP server (without orchestration integration)
    */
   static async createStandaloneServer(config: {
-    mcpConfig: import("../utils/types.ts").MCPConfig;
-    logger: import("../core/logger.ts").ILogger;
+    mcpConfig: MCPConfig;
+    logger: ILogger;
     enableLifecycleManagement?: boolean;
     enablePerformanceMonitoring?: boolean;
   }): Promise<{
@@ -170,13 +176,13 @@ export class MCPIntegrationFactory {
   /**
    * Create a development/testing MCP setup
    */
-  static async createDevelopmentSetup(logger: import("../core/logger.ts").ILogger): Promise<{
+  static async createDevelopmentSetup(logger: ILogger): Promise<{
     server: MCPServer;
     lifecycleManager: MCPLifecycleManager;
     performanceMonitor: MCPPerformanceMonitor;
     protocolManager: MCPProtocolManager;
   }> {
-    const mcpConfig: import("../utils/types.ts").MCPConfig = {
+    const mcpConfig: MCPConfig = {
       transport: 'stdio',
       enableMetrics: true,
       auth: {

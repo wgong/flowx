@@ -2,12 +2,179 @@
  * Enhanced Interactive REPL for Claude-Flow
  */
 
-import { Input, Confirm, Select } from '@cliffy/prompt';
-import { colors } from '@cliffy/ansi/colors';
-import { Table } from '@cliffy/table';
-import { AgentProfile, Task } from "../utils/types.ts";
-import { generateId } from "../utils/helpers.ts";
-import { formatStatusIndicator, formatDuration, formatProgressBar } from "./formatter.ts";
+import * as readline from 'readline';
+import { AgentProfile, Task } from "../utils/types.js";
+import { generateId } from "../utils/helpers.js";
+import { formatStatusIndicator, formatDuration, formatProgressBar } from "./formatter.js";
+import * as fs from 'fs/promises';
+
+// Color utilities with bold combinations
+const colors = {
+  red: (text: string) => `\x1b[31m${text}\x1b[0m`,
+  green: (text: string) => `\x1b[32m${text}\x1b[0m`,
+  yellow: (text: string) => `\x1b[33m${text}\x1b[0m`,
+  blue: (text: string) => `\x1b[34m${text}\x1b[0m`,
+  magenta: (text: string) => `\x1b[35m${text}\x1b[0m`,
+  cyan: (text: string) => `\x1b[36m${text}\x1b[0m`,
+  white: (text: string) => `\x1b[37m${text}\x1b[0m`,
+  gray: (text: string) => `\x1b[90m${text}\x1b[0m`,
+  bold: (text: string) => `\x1b[1m${text}\x1b[0m`,
+  dim: (text: string) => `\x1b[2m${text}\x1b[0m`,
+};
+
+// Color combination helpers
+const colorCombinations = {
+  cyanBold: (text: string) => `\x1b[1;36m${text}\x1b[0m`,
+  greenBold: (text: string) => `\x1b[1;32m${text}\x1b[0m`,
+  whiteBold: (text: string) => `\x1b[1;37m${text}\x1b[0m`,
+  yellowBold: (text: string) => `\x1b[1;33m${text}\x1b[0m`,
+  blueBold: (text: string) => `\x1b[1;34m${text}\x1b[0m`,
+  redBold: (text: string) => `\x1b[1;31m${text}\x1b[0m`,
+  grayBold: (text: string) => `\x1b[1;90m${text}\x1b[0m`
+};
+
+// Add bold variants to colors object
+Object.assign(colors, {
+  cyan: Object.assign(colors.cyan, {
+    bold: colorCombinations.cyanBold
+  }),
+  green: Object.assign(colors.green, {
+    bold: colorCombinations.greenBold
+  }),
+  white: Object.assign(colors.white, {
+    bold: colorCombinations.whiteBold
+  }),
+  yellow: Object.assign(colors.yellow, {
+    bold: colorCombinations.yellowBold
+  }),
+  blue: Object.assign(colors.blue, {
+    bold: colorCombinations.blueBold
+  }),
+  red: Object.assign(colors.red, {
+    bold: colorCombinations.redBold
+  }),
+  gray: Object.assign(colors.gray, {
+    bold: colorCombinations.grayBold
+  })
+});
+
+// Simple table utility
+class Table {
+  private headers: string[] = [];
+  private rows: string[][] = [];
+  private hasBorder: boolean = false;
+
+  constructor() {}
+
+  header(headers: string[]): this {
+    this.headers = headers;
+    return this;
+  }
+
+  body(rows: string[][]): this {
+    this.rows = rows;
+    return this;
+  }
+
+  push(row: string[]): this {
+    this.rows.push(row);
+    return this;
+  }
+
+  border(enabled: boolean): this {
+    this.hasBorder = enabled;
+    return this;
+  }
+
+  render(): void {
+    console.log(this.toString());
+  }
+
+  toString(): string {
+    if (this.headers.length === 0 && this.rows.length === 0) {
+      return '';
+    }
+
+    const allRows = this.headers.length > 0 ? [this.headers, ...this.rows] : this.rows;
+    const colWidths = this.headers.map((_, i) => 
+      Math.max(...allRows.map(row => (row[i] || '').length))
+    );
+
+    let result = '';
+    
+    if (this.headers.length > 0) {
+      result += this.headers.map((header, i) => header.padEnd(colWidths[i])).join(' | ') + '\n';
+      result += colWidths.map(width => '-'.repeat(width)).join('-+-') + '\n';
+    }
+
+    for (const row of this.rows) {
+      result += row.map((cell, i) => (cell || '').padEnd(colWidths[i])).join(' | ') + '\n';
+    }
+
+    return result;
+  }
+}
+
+// Simple prompt utilities
+async function Input(options: { message: string; default?: string }): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    rl.question(`${options.message}${options.default ? ` (${options.default})` : ''}: `, (answer) => {
+      rl.close();
+      resolve(answer || options.default || '');
+    });
+  });
+}
+
+async function Confirm(options: { message: string; default?: boolean }): Promise<boolean> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    const defaultText = options.default !== undefined ? (options.default ? ' (Y/n)' : ' (y/N)') : ' (y/n)';
+    rl.question(`${options.message}${defaultText}: `, (answer) => {
+      rl.close();
+      const normalized = answer.toLowerCase();
+      if (normalized === 'y' || normalized === 'yes') {
+        resolve(true);
+      } else if (normalized === 'n' || normalized === 'no') {
+        resolve(false);
+      } else {
+        resolve(options.default || false);
+      }
+    });
+  });
+}
+
+async function Select(options: { message: string; options: string[] }): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    console.log(options.message);
+    options.options.forEach((option, i) => {
+      console.log(`${i + 1}. ${option}`);
+    });
+    
+    rl.question('Select option (number): ', (answer) => {
+      rl.close();
+      const index = parseInt(answer) - 1;
+      if (index >= 0 && index < options.options.length) {
+        resolve(options.options[index]);
+      } else {
+        resolve(options.options[0]);
+      }
+    });
+  });
+}
 
 interface REPLCommand {
   name: string;
@@ -57,7 +224,7 @@ class CommandHistory {
 
   private async loadHistory(): Promise<void> {
     try {
-      const content = await Deno.readTextFile(this.historyFile);
+      const content = await fs.readFile(this.historyFile, 'utf8');
       this.history = content.split('\n').filter(line => line.trim());
     } catch {
       // History file doesn't exist yet
@@ -66,7 +233,7 @@ class CommandHistory {
 
   private async saveHistory(): Promise<void> {
     try {
-      await Deno.writeTextFile(this.historyFile, this.history.join('\n'));
+      await fs.writeFile(this.historyFile, this.history.join('\n'));
     } catch {
       // Ignore save errors
     }
@@ -163,7 +330,7 @@ export async function startREPL(options: any = {}): Promise<void> {
   const context: REPLContext = {
     options,
     history: [],
-    workingDirectory: Deno.cwd(),
+    workingDirectory: process.cwd(),
     connectionStatus: 'disconnected',
     lastActivity: new Date(),
   };
@@ -294,7 +461,7 @@ export async function startREPL(options: any = {}): Promise<void> {
         const searchQuery = args.indexOf('--search') >= 0 ? args[args.indexOf('--search') + 1] : null;
         const historyItems = searchQuery ? history.search(searchQuery) : history.get();
         
-        console.log(colors.cyan.bold(`Command History${searchQuery ? ` (search: ${searchQuery})` : ''}`));
+        console.log(colorCombinations.cyanBold(`Command History${searchQuery ? ` (search: ${searchQuery})` : ''}`));
         console.log('─'.repeat(50));
         
         if (historyItems.length === 0) {
@@ -329,9 +496,9 @@ export async function startREPL(options: any = {}): Promise<void> {
         }
         
         try {
-          const newDir = args[0] === '~' ? Deno.env.get('HOME') || '/' : args[0];
-          Deno.chdir(newDir);
-          ctx.workingDirectory = Deno.cwd();
+          const newDir = args[0] === '~' ? process.env.HOME || '/' : args[0];
+          process.chdir(newDir);
+          ctx.workingDirectory = process.cwd();
           console.log(colors.gray(`Changed to: ${ctx.workingDirectory}`));
         } catch (error) {
           console.error(colors.red('Error:'), error instanceof Error ? error.message : String(error));
@@ -360,7 +527,7 @@ export async function startREPL(options: any = {}): Promise<void> {
       description: 'Exit the REPL',
       handler: async () => {
         console.log(colors.gray('Goodbye!'));
-        Deno.exit(0);
+        process.exit(0);
       },
     },
   ];
@@ -378,9 +545,8 @@ export async function startREPL(options: any = {}): Promise<void> {
   while (true) {
     try {
       const prompt = createPrompt(context);
-      const input = await Input.prompt({
+      const input = await Input({
         message: prompt,
-        suggestions: (input: string) => completer.complete(input),
       });
 
       if (!input.trim()) {
@@ -447,7 +613,7 @@ function getConnectionStatusIcon(status: string): string {
 }
 
 function parseCommand(input: string): string[] {
-  // Simple command parsing - handle quoted strings
+  // Handle quoted arguments
   const args: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -456,56 +622,48 @@ function parseCommand(input: string): string[] {
   for (let i = 0; i < input.length; i++) {
     const char = input[i];
     
-    if (inQuotes) {
-      if (char === quoteChar) {
-        inQuotes = false;
-        quoteChar = '';
-      } else {
-        current += char;
+    if ((char === '"' || char === "'") && !inQuotes) {
+      inQuotes = true;
+      quoteChar = char;
+    } else if (char === quoteChar && inQuotes) {
+      inQuotes = false;
+      quoteChar = '';
+    } else if (char === ' ' && !inQuotes) {
+      if (current) {
+        args.push(current);
+        current = '';
       }
     } else {
-      if (char === '"' || char === "'") {
-        inQuotes = true;
-        quoteChar = char;
-      } else if (char === ' ' || char === '\t') {
-        if (current.trim()) {
-          args.push(current.trim());
-          current = '';
-        }
-      } else {
-        current += char;
-      }
+      current += char;
     }
   }
   
-  if (current.trim()) {
-    args.push(current.trim());
+  if (current) {
+    args.push(current);
   }
   
   return args;
 }
 
 function showHelp(commands: REPLCommand[]): void {
-  console.log(colors.cyan.bold('Claude-Flow Interactive REPL'));
-  console.log('─'.repeat(50));
   console.log();
   
-  console.log(colors.white.bold('Available Commands:'));
+  console.log(colors.bold(colors.white('Available Commands:')));
   console.log();
   
-  const table = new Table()
-    .header(['Command', 'Aliases', 'Description'])
-    .border(false);
+  const table = new Table().header(['Command', 'Aliases', 'Description']);
+  const rows: string[][] = [];
 
   for (const cmd of commands) {
-    table.push([
+    rows.push([
       colors.cyan(cmd.name),
-      cmd.aliases && Array.isArray(cmd.aliases) ? colors.gray(cmd.aliases.join(', ')) : '',
+      cmd.aliases ? colors.gray(cmd.aliases.join(', ')) : '',
       cmd.description
     ]);
   }
   
-  table.render();
+  table.body(rows);
+  console.log(table.toString());
   console.log();
   
   console.log(colors.gray('Tips:'));
@@ -526,7 +684,7 @@ function showCommandHelp(commands: REPLCommand[], commandName: string): void {
     return;
   }
   
-  console.log(colors.cyan.bold(`Command: ${command.name}`));
+  console.log(colors.bold(colors.cyan(`Command: ${command.name}`)));
   console.log('─'.repeat(30));
   console.log(`${colors.white('Description:')} ${command.description}`);
   
@@ -540,7 +698,7 @@ function showCommandHelp(commands: REPLCommand[], commandName: string): void {
   
   if (command.examples) {
     console.log();
-    console.log(colors.white.bold('Examples:'));
+    console.log(colors.bold(colors.white('Examples:')));
     for (const example of command.examples) {
       console.log(`  ${colors.gray('$')} ${colors.cyan(example)}`);
     }
@@ -548,7 +706,7 @@ function showCommandHelp(commands: REPLCommand[], commandName: string): void {
 }
 
 async function showSystemStatus(context: REPLContext, component?: string): Promise<void> {
-  console.log(colors.cyan.bold('System Status'));
+  console.log(colors.bold(colors.cyan('System Status')));
   console.log('─'.repeat(30));
   
   const statusIcon = formatStatusIndicator(context.connectionStatus === 'connected' ? 'success' : 'error');
@@ -638,17 +796,16 @@ async function showAgentList(): Promise<void> {
     { id: 'agent-003', name: 'Implementer', type: 'implementer', status: 'idle', tasks: 0 },
   ];
   
-  console.log(colors.cyan.bold(`Active Agents (${agents.length})`));
+  console.log(colors.bold(colors.cyan(`Active Agents (${agents.length})`)));
   console.log('─'.repeat(50));
   
-  const table = new Table()
-    .header(['ID', 'Name', 'Type', 'Status', 'Tasks'])
-    .border(true);
+  const table = new Table().header(['ID', 'Name', 'Type', 'Status', 'Tasks']);
+  const rows: string[][] = [];
 
   for (const agent of agents) {
     const statusIcon = formatStatusIndicator(agent.status);
     
-    table.push([
+    rows.push([
       colors.gray(agent.id),
       colors.white(agent.name),
       colors.cyan(agent.type),
@@ -657,7 +814,8 @@ async function showAgentList(): Promise<void> {
     ]);
   }
   
-  table.render();
+  table.body(rows);
+  console.log(table.toString());
 }
 
 async function handleAgentSpawn(args: string[]): Promise<void> {
@@ -668,7 +826,7 @@ async function handleAgentSpawn(args: string[]): Promise<void> {
   }
 
   const type = args[0];
-  const name = args[1] || await Input.prompt({
+  const name = args[1] || await Input({
     message: 'Agent name:',
     default: `${type}-agent`,
   });
@@ -686,7 +844,7 @@ async function handleAgentSpawn(args: string[]): Promise<void> {
 }
 
 async function handleAgentTerminate(agentId: string): Promise<void> {
-  const confirmed = await Confirm.prompt({
+  const confirmed = await Confirm({
     message: `Terminate agent ${agentId}?`,
     default: false,
   });
@@ -703,7 +861,7 @@ async function handleAgentTerminate(agentId: string): Promise<void> {
 
 async function showAgentInfo(agentId: string): Promise<void> {
   // Mock agent info
-  console.log(colors.cyan.bold('Agent Information'));
+  console.log(colorCombinations.cyanBold('Agent Information'));
   console.log('─'.repeat(30));
   console.log(`${colors.white('ID:')} ${agentId}`);
   console.log(`${colors.white('Name:')} Research Agent`);
@@ -760,17 +918,16 @@ async function showTaskList(): Promise<void> {
     { id: 'task-003', type: 'implementation', description: 'Implement solution', status: 'completed', agent: 'agent-003' },
   ];
   
-  console.log(colors.cyan.bold(`Tasks (${tasks.length})`));
+  console.log(colorCombinations.cyanBold(`Tasks (${tasks.length})`));
   console.log('─'.repeat(60));
   
-  const table = new Table()
-    .header(['ID', 'Type', 'Description', 'Status', 'Agent'])
-    .border(true);
+  const table = new Table().header(['ID', 'Type', 'Description', 'Status', 'Agent']);
+  const rows: string[][] = [];
 
   for (const task of tasks) {
     const statusIcon = formatStatusIndicator(task.status);
     
-    table.push([
+    rows.push([
       colors.gray(task.id),
       colors.white(task.type),
       task.description.substring(0, 30) + (task.description.length > 30 ? '...' : ''),
@@ -779,7 +936,9 @@ async function showTaskList(): Promise<void> {
     ]);
   }
   
-  table.render();
+  table.body(rows);
+  
+  console.log(table.toString());
 }
 
 async function handleTaskCreate(args: string[]): Promise<void> {
@@ -802,7 +961,7 @@ async function handleTaskCreate(args: string[]): Promise<void> {
 }
 
 async function showTaskStatus(taskId: string): Promise<void> {
-  console.log(colors.cyan.bold('Task Status'));
+  console.log(colorCombinations.cyanBold('Task Status'));
   console.log('─'.repeat(30));
   console.log(`${colors.white('ID:')} ${taskId}`);
   console.log(`${colors.white('Type:')} research`);
@@ -813,7 +972,7 @@ async function showTaskStatus(taskId: string): Promise<void> {
 }
 
 async function handleTaskCancel(taskId: string): Promise<void> {
-  const confirmed = await Confirm.prompt({
+  const confirmed = await Confirm({
     message: `Cancel task ${taskId}?`,
     default: false,
   });
@@ -856,7 +1015,7 @@ async function handleMemoryCommand(args: string[], context: REPLContext): Promis
 }
 
 async function showMemoryStats(): Promise<void> {
-  console.log(colors.cyan.bold('Memory Statistics'));
+  console.log(colorCombinations.cyanBold('Memory Statistics'));
   console.log('─'.repeat(30));
   console.log(`${colors.white('Total Entries:')} 1,247`);
   console.log(`${colors.white('Cache Size:')} 95 MB`);
@@ -897,7 +1056,7 @@ async function showSessionList(): Promise<void> {
     { id: 'session-002', name: 'Development', date: '2024-01-14', agents: 2, tasks: 5 },
   ];
   
-  console.log(colors.cyan.bold(`Saved Sessions (${sessions.length})`));
+  console.log(colorCombinations.cyanBold(`Saved Sessions (${sessions.length})`));
   console.log('─'.repeat(50));
   
   const table = new Table()
@@ -905,20 +1064,20 @@ async function showSessionList(): Promise<void> {
     .border(true);
 
   for (const session of sessions) {
-    table.push([
+    table.body([[
       colors.gray(session.id),
       colors.white(session.name),
       session.date,
       session.agents.toString(),
       session.tasks.toString()
-    ]);
+    ]]);
   }
   
-  table.render();
+  console.log(table.toString());
 }
 
 async function handleSessionSave(args: string[]): Promise<void> {
-  const name = args.length > 0 ? args.join(' ') : await Input.prompt({
+  const name = args.length > 0 ? args.join(' ') : await Input({
     message: 'Session name:',
     default: `session-${new Date().toISOString().split('T')[0]}`,
   });
@@ -933,7 +1092,7 @@ async function handleSessionSave(args: string[]): Promise<void> {
 }
 
 async function handleSessionRestore(sessionId: string): Promise<void> {
-  const confirmed = await Confirm.prompt({
+  const confirmed = await Confirm({
     message: `Restore session ${sessionId}?`,
     default: false,
   });
@@ -986,54 +1145,47 @@ async function handleWorkflowCommand(args: string[], context: REPLContext): Prom
 async function showWorkflowList(): Promise<void> {
   // Mock workflow data
   const workflows = [
-    { id: 'workflow-001', name: 'Research Pipeline', status: 'running', progress: 60 },
-    { id: 'workflow-002', name: 'Data Analysis', status: 'completed', progress: 100 },
+    { id: 'workflow-001', name: 'Research Pipeline', status: 'active', steps: 5 },
+    { id: 'workflow-002', name: 'Data Processing', status: 'completed', steps: 3 },
   ];
   
-  console.log(colors.cyan.bold(`Workflows (${workflows.length})`));
+  console.log(colorCombinations.cyanBold(`Workflows (${workflows.length})`));
   console.log('─'.repeat(50));
   
-  const table = new Table()
-    .header(['ID', 'Name', 'Status', 'Progress'])
-    .border(true);
+  const table = new Table().header(['ID', 'Name', 'Status', 'Steps']);
+  const rows: string[][] = [];
 
   for (const workflow of workflows) {
     const statusIcon = formatStatusIndicator(workflow.status);
-    const progressBar = formatProgressBar(workflow.progress, 100, 15);
     
-    table.push([
+    rows.push([
       colors.gray(workflow.id),
       colors.white(workflow.name),
       `${statusIcon} ${workflow.status}`,
-      `${progressBar} ${workflow.progress}%`
+      workflow.steps.toString()
     ]);
   }
   
-  table.render();
+  table.body(rows);
+  console.log(table.toString());
 }
 
 async function handleWorkflowRun(filename: string): Promise<void> {
-  try {
-    await Deno.stat(filename);
-    console.log(colors.yellow(`Running workflow: ${filename}`));
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const workflowId = generateId('workflow');
-    console.log(colors.green('✓ Workflow started successfully'));
-    console.log(`${colors.white('ID:')} ${workflowId}`);
-  } catch {
-    console.log(colors.red(`Workflow file not found: ${filename}`));
-  }
+  console.log(colors.yellow(`Running workflow: ${filename}`));
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  const workflowId = generateId('workflow');
+  console.log(colors.green('✓ Workflow started'));
+  console.log(`${colors.white('ID:')} ${workflowId}`);
 }
 
 async function showWorkflowStatus(workflowId: string): Promise<void> {
-  console.log(colors.cyan.bold('Workflow Status'));
+  console.log(colorCombinations.cyanBold('Workflow Status'));
   console.log('─'.repeat(30));
   console.log(`${colors.white('ID:')} ${workflowId}`);
   console.log(`${colors.white('Name:')} Research Pipeline`);
   console.log(`${colors.white('Status:')} ${formatStatusIndicator('running')} running`);
-  console.log(`${colors.white('Progress:')} ${formatProgressBar(75, 100, 20)} 75%`);
-  console.log(`${colors.white('Tasks:')} 6/8 completed`);
+  console.log(`${colors.white('Progress:')} ${formatProgressBar(3, 5, 20)} 3/5 steps`);
   console.log(`${colors.white('Started:')} ${new Date().toLocaleTimeString()}`);
 }
 
@@ -1047,4 +1199,17 @@ function findSimilarCommands(input: string, commands: REPLCommand[]): string[] {
       return commonChars >= Math.min(2, input.length / 2);
     })
     .slice(0, 3); // Top 3 suggestions
+}
+
+async function createReadlineInterface(completer: CommandCompleter): Promise<readline.Interface> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    completer: (line: string) => {
+      const completions = completer.complete(line);
+      return [completions, line];
+    }
+  });
+  
+  return rl;
 }

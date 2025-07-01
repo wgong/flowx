@@ -171,8 +171,9 @@ export class AgentRegistry extends EventEmitter {
     const entry = await this.memory.retrieve(key);
     
     if (entry) {
-      this.cache.set(agentId, entry);
-      return entry;
+      const registryEntry = entry.value as AgentRegistryEntry;
+      this.cache.set(agentId, registryEntry);
+      return registryEntry;
     }
 
     return null;
@@ -196,7 +197,7 @@ export class AgentRegistry extends EventEmitter {
     }
 
     if (query.healthThreshold !== undefined) {
-      agents = agents.filter(agent => agent.health >= query.healthThreshold);
+      agents = agents.filter(agent => agent.health >= query.healthThreshold!);
     }
 
     if (query.namePattern) {
@@ -391,16 +392,19 @@ export class AgentRegistry extends EventEmitter {
   async getCoordinationData(agentId: string): Promise<any> {
     const key = `coordination:${agentId}`;
     const result = await this.memory.retrieve(key);
-    return result?.data || null;
+    return result?.value || null;
   }
 
   // === PRIVATE METHODS ===
 
   private async loadFromMemory(): Promise<void> {
     try {
-      const entries = await this.memory.queryByType('agent-registry', {
+      // Load all entries from the namespace and filter by type
+      const allEntries = await this.memory.query({
         partition: this.namespace
       });
+      
+      const entries = allEntries.filter(entry => entry.type === 'agent-registry');
 
       this.cache.clear();
       for (const entry of entries) {

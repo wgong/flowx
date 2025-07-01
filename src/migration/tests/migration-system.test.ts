@@ -3,8 +3,9 @@
  * Comprehensive test suite for migration functionality
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'jest';
-import * as fs from 'npm:fs-extra';
+// Jest globals are automatically available
+// import { describe, it, expect, beforeEach, afterEach } from 'jest';
+import * as fs from 'fs-extra';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { MigrationRunner } from '../migration-runner.ts';
@@ -405,10 +406,10 @@ describe('Migration System', () => {
       await rollbackManager.rollback(backup.metadata.backupId, false);
 
       // Verify recovery
-      const exists = await fs.pathExists(path.join(claudePath, 'original.md'));
+      const exists = await pathExists(path.join(claudePath, 'original.md'));
       expect(exists).toBe(true);
       
-      const brokenExists = await fs.pathExists(path.join(claudePath, 'broken.md'));
+      const brokenExists = await pathExists(path.join(claudePath, 'broken.md'));
       expect(brokenExists).toBe(false);
     });
   });

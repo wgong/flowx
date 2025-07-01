@@ -5,10 +5,10 @@
  * Uses blessed for terminal UI
  */
 
-const blessed = require('blessed');
-const fs = require('node:fs').promises;
-const path = require('node:path');
-const { spawn } = require('node:child_process');
+import blessed from 'blessed';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
 
 class SwarmUI {
   constructor() {
@@ -567,13 +567,14 @@ class SwarmUI {
     
     try {
       // Kill all swarm processes (simplified)
-      const { exec } = require('node:child_process');
-      exec('pkill -f "claude-flow swarm"', (error) => {
-        if (error) {
-          this.log(`Error stopping swarm: ${error.message}`, 'error');
-        } else {
-          this.log('Swarm operations stopped');
-        }
+      import('node:child_process').then(({ exec }) => {
+        exec('pkill -f "claude-flow swarm"', (error) => {
+          if (error) {
+            this.log(`Error stopping swarm: ${error.message}`, 'error');
+          } else {
+            this.log('Swarm operations stopped');
+          }
+        });
       });
 
       // Update display
@@ -589,7 +590,7 @@ class SwarmUI {
     this.log(`Executing command: ${command}`);
     
     try {
-      const { exec } = require('node:child_process');
+      const { exec } = await import('node:child_process');
       exec(command, (error, stdout, stderr) => {
         if (error) {
           this.log(`Command error: ${error.message}`, 'error');
@@ -655,8 +656,7 @@ process.on('unhandledRejection', (error) => {
   process.exit(1);
 });
 
-if (require.main === module) {
-  main();
-}
+// ES module entry point
+main();
 
-module.exports = SwarmUI;
+export default SwarmUI;

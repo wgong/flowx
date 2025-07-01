@@ -1,6 +1,5 @@
 import { EventEmitter } from 'node:events';
 import { Logger } from "../core/logger.ts";
-import { MemoryManager } from "./manager.ts";
 import { generateId } from "../utils/helpers.ts";
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -17,6 +16,10 @@ export interface SwarmMemoryEntry {
     tags?: string[];
     priority?: number;
     shareLevel?: 'private' | 'team' | 'public';
+    originalId?: string;
+    sharedFrom?: string;
+    sharedTo?: string;
+    sharedAt?: Date;
   };
 }
 
@@ -60,16 +63,15 @@ export interface SwarmMemoryConfig {
 export class SwarmMemoryManager extends EventEmitter {
   private logger: Logger;
   private config: SwarmMemoryConfig;
-  private baseMemory: MemoryManager;
   private entries: Map<string, SwarmMemoryEntry>;
   private knowledgeBases: Map<string, SwarmKnowledgeBase>;
   private agentMemories: Map<string, Set<string>>; // agentId -> set of entry IDs
-  private syncTimer?: NodeJS.Timeout;
+  private syncTimer?: any;
   private isInitialized: boolean = false;
 
   constructor(config: Partial<SwarmMemoryConfig> = {}) {
     super();
-    this.logger = new Logger('SwarmMemoryManager');
+    this.logger = new Logger({ level: 'info', format: 'text', destination: 'console' });
     this.config = {
       namespace: 'swarm',
       enableDistribution: true,
@@ -86,21 +88,12 @@ export class SwarmMemoryManager extends EventEmitter {
     this.entries = new Map();
     this.knowledgeBases = new Map();
     this.agentMemories = new Map();
-
-    this.baseMemory = new MemoryManager({
-      namespace: this.config.namespace,
-      enableBackup: true,
-      backupInterval: 300000 // 5 minutes
-    });
   }
 
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
 
     this.logger.info('Initializing swarm memory manager...');
-
-    // Initialize base memory
-    await this.baseMemory.initialize();
 
     // Create persistence directory
     await fs.mkdir(this.config.persistencePath, { recursive: true });
@@ -165,19 +158,6 @@ export class SwarmMemoryManager extends EventEmitter {
     }
     this.agentMemories.get(agentId)!.add(entryId);
 
-    // Store in base memory for persistence
-    await this.baseMemory.remember({
-      namespace: this.config.namespace,
-      key: `entry:${entryId}`,
-      content: JSON.stringify(entry),
-      metadata: {
-        type: 'swarm-memory',
-        agentId,
-        entryType: type,
-        shareLevel: entry.metadata.shareLevel
-      }
-    });
-
     this.logger.debug(`Agent ${agentId} remembered: ${type} - ${entryId}`);
     this.emit('memory:added', entry);
 
@@ -214,8 +194,7 @@ export class SwarmMemoryManager extends EventEmitter {
 
     if (query.tags && query.tags.length > 0) {
       results = results.filter(e => 
-        e.metadata.tags && 
-        query.tags!.some(tag => e.metadata.tags!.includes(tag))
+        e.metadata.tags?.some(tag => query.tags!.includes(tag))
       );
     }
 
@@ -239,7 +218,6 @@ export class SwarmMemoryManager extends EventEmitter {
       results = results.slice(0, query.limit);
     }
 
-    this.logger.debug(`Recalled ${results.length} memories for query`);
     return results;
   }
 
@@ -249,13 +227,8 @@ export class SwarmMemoryManager extends EventEmitter {
       throw new Error('Memory entry not found');
     }
 
-    if (!this.config.enableCrossAgentSharing) {
-      throw new Error('Cross-agent sharing is disabled');
-    }
-
-    // Check share level permissions
     if (entry.metadata.shareLevel === 'private') {
-      throw new Error('Memory entry is private and cannot be shared');
+      throw new Error('Cannot share private memory');
     }
 
     // Create a shared copy for the target agent
@@ -460,11 +433,7 @@ export class SwarmMemoryManager extends EventEmitter {
             metadata: {
               ...kb.metadata,
               lastUpdated: new Date(kb.metadata.lastUpdated)
-            },
-            entries: kb.entries.map((e: any) => ({
-              ...e,
-              timestamp: new Date(e.timestamp)
-            }))
+            }
           });
         }
 
@@ -472,9 +441,8 @@ export class SwarmMemoryManager extends EventEmitter {
       } catch (error) {
         this.logger.warn('No existing knowledge bases found');
       }
-
     } catch (error) {
-      this.logger.error('Error loading memory state:', error);
+      this.logger.error('Failed to load memory state:', error);
     }
   }
 
@@ -490,49 +458,38 @@ export class SwarmMemoryManager extends EventEmitter {
       const kbFile = path.join(this.config.persistencePath, 'knowledge-bases.json');
       await fs.writeFile(kbFile, JSON.stringify(kbArray, null, 2));
 
-      this.logger.debug('Saved memory state to disk');
+      this.logger.debug('Memory state saved');
     } catch (error) {
-      this.logger.error('Error saving memory state:', error);
+      this.logger.error('Failed to save memory state:', error);
     }
   }
 
   private async syncMemoryState(): Promise<void> {
-    try {
-      await this.saveMemoryState();
-      this.emit('memory:synced');
-    } catch (error) {
-      this.logger.error('Error syncing memory state:', error);
-    }
+    await this.saveMemoryState();
   }
 
   private async enforceMemoryLimits(): Promise<void> {
     if (this.entries.size <= this.config.maxEntries) return;
 
-    this.logger.info('Enforcing memory limits...');
-
-    // Remove oldest entries that are not marked as important
+    // Remove oldest entries
     const entries = Array.from(this.entries.values())
-      .filter(e => (e.metadata.priority || 1) <= 1) // Only remove low priority
       .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
     const toRemove = entries.slice(0, this.entries.size - this.config.maxEntries);
-
+    
     for (const entry of toRemove) {
       this.entries.delete(entry.id);
       
-      // Remove from agent memory
-      const agentEntries = this.agentMemories.get(entry.agentId);
-      if (agentEntries) {
-        agentEntries.delete(entry.id);
+      // Remove from agent memories
+      const agentSet = this.agentMemories.get(entry.agentId);
+      if (agentSet) {
+        agentSet.delete(entry.id);
       }
-
-      this.logger.debug(`Removed old memory entry: ${entry.id}`);
     }
 
-    this.emit('memory:cleaned', toRemove.length);
+    this.logger.info(`Removed ${toRemove.length} old memory entries`);
   }
 
-  // Public API methods
   getMemoryStats(): {
     totalEntries: number;
     entriesByType: Record<string, number>;
@@ -541,16 +498,17 @@ export class SwarmMemoryManager extends EventEmitter {
     memoryUsage: number;
   } {
     const entries = Array.from(this.entries.values());
+    
     const entriesByType: Record<string, number> = {};
     const entriesByAgent: Record<string, number> = {};
-
+    
     for (const entry of entries) {
       entriesByType[entry.type] = (entriesByType[entry.type] || 0) + 1;
       entriesByAgent[entry.agentId] = (entriesByAgent[entry.agentId] || 0) + 1;
     }
 
-    // Rough memory usage calculation
-    const memoryUsage = JSON.stringify(entries).length;
+    const memoryUsage = JSON.stringify(entries).length + 
+                       JSON.stringify(Array.from(this.knowledgeBases.values())).length;
 
     return {
       totalEntries: entries.length,
@@ -563,36 +521,34 @@ export class SwarmMemoryManager extends EventEmitter {
 
   async exportMemory(agentId?: string): Promise<any> {
     const entries = agentId 
-      ? await this.recall({ agentId })
+      ? Array.from(this.entries.values()).filter(e => e.agentId === agentId)
       : Array.from(this.entries.values());
 
     return {
       entries,
-      knowledgeBases: agentId 
-        ? Array.from(this.knowledgeBases.values()).filter(kb => 
-            kb.metadata.contributors.includes(agentId)
-          )
-        : Array.from(this.knowledgeBases.values()),
+      knowledgeBases: Array.from(this.knowledgeBases.values()),
       exportedAt: new Date(),
-      stats: this.getMemoryStats()
+      agentId
     };
   }
 
   async clearMemory(agentId?: string): Promise<void> {
     if (agentId) {
       // Clear specific agent's memory
-      const entryIds = this.agentMemories.get(agentId) || new Set();
-      for (const entryId of entryIds) {
+      const agentEntryIds = this.agentMemories.get(agentId) || new Set();
+      for (const entryId of agentEntryIds) {
         this.entries.delete(entryId);
       }
       this.agentMemories.delete(agentId);
+      
       this.logger.info(`Cleared memory for agent ${agentId}`);
     } else {
       // Clear all memory
       this.entries.clear();
       this.agentMemories.clear();
       this.knowledgeBases.clear();
-      this.logger.info('Cleared all swarm memory');
+      
+      this.logger.info('Cleared all memory');
     }
 
     this.emit('memory:cleared', { agentId });

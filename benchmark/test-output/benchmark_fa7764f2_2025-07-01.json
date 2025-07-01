@@ -1,0 +1,65 @@
+{
+  "id": "338ce2fd-1620-4a93-a50b-c651e8429613",
+  "name": "benchmark-fa7764f2",
+  "description": "Benchmark for: Plugin test benchmark",
+  "status": "completed",
+  "duration": 0.101,
+  "tasks": [
+    {
+      "id": "0120b165-2f9f-435a-ab50-08d212e89e1c",
+      "objective": "Plugin test benchmark",
+      "description": "Benchmark task: Plugin test benchmark",
+      "strategy": "auto",
+      "mode": "centralized",
+      "status": "completed",
+      "duration": 0.101,
+      "parameters": {},
+      "metadata": {
+        "testPlugin": "pre-task"
+      }
+    }
+  ],
+  "results": [
+    {
+      "id": "6f7f5c44-31e6-47f2-96a9-f266036bc279",
+      "taskId": "0120b165-2f9f-435a-ab50-08d212e89e1c",
+      "agentId": "auto-agent-50bf33c9",
+      "status": "success",
+      "errors": [],
+      "warnings": [],
+      "performanceMetrics": {
+        "executionTime": 0.5,
+        "throughput": 1,
+        "successRate": 1,
+        "responseTime": 0,
+        "latency": 0
+      },
+      "resourceUsage": {
+        "cpuPercent": 10,
+        "averageCpuPercent": 5,
+        "memoryMb": 100,
+        "peakMemoryMb": 150,
+        "diskIoBytes": 0,
+        "networkIoBytes": 0
+      },
+      "duration": 0.101,
+      "metadata": {
+        "testPlugin": "post-task"
+      }
+    }
+  ],
+  "metrics": {
+    "successRate": 0,
+    "errorRate": 0,
+    "throughput": 0,
+    "averageLatency": 0,
+    "peakMemoryUsage": 0,
+    "totalCpuTime": 0
+  },
+  "metadata": {
+    "testPlugin": "post-benchmark"
+  },
+  "startedAt": "2025-07-01T14:25:35.439Z",
+  "completedAt": "2025-07-01T14:25:35.540Z",
+  "createdAt": "2025-07-01T14:25:35.439Z"
+}

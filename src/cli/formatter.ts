@@ -2,10 +2,79 @@
  * Output formatting utilities for CLI
  */
 
-import { colors } from '@cliffy/ansi/colors';
-import { Table } from '@cliffy/table';
-// Box is not available in the current cliffy version
-import { AgentProfile, Task, MemoryEntry, HealthStatus } from "../utils/types.ts";
+import { Logger } from '../core/logger.js';
+import { AgentProfile, Task, MemoryEntry, HealthStatus, ComponentHealth } from "../utils/types.js";
+
+// Simple color utilities (replacing @cliffy/ansi/colors)
+const colors = {
+  red: (text: string) => `\x1b[31m${text}\x1b[0m`,
+  green: (text: string) => `\x1b[32m${text}\x1b[0m`,
+  yellow: (text: string) => `\x1b[33m${text}\x1b[0m`,
+  blue: (text: string) => `\x1b[34m${text}\x1b[0m`,
+  cyan: (text: string) => `\x1b[36m${text}\x1b[0m`,
+  magenta: (text: string) => `\x1b[35m${text}\x1b[0m`,
+  gray: (text: string) => `\x1b[90m${text}\x1b[0m`,
+  white: (text: string) => `\x1b[37m${text}\x1b[0m`,
+  bold: (text: string) => `\x1b[1m${text}\x1b[0m`,
+  underline: (text: string) => `\x1b[4m${text}\x1b[0m`,
+};
+
+// Extended color combinations
+const colorCombos = {
+  cyanBold: (text: string) => `\x1b[1;36m${text}\x1b[0m`,
+  greenBold: (text: string) => `\x1b[1;32m${text}\x1b[0m`,
+  yellowBold: (text: string) => `\x1b[1;33m${text}\x1b[0m`,
+  redBold: (text: string) => `\x1b[1;31m${text}\x1b[0m`,
+  magentaBold: (text: string) => `\x1b[1;35m${text}\x1b[0m`,
+  whiteBold: (text: string) => `\x1b[1;37m${text}\x1b[0m`,
+};
+
+// Simple table utility (replacing @cliffy/table)
+class SimpleTable {
+  private rows: string[][] = [];
+  private headers: string[] = [];
+
+  constructor() {}
+
+  header(headers: string[]): this {
+    this.headers = headers;
+    return this;
+  }
+
+  body(rows: string[][]): this {
+    this.rows = rows;
+    return this;
+  }
+
+  toString(): string {
+    const allRows = this.headers.length > 0 ? [this.headers, ...this.rows] : this.rows;
+    if (allRows.length === 0) return '';
+
+    // Calculate column widths
+    const colWidths = allRows[0].map((_, colIndex) => 
+      Math.max(...allRows.map(row => (row[colIndex] || '').length))
+    );
+
+    // Format rows
+    const formatRow = (row: string[]) => 
+      '| ' + row.map((cell, i) => (cell || '').padEnd(colWidths[i])).join(' | ') + ' |';
+
+    const separator = '+' + colWidths.map(w => '-'.repeat(w + 2)).join('+') + '+';
+
+    const result = [separator];
+    if (this.headers.length > 0) {
+      result.push(formatRow(this.headers));
+      result.push(separator);
+    }
+    this.rows.forEach(row => result.push(formatRow(row)));
+    result.push(separator);
+
+    return result.join('\n');
+  }
+}
+
+// Export the Table class properly
+export { SimpleTable as Table };
 
 /**
  * Formats an error for display
@@ -33,7 +102,7 @@ export function formatError(error: unknown): string {
  */
 export function formatAgent(agent: AgentProfile): string {
   const lines = [
-    colors.cyan.bold(`Agent: ${agent.name}`),
+    colorCombos.cyanBold(`Agent: ${agent.name}`),
     colors.gray(`ID: ${agent.id}`),
     colors.gray(`Type: ${agent.type}`),
     colors.gray(`Priority: ${agent.priority}`),
@@ -56,13 +125,15 @@ export function formatTask(task: Task): string {
     completed: colors.green,
     failed: colors.red,
     cancelled: colors.magenta,
-  }[task.status] || colors.white;
+  } as Record<string, (text: string) => string>;
+
+  const colorFn = statusColor[task.status] || colors.white;
 
   const lines = [
-    colors.yellow.bold(`Task: ${task.description}`),
+    colorCombos.yellowBold(`Task: ${task.description}`),
     colors.gray(`ID: ${task.id}`),
     colors.gray(`Type: ${task.type}`),
-    statusColor(`Status: ${task.status}`),
+    colorFn(`Status: ${task.status}`),
     colors.gray(`Priority: ${task.priority}`),
   ];
 
@@ -86,7 +157,7 @@ export function formatTask(task: Task): string {
  */
 export function formatMemoryEntry(entry: MemoryEntry): string {
   const lines = [
-    colors.magenta.bold(`Memory Entry: ${entry.type}`),
+    colorCombos.magentaBold(`Memory Entry: ${entry.type}`),
     colors.gray(`ID: ${entry.id}`),
     colors.gray(`Agent: ${entry.agentId}`),
     colors.gray(`Session: ${entry.sessionId}`),
@@ -107,34 +178,39 @@ export function formatMemoryEntry(entry: MemoryEntry): string {
  * Formats health status for display
  */
 export function formatHealthStatus(health: HealthStatus): string {
-  const statusColor = {
+  const statusColorMap = {
     healthy: colors.green,
     degraded: colors.yellow,
     unhealthy: colors.red,
-  }[health.status];
+  } as Record<string, (text: string) => string>;
+
+  const statusColor = statusColorMap[health.status] || colors.white;
 
   const lines = [
-    statusColor.bold(`System Status: ${health.status.toUpperCase()}`),
+    statusColor(`System Status: ${health.status.toUpperCase()}`),
     colors.gray(`Checked at: ${health.timestamp.toISOString()}`),
     '',
-    colors.cyan.bold('Components:'),
+    colorCombos.cyanBold('Components:'),
   ];
 
   for (const [name, component] of Object.entries(health.components)) {
-    const compColor = {
+    const typedComponent = component as ComponentHealth;
+    const compColorMap = {
       healthy: colors.green,
       degraded: colors.yellow,
       unhealthy: colors.red,
-    }[component.status];
+    } as Record<string, (text: string) => string>;
 
-    lines.push(compColor(`  ${name}: ${component.status}`));
+    const compColor = compColorMap[typedComponent.status] || colors.white;
+
+    lines.push(compColor(`  ${name}: ${typedComponent.status}`));
     
-    if (component.error) {
-      lines.push(colors.red(`    Error: ${component.error}`));
+    if (typedComponent.error) {
+      lines.push(colors.red(`    Error: ${typedComponent.error}`));
     }
 
-    if (component.metrics) {
-      for (const [metric, value] of Object.entries(component.metrics)) {
+    if (typedComponent.metrics) {
+      for (const [metric, value] of Object.entries(typedComponent.metrics)) {
         lines.push(colors.gray(`    ${metric}: ${value}`));
       }
     }
@@ -146,53 +222,37 @@ export function formatHealthStatus(health: HealthStatus): string {
 /**
  * Creates a table for agent listing
  */
-export function createAgentTable(agents: AgentProfile[]): Table {
-  const table = new Table()
-    .header(['ID', 'Name', 'Type', 'Priority', 'Max Tasks'])
-    .border(true);
+export function createAgentTable(agents: AgentProfile[]): SimpleTable {
+  const table = new SimpleTable()
+    .header(['ID', 'Name', 'Type', 'Priority', 'Max Tasks']);
 
-  for (const agent of agents) {
-    table.push([
-      agent.id,
-      agent.name,
-      agent.type,
-      agent.priority.toString(),
-      agent.maxConcurrentTasks.toString(),
-    ]);
-  }
+  const rows = agents.map(agent => [
+    agent.id,
+    agent.name,
+    agent.type,
+    agent.priority.toString(),
+    agent.maxConcurrentTasks.toString(),
+  ]);
 
-  return table;
+  return table.body(rows);
 }
 
 /**
  * Creates a table for task listing
  */
-export function createTaskTable(tasks: Task[]): Table {
-  const table = new Table()
-    .header(['ID', 'Type', 'Description', 'Status', 'Agent'])
-    .border(true);
+export function createTaskTable(tasks: Task[]): SimpleTable {
+  const table = new SimpleTable()
+    .header(['ID', 'Type', 'Description', 'Status', 'Agent']);
 
-  for (const task of tasks) {
-    const statusCell = {
-      pending: colors.gray(task.status),
-      queued: colors.yellow(task.status),
-      assigned: colors.blue(task.status),
-      running: colors.cyan(task.status),
-      completed: colors.green(task.status),
-      failed: colors.red(task.status),
-      cancelled: colors.magenta(task.status),
-    }[task.status] || task.status;
+  const rows = tasks.map(task => [
+    task.id,
+    task.type,
+    task.description.substring(0, 30) + (task.description.length > 30 ? '...' : ''),
+    task.status,
+    task.assignedAgent || 'None',
+  ]);
 
-    table.push([
-      task.id,
-      task.type,
-      task.description.substring(0, 40) + (task.description.length > 40 ? '...' : ''),
-      statusCell,
-      task.assignedAgent || '-',
-    ]);
-  }
-
-  return table;
+  return table.body(rows);
 }
 
 /**
@@ -226,10 +286,10 @@ export function formatDuration(ms: number): string {
  */
 export function displayBanner(version: string): void {
   const banner = `
-${colors.cyan.bold('╔══════════════════════════════════════════════════════════════╗')}
-${colors.cyan.bold('║')}             ${colors.white.bold('🧠 Claude-Flow')} ${colors.gray('v' + version)}                        ${colors.cyan.bold('║')}
-${colors.cyan.bold('║')}          ${colors.gray('Advanced AI Agent Orchestration')}               ${colors.cyan.bold('║')}
-${colors.cyan.bold('╚══════════════════════════════════════════════════════════════╝')}
+${colorCombos.cyanBold('╔══════════════════════════════════════════════════════════════╗')}
+${colorCombos.cyanBold('║')}             ${colorCombos.whiteBold('🧠 Claude-Flow')} ${colors.gray('v' + version)}                        ${colorCombos.cyanBold('║')}
+${colorCombos.cyanBold('║')}          ${colors.gray('Advanced AI Agent Orchestration')}               ${colorCombos.cyanBold('║')}
+${colorCombos.cyanBold('╚══════════════════════════════════════════════════════════════╝')}
 `;
   console.log(banner);
 }
@@ -238,14 +298,14 @@ ${colors.cyan.bold('╚═══════════════════
  * Displays detailed version information
  */
 export function displayVersion(version: string, buildDate: string): void {
+  const nodeVersion = process.version;
   const info = [
-    colors.cyan.bold('Claude-Flow Version Information'),
+    colorCombos.cyanBold('Claude-Flow Version Information'),
     '',
     colors.white('Version:    ') + colors.yellow(version),
     colors.white('Build Date: ') + colors.yellow(buildDate),
-    colors.white('Runtime:    ') + colors.yellow('Deno ' + Deno.version.deno),
-    colors.white('TypeScript: ') + colors.yellow(Deno.version.typescript),
-    colors.white('V8:         ') + colors.yellow(Deno.version.v8),
+    colors.white('Runtime:    ') + colors.yellow('Node.js ' + nodeVersion),
+    colors.white('Platform:   ') + colors.yellow(process.platform + ' ' + process.arch),
     '',
     colors.gray('Components:'),
     colors.white('  • Multi-Agent Orchestration'),

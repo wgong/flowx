@@ -3,7 +3,9 @@
  */
 
 import { EventEmitter } from "./event-emitter.ts";
-import { colors } from '@cliffy/ansi/colors';
+import { Logger } from '../../../core/logger.ts';
+import { ProcessUI } from './process-ui.ts';
+import { ConfigManager } from '../../../config/config-manager.ts';
 import { 
   ProcessInfo, 
   ProcessType, 
@@ -19,6 +21,17 @@ import { MCPServer } from "../../../mcp/server.ts";
 import { eventBus } from "../../../core/event-bus.ts";
 import { logger } from "../../../core/logger.ts";
 import { configManager } from "../../../core/config.ts";
+
+// Simple color utilities (replacing @cliffy/ansi/colors)
+const colors = {
+  red: (text: string) => `\x1b[31m${text}\x1b[0m`,
+  green: (text: string) => `\x1b[32m${text}\x1b[0m`,
+  yellow: (text: string) => `\x1b[33m${text}\x1b[0m`,
+  blue: (text: string) => `\x1b[34m${text}\x1b[0m`,
+  cyan: (text: string) => `\x1b[36m${text}\x1b[0m`,
+  gray: (text: string) => `\x1b[90m${text}\x1b[0m`,
+  bold: (text: string) => `\x1b[1m${text}\x1b[0m`,
+};
 
 export class ProcessManager extends EventEmitter {
   private processes: Map<string, ProcessInfo> = new Map();

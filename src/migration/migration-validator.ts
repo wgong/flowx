@@ -7,8 +7,41 @@ import * as path from 'node:path';
 import { ValidationResult, ValidationCheck } from './types.ts';
 import { logger } from './logger.ts';
 import { colors } from '../utils/colors.ts';
-import globPkg from 'npm:glob';
+import globPkg from 'glob';
 const { glob } = globPkg;
+
+// Helper function to check if path exists
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Helper function to read JSON files
+async function readJson(filePath: string): Promise<any> {
+  const content = await fs.readFile(filePath, 'utf-8');
+  return JSON.parse(content);
+}
+
+// Helper function to remove files/directories
+async function remove(filePath: string): Promise<void> {
+  try {
+    const stat = await fs.stat(filePath);
+    if (stat.isDirectory()) {
+      await fs.rmdir(filePath, { recursive: true });
+    } else {
+      await fs.unlink(filePath);
+    }
+  } catch (error) {
+    // Ignore if file doesn't exist
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
+  }
+}
 
 export class MigrationValidator {
   private requiredFiles = [
@@ -66,14 +99,14 @@ export class MigrationValidator {
 
     // Check .claude directory exists
     const claudePath = path.join(projectPath, '.claude');
-    if (!await fs.pathExists(claudePath)) {
+    if (!await pathExists(claudePath)) {
       check.passed = false;
       result.errors.push('.claude directory not found');
     }
 
     // Check commands directory
     const commandsPath = path.join(claudePath, 'commands');
-    if (!await fs.pathExists(commandsPath)) {
+    if (!await pathExists(commandsPath)) {
       check.passed = false;
       result.errors.push('.claude/commands directory not found');
     }
@@ -81,7 +114,7 @@ export class MigrationValidator {
     // Check required files
     for (const file of this.requiredFiles) {
       const filePath = path.join(projectPath, file);
-      if (!await fs.pathExists(filePath)) {
+      if (!await pathExists(filePath)) {
         check.passed = false;
         result.errors.push(`Required file missing: ${file}`);
       }
@@ -98,13 +131,13 @@ export class MigrationValidator {
 
     const commandsPath = path.join(projectPath, '.claude/commands');
     
-    if (await fs.pathExists(commandsPath)) {
+    if (await pathExists(commandsPath)) {
       for (const command of this.requiredCommands) {
         const commandFile = path.join(commandsPath, `${command}.md`);
         const sparcCommandFile = path.join(commandsPath, 'sparc', `${command.replace('sparc-', '')}.md`);
         
-        const hasMainFile = await fs.pathExists(commandFile);
-        const hasSparcFile = await fs.pathExists(sparcCommandFile);
+        const hasMainFile = await pathExists(commandFile);
+        const hasSparcFile = await pathExists(sparcCommandFile);
         
         if (!hasMainFile && !hasSparcFile) {
           check.passed = false;
@@ -149,7 +182,7 @@ export class MigrationValidator {
       }
       
     } catch (error) {
-      result.errors.push(`Failed to validate ${command}: ${error.message}`);
+      result.errors.push(`Failed to validate ${command}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -161,7 +194,7 @@ export class MigrationValidator {
 
     // Check CLAUDE.md
     const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
-    if (await fs.pathExists(claudeMdPath)) {
+    if (await pathExists(claudeMdPath)) {
       const content = await fs.readFile(claudeMdPath, 'utf-8');
       
       // Check for SPARC configuration
@@ -187,9 +220,9 @@ export class MigrationValidator {
 
     // Check .roomodes
     const roomodesPath = path.join(projectPath, '.roomodes');
-    if (await fs.pathExists(roomodesPath)) {
+    if (await pathExists(roomodesPath)) {
       try {
-        const roomodes = await fs.readJson(roomodesPath);
+        const roomodes = await readJson(roomodesPath);
         const requiredModes = ['architect', 'code', 'tdd', 'debug'];
         
         for (const mode of requiredModes) {
@@ -198,7 +231,7 @@ export class MigrationValidator {
           }
         }
       } catch (error) {
-        result.errors.push(`Invalid .roomodes file: ${error.message}`);
+        result.errors.push(`Invalid .roomodes file: ${error instanceof Error ? error.message : String(error)}`);
         check.passed = false;
       }
     }
@@ -214,8 +247,13 @@ export class MigrationValidator {
 
     // Check for corrupted files
     const claudePath = path.join(projectPath, '.claude');
-    if (await fs.pathExists(claudePath)) {
-      const files = await glob('**/*.md', { cwd: claudePath });
+    if (await pathExists(claudePath)) {
+      const files = await new Promise<string[]>((resolve, reject) => {
+        glob('**/*.md', { cwd: claudePath }, (err, matches) => {
+          if (err) reject(err);
+          else resolve(matches);
+        });
+      });
       
       for (const file of files) {
         try {
@@ -234,7 +272,7 @@ export class MigrationValidator {
           }
           
         } catch (error) {
-          result.errors.push(`Cannot read file ${file}: ${error.message}`);
+          result.errors.push(`Cannot read file ${file}: ${error instanceof Error ? error.message : String(error)}`);
           check.passed = false;
         }
       }
@@ -251,12 +289,12 @@ export class MigrationValidator {
 
     // Check directory permissions
     const claudePath = path.join(projectPath, '.claude');
-    if (await fs.pathExists(claudePath)) {
+    if (await pathExists(claudePath)) {
       try {
         // Test write permissions
         const testFile = path.join(claudePath, '.test-write');
         await fs.writeFile(testFile, 'test');
-        await fs.remove(testFile);
+        await remove(testFile);
       } catch (error) {
         result.warnings.push('.claude directory may not be writable');
       }
@@ -264,9 +302,9 @@ export class MigrationValidator {
 
     // Check for potential conflicts
     const packageJsonPath = path.join(projectPath, 'package.json');
-    if (await fs.pathExists(packageJsonPath)) {
+    if (await pathExists(packageJsonPath)) {
       try {
-        const packageJson = await fs.readJson(packageJsonPath);
+        const packageJson = await readJson(packageJsonPath);
         
         // Check for script conflicts
         const scripts = packageJson.scripts || {};

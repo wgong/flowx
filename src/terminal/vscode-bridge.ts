@@ -5,7 +5,41 @@
  * for terminal management and output capture.
  */
 
-import * as vscode from 'vscode';
+// Type declarations for vscode module (optional dependency)
+interface VSCodeTerminal {
+  sendText(text: string, addNewLine?: boolean): void;
+  dispose(): void;
+}
+
+interface VSCodeExtensionContext {
+  subscriptions: any[];
+}
+
+interface VSCodeWindow {
+  createTerminal(options?: any): VSCodeTerminal;
+  showInformationMessage(message: string): void;
+  onDidCloseTerminal?: (callback: (terminal: VSCodeTerminal) => void) => any;
+  registerTerminalProfileProvider?: any;
+}
+
+interface VSCodeEventEmitter<T> {
+  event: (listener: (e: T) => void) => any;
+  fire(data: T): void;
+  dispose(): void;
+}
+
+interface VSCodeAPI {
+  window: VSCodeWindow;
+  EventEmitter: new <T>() => VSCodeEventEmitter<T>;
+}
+
+// Conditional import for vscode module
+let vscode: VSCodeAPI | null = null;
+try {
+  vscode = require('vscode');
+} catch (error) {
+  // VSCode module not available - running outside VSCode
+}
 
 /**
  * Terminal output processors registry
@@ -15,17 +49,22 @@ const terminalOutputProcessors = new Map<string, (data: string) => void>();
 /**
  * Active terminals registry
  */
-const activeTerminals = new Map<string, vscode.Terminal>();
+const activeTerminals = new Map<string, VSCodeTerminal>();
 
 /**
  * Terminal write emulators for output capture
  */
-const terminalWriteEmulators = new Map<vscode.Terminal, vscode.EventEmitter<string>>();
+const terminalWriteEmulators = new Map<VSCodeTerminal, VSCodeEventEmitter<string>>();
 
 /**
  * Initialize the VSCode terminal bridge
  */
-export function initializeTerminalBridge(context: vscode.ExtensionContext): void {
+export function initializeTerminalBridge(context: VSCodeExtensionContext): void {
+  if (!vscode) {
+    console.warn('VSCode API not available - terminal bridge disabled');
+    return;
+  }
+
   // Inject VSCode API into global scope for Claude-Flow
   (globalThis as any).vscode = vscode;
 
@@ -39,8 +78,8 @@ export function initializeTerminalBridge(context: vscode.ExtensionContext): void
 
   // Override terminal creation to capture output
   const originalCreateTerminal = vscode.window.createTerminal;
-  (vscode.window as any).createTerminal = function(options: vscode.TerminalOptions) {
-    const terminal = originalCreateTerminal.call(vscode.window, options) as vscode.Terminal;
+  (vscode.window as any).createTerminal = function(options: any) {
+    const terminal = originalCreateTerminal.call(vscode.window, options) as VSCodeTerminal;
     
     // Create write emulator for this terminal
     const writeEmulator = new vscode.EventEmitter<string>();
@@ -60,8 +99,8 @@ export function initializeTerminalBridge(context: vscode.ExtensionContext): void
   };
 
   // Clean up on terminal close
-  context.subscriptions.push(
-    vscode.window.onDidCloseTerminal((terminal: vscode.Terminal) => {
+  if (vscode.window.onDidCloseTerminal) {
+    const disposable = vscode.window.onDidCloseTerminal((terminal: VSCodeTerminal) => {
       // Find and remove from registries
       for (const [id, term] of activeTerminals.entries()) {
         if (term === terminal) {
@@ -77,14 +116,16 @@ export function initializeTerminalBridge(context: vscode.ExtensionContext): void
         emulator.dispose();
         terminalWriteEmulators.delete(terminal);
       }
-    })
-  );
+    });
+    
+    context.subscriptions.push(disposable);
+  }
 }
 
 /**
  * Capture terminal output using various methods
  */
-function captureTerminalOutput(terminal: vscode.Terminal, terminalId: string): void {
+function captureTerminalOutput(terminal: VSCodeTerminal, terminalId: string): void {
   // Method 1: Use terminal.sendText override to capture commands
   const originalSendText = terminal.sendText;
   (terminal as any).sendText = function(text: string, addNewLine?: boolean) {
@@ -119,7 +160,9 @@ function captureTerminalOutput(terminal: vscode.Terminal, terminalId: string): v
 /**
  * Set up terminal renderer for output capture
  */
-function setupTerminalRenderer(terminal: vscode.Terminal, terminalId: string): void {
+function setupTerminalRenderer(terminal: VSCodeTerminal, terminalId: string): void {
+  if (!vscode) return;
+
   // Check if terminal renderer API is available
   if (vscode.window.registerTerminalProfileProvider) {
     // This is a more advanced method that requires additional setup
@@ -147,9 +190,14 @@ export async function createCapturedTerminal(
   shellPath?: string,
   shellArgs?: string[]
 ): Promise<{
-  terminal: vscode.Terminal;
-  onData: vscode.Event<string>;
-}> {
+  terminal: VSCodeTerminal;
+  onData: (listener: (e: string) => void) => any;
+} | null> {
+  if (!vscode) {
+    console.warn('VSCode API not available');
+    return null;
+  }
+
   const writeEmulator = new vscode.EventEmitter<string>();
   
   const terminal = vscode.window.createTerminal({
@@ -170,73 +218,55 @@ export async function createCapturedTerminal(
  * Send command to terminal and capture output
  */
 export async function executeTerminalCommand(
-  terminal: vscode.Terminal,
+  terminal: VSCodeTerminal,
   command: string,
   timeout: number = 30000
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const writeEmulator = terminalWriteEmulators.get(terminal);
     if (!writeEmulator) {
-      reject(new Error('No write emulator for terminal'));
+      reject(new Error('Terminal not found or not configured for output capture'));
       return;
     }
 
     let output = '';
-    const marker = `__COMMAND_COMPLETE_${Date.now()}__`;
-    
-    // Set up output listener
+    const timeoutId = setTimeout(() => {
+      reject(new Error(`Command timed out after ${timeout}ms`));
+    }, timeout);
+
     const disposable = writeEmulator.event((data: string) => {
       output += data;
       
-      if (output.includes(marker)) {
-        // Command completed
+      // Simple command completion detection
+      if (data.includes('$') || data.includes('>')) {
+        clearTimeout(timeoutId);
         disposable.dispose();
-        const result = output.substring(0, output.indexOf(marker));
-        resolve(result);
+        resolve(output);
       }
     });
 
-    // Set timeout
-    const timer = setTimeout(() => {
-      disposable.dispose();
-      reject(new Error('Command timeout'));
-    }, timeout);
-
-    // Execute command with marker
-    terminal.sendText(`${command} && echo "${marker}"`);
-    
-    // Clear timeout on success
-    writeEmulator.event(() => {
-      if (output.includes(marker)) {
-        clearTimeout(timer);
-      }
-    });
+    // Send the command
+    terminal.sendText(command);
   });
 }
 
 /**
  * Get terminal by ID
  */
-export function getTerminalById(terminalId: string): vscode.Terminal | undefined {
+export function getTerminalById(terminalId: string): VSCodeTerminal | undefined {
   return activeTerminals.get(terminalId);
 }
 
 /**
- * Dispose all terminal resources
+ * Dispose terminal bridge resources
  */
 export function disposeTerminalBridge(): void {
-  // Clean up all terminals
-  for (const terminal of activeTerminals.values()) {
-    terminal.dispose();
-  }
-  activeTerminals.clear();
-  
-  // Clean up processors
-  terminalOutputProcessors.clear();
-  
-  // Clean up write emulators
+  // Clean up all emulators
   for (const emulator of terminalWriteEmulators.values()) {
     emulator.dispose();
   }
+  
   terminalWriteEmulators.clear();
+  activeTerminals.clear();
+  terminalOutputProcessors.clear();
 }

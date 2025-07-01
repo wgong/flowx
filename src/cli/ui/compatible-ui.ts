@@ -4,7 +4,7 @@
  */
 
 import readline from 'node:readline';
-import chalk from 'npm:chalk';
+import chalk from 'chalk';
 
 export interface UIProcess {
   id: string;

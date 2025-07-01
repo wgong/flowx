@@ -3,10 +3,10 @@
  * Implements comprehensive memory operations with advanced capabilities
  */
 
-import { Command } from 'npm:commander';
+import { Command } from 'commander';
 import { promises as fs } from 'node:fs';
 import { join, extname, basename } from 'node:path';
-import chalk from 'npm:chalk';
+import chalk from 'chalk';
 import { AdvancedMemoryManager, QueryOptions, ExportOptions, ImportOptions, CleanupOptions } from "../../memory/advanced-memory-manager.ts";
 import { Logger } from "../../core/logger.ts";
 
@@ -226,7 +226,7 @@ export function createAdvancedMemoryCommand(): Command {
         }
 
       } catch (error) {
-        printError(`Query failed: ${error.message}`);
+        printError(`Query failed: ${(error as Error).message}`);
         if (options.debug) {
           console.error(error);
         }
@@ -308,7 +308,7 @@ export function createAdvancedMemoryCommand(): Command {
         }
 
       } catch (error) {
-        printError(`Export failed: ${error.message}`);
+        printError(`Export failed: ${(error as Error).message}`);
         if (options.debug) {
           console.error(error);
         }
@@ -373,7 +373,7 @@ export function createAdvancedMemoryCommand(): Command {
           if (options.valueTransform) {
             try {
               // Create function from string (simplified - in production, use a proper sandbox)
-              transformation.valueTransformation = new Function('value', options.valueTransform);
+              transformation.valueTransformation = new Function('value', options.valueTransform) as (value: any) => any;
             } catch (error) {
               printError('Invalid value transformation function');
               return;
@@ -382,7 +382,7 @@ export function createAdvancedMemoryCommand(): Command {
           
           if (options.metadataExtract) {
             try {
-              transformation.metadataExtraction = new Function('entry', options.metadataExtract);
+              transformation.metadataExtraction = new Function('entry', options.metadataExtract) as (entry: any) => Record<string, any>;
             } catch (error) {
               printError('Invalid metadata extraction function');
               return;
@@ -436,7 +436,7 @@ export function createAdvancedMemoryCommand(): Command {
         }
 
       } catch (error) {
-        printError(`Import failed: ${error.message}`);
+        printError(`Import failed: ${(error as Error).message}`);
         if (options.debug) {
           console.error(error);
         }
@@ -580,7 +580,7 @@ export function createAdvancedMemoryCommand(): Command {
         }
 
       } catch (error) {
-        printError(`Statistics generation failed: ${error.message}`);
+        printError(`Statistics generation failed: ${(error as Error).message}`);
         if (options.debug) {
           console.error(error);
         }
@@ -681,7 +681,7 @@ export function createAdvancedMemoryCommand(): Command {
         }
 
       } catch (error) {
-        printError(`Cleanup failed: ${error.message}`);
+        printError(`Cleanup failed: ${(error as Error).message}`);
         if (options.debug) {
           console.error(error);
         }
@@ -753,7 +753,7 @@ export function createAdvancedMemoryCommand(): Command {
         }
 
       } catch (error) {
-        printError(`Store failed: ${error.message}`);
+        printError(`Store failed: ${(error as Error).message}`);
       }
     });
 
@@ -817,7 +817,7 @@ export function createAdvancedMemoryCommand(): Command {
         }
 
       } catch (error) {
-        printError(`Retrieve failed: ${error.message}`);
+        printError(`Retrieve failed: ${(error as Error).message}`);
       }
     });
 
@@ -855,7 +855,7 @@ export function createAdvancedMemoryCommand(): Command {
         }
 
       } catch (error) {
-        printError(`Delete failed: ${error.message}`);
+        printError(`Delete failed: ${(error as Error).message}`);
       }
     });
 
@@ -907,7 +907,7 @@ export function createAdvancedMemoryCommand(): Command {
         }
 
       } catch (error) {
-        printError(`List failed: ${error.message}`);
+        printError(`List failed: ${(error as Error).message}`);
       }
     });
 
@@ -931,7 +931,7 @@ export function createAdvancedMemoryCommand(): Command {
         });
 
       } catch (error) {
-        printError(`Failed to list namespaces: ${error.message}`);
+        printError(`Failed to list namespaces: ${(error as Error).message}`);
       }
     });
 
@@ -954,7 +954,7 @@ export function createAdvancedMemoryCommand(): Command {
         });
 
       } catch (error) {
-        printError(`Failed to list types: ${error.message}`);
+        printError(`Failed to list types: ${(error as Error).message}`);
       }
     });
 
@@ -977,7 +977,7 @@ export function createAdvancedMemoryCommand(): Command {
         });
 
       } catch (error) {
-        printError(`Failed to list tags: ${error.message}`);
+        printError(`Failed to list tags: ${(error as Error).message}`);
       }
     });
 
@@ -1009,12 +1009,9 @@ export function createAdvancedMemoryCommand(): Command {
         }
 
       } catch (error) {
-        printError(`Configuration operation failed: ${error.message}`);
+        printError(`Configuration operation failed: ${(error as Error).message}`);
       }
     });
 
   return memoryCmd;
 }
-
-// Export for use in the main CLI
-export { createAdvancedMemoryCommand };

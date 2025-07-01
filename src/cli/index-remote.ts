@@ -4,7 +4,7 @@
  * This version can be run directly from GitHub
  */
 
-const VERSION = '1.0.73';
+const VERSION = '1.1.2';
 
 // Simple color functions
 const colors = {
@@ -129,8 +129,10 @@ async function main() {
   }
 }
 
-if (import.meta.main) {
+// Check if this module is being run directly (Node.js equivalent of import.meta.main)
+if (require.main === module) {
   main().catch((error) => {
+    console.error('Remote CLI Error:', error);
     printError(`Error: ${error.message}`);
     Deno.exit(1);
   });

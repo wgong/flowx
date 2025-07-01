@@ -28,9 +28,13 @@ async function initializeAgentSystem(): Promise<{ manager: AgentManager; registr
     const eventBus = EventBus.getInstance();
     
     const memorySystem = new DistributedMemorySystem({
-      backend: 'markdown',
-      path: './memory'
-    });
+      namespace: 'agents',
+      distributed: false,
+      consistency: 'strong',
+      replicationFactor: 1,
+      syncInterval: 5000,
+      maxMemorySize: 256 * 1024 * 1024
+    }, logger, eventBus);
     
     await memorySystem.initialize();
     
@@ -59,7 +63,7 @@ async function initializeAgentSystem(): Promise<{ manager: AgentManager; registr
     
     return { manager: agentManager, registry: agentRegistry };
   } catch (error) {
-    throw new Error(`Failed to initialize agent system: ${error.message}`);
+    throw new Error(`Failed to initialize agent system: ${(error as Error).message}`);
   }
 }
 
@@ -94,7 +98,7 @@ export const agentCommands = {
       console.log(`   Template: ${templateName}`);
       
     } catch (error) {
-      console.error('❌ Error creating agent:', error.message);
+      console.error(`❌ Agent creation failed: ${(error as Error).message}`);
     }
   },
 
@@ -154,7 +158,7 @@ export const agentCommands = {
       console.log(`   Average Health: ${Math.round(stats.averageHealth * 100)}%`);
       
     } catch (error) {
-      console.error('❌ Error listing agents:', error.message);
+      console.error('❌ Error listing agents:', (error as Error).message);
     }
   },
 
@@ -248,7 +252,7 @@ export const agentCommands = {
       }
       
     } catch (error) {
-      console.error('❌ Error getting agent info:', error.message);
+      console.error('❌ Error getting agent info:', (error as Error).message);
     }
   },
 
@@ -298,7 +302,7 @@ export const agentCommands = {
       }
       
     } catch (error) {
-      console.error('❌ Error terminating agent:', error.message);
+      console.error(`❌ Agent stop failed: ${(error as Error).message}`);
     }
   },
 
@@ -318,7 +322,7 @@ export const agentCommands = {
       console.log('✅ Agent started successfully');
       
     } catch (error) {
-      console.error('❌ Error starting agent:', error.message);
+      console.error(`❌ Agent start failed: ${(error as Error).message}`);
     }
   },
 
@@ -339,7 +343,7 @@ export const agentCommands = {
       console.log('✅ Agent restarted successfully');
       
     } catch (error) {
-      console.error('❌ Error restarting agent:', error.message);
+      console.error('❌ Error restarting agent:', (error as Error).message);
     }
   },
 
@@ -375,7 +379,7 @@ export const agentCommands = {
       console.log(`  Disk: ${Math.round(stats.resourceUtilization.disk / 1024 / 1024)}MB`);
       
     } catch (error) {
-      console.error('❌ Error getting health status:', error.message);
+      console.error('❌ Error getting health status:', (error as Error).message);
     }
   },
 

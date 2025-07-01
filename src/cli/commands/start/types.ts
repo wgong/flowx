@@ -11,6 +11,11 @@ export interface ProcessInfo {
   startTime?: number;
   config?: Record<string, any>;
   metrics?: ProcessMetrics;
+  stdin?: any;
+  stdout?: any;
+  command?: string;
+  args?: string[];
+  workingDirectory?: string;
 }
 
 export enum ProcessType {
@@ -37,6 +42,8 @@ export interface ProcessMetrics {
   uptime?: number;
   restarts?: number;
   lastError?: string;
+  startTime?: number;
+  restartCount?: number;
 }
 
 export interface SystemStats {
@@ -57,6 +64,9 @@ export interface StartOptions {
   verbose?: boolean;
   ui?: boolean;
   autoStart?: boolean;
+  force?: boolean;
+  healthCheck?: boolean;
+  timeout?: number;
 }
 
 export interface UIAction {

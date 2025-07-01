@@ -213,7 +213,7 @@ export interface TerminalConfig {
 }
 
 export interface MemoryConfig {
-  backend: 'sqlite' | 'markdown' | 'hybrid';
+  backend: 'sqlite' | 'sqljs' | 'markdown' | 'hybrid';
   cacheSizeMB: number;
   syncInterval: number;
   conflictResolution: 'last-write' | 'crdt' | 'manual';

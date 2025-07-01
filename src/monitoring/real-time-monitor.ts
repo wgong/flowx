@@ -196,11 +196,11 @@ export class RealTimeMonitor extends EventEmitter {
 
   private setupEventHandlers(): void {
     // Agent events
-    this.eventBus.on('agent:metrics-update', (data) => {
+    this.eventBus.on('agent:metrics-update', (data: any) => {
       this.updateAgentMetrics(data.agentId, data.metrics);
     });
 
-    this.eventBus.on('agent:status-changed', (data) => {
+    this.eventBus.on('agent:status-changed', (data: any) => {
       this.recordMetric('agent.status.change', 1, { 
         agentId: data.agentId, 
         from: data.from, 
@@ -209,30 +209,30 @@ export class RealTimeMonitor extends EventEmitter {
     });
 
     // Task events
-    this.eventBus.on('task:started', (data) => {
+    this.eventBus.on('task:started', (data: any) => {
       this.recordMetric('task.started', 1, { taskId: data.taskId, agentId: data.agentId });
     });
 
-    this.eventBus.on('task:completed', (data) => {
+    this.eventBus.on('task:completed', (data: any) => {
       this.recordMetric('task.completed', 1, { taskId: data.taskId });
       this.recordMetric('task.duration', data.duration, { taskId: data.taskId });
     });
 
-    this.eventBus.on('task:failed', (data) => {
+    this.eventBus.on('task:failed', (data: any) => {
       this.recordMetric('task.failed', 1, { taskId: data.taskId, error: data.error });
     });
 
     // System events
-    this.eventBus.on('system:resource-update', (data) => {
+    this.eventBus.on('system:resource-update', (data: any) => {
       this.updateSystemMetrics(data);
     });
 
-    this.eventBus.on('swarm:metrics-update', (data) => {
+    this.eventBus.on('swarm:metrics-update', (data: any) => {
       this.updateSwarmMetrics(data.metrics);
     });
 
     // Error events
-    this.eventBus.on('error', (data) => {
+    this.eventBus.on('error', (data: any) => {
       this.handleError(data);
     });
   }
@@ -262,9 +262,9 @@ export class RealTimeMonitor extends EventEmitter {
     this.logger.info('Shutting down real-time monitor');
 
     // Stop all intervals
-    if (this.monitoringInterval) clearInterval(this.monitoringInterval);
-    if (this.healthCheckInterval) clearInterval(this.healthCheckInterval);
-    if (this.alertProcessor) clearInterval(this.alertProcessor);
+    if (this.monitoringInterval) clearInterval(this.monitoringInterval as any);
+    if (this.healthCheckInterval) clearInterval(this.healthCheckInterval as any);
+    if (this.alertProcessor) clearInterval(this.alertProcessor as any);
 
     // Flush any remaining metrics
     await this.flushMetrics();
@@ -279,7 +279,7 @@ export class RealTimeMonitor extends EventEmitter {
       this.collectSystemMetrics();
       this.processMetricsBuffer();
       this.cleanupOldMetrics();
-    }, this.config.updateInterval);
+    }, this.config.updateInterval) as NodeJS.Timeout;
 
     this.logger.info('Started metrics collection', { 
       interval: this.config.updateInterval 
@@ -407,7 +407,7 @@ export class RealTimeMonitor extends EventEmitter {
   private startAlertProcessing(): void {
     this.alertProcessor = setInterval(() => {
       this.processAlerts();
-    }, 1000); // Process alerts every second
+    }, this.config.updateInterval) as NodeJS.Timeout;
 
     this.logger.info('Started alert processing');
   }
@@ -546,7 +546,7 @@ export class RealTimeMonitor extends EventEmitter {
   private startHealthChecks(): void {
     this.healthCheckInterval = setInterval(() => {
       this.performHealthChecks();
-    }, 30000); // Every 30 seconds
+    }, 30000) as NodeJS.Timeout; // Check every 30 seconds
 
     this.logger.info('Started health checks');
   }
@@ -560,33 +560,35 @@ export class RealTimeMonitor extends EventEmitter {
 
   private async executeHealthCheck(check: HealthCheck): Promise<void> {
     try {
-      let isHealthy = false;
-
+      let result = false;
+      
       switch (check.type) {
         case 'http':
-          isHealthy = await this.performHttpHealthCheck(check);
+          result = await this.performHttpHealthCheck(check);
           break;
         case 'tcp':
-          isHealthy = await this.performTcpHealthCheck(check);
+          result = await this.performTcpHealthCheck(check);
           break;
         case 'custom':
-          if (check.customCheck) {
-            isHealthy = await check.customCheck();
-          }
+          result = check.customCheck ? await check.customCheck() : false;
           break;
       }
 
-      this.recordMetric(`healthcheck.${check.name}`, isHealthy ? 1 : 0, {
-        type: check.type,
-        target: check.target
+      this.recordMetric('health.check', result ? 1 : 0, { 
+        name: check.name,
+        type: check.type 
       });
 
+      if (!result) {
+        this.logger.warn(`Health check failed: ${check.name}`);
+      }
+
     } catch (error) {
-      this.logger.error('Health check failed', { check: check.name, error });
-      this.recordMetric(`healthcheck.${check.name}`, 0, {
+      this.logger.error(`Health check error: ${check.name}`, error instanceof Error ? error.message : String(error));
+      this.recordMetric('health.check', 0, { 
+        name: check.name,
         type: check.type,
-        target: check.target,
-        error: error.message
+        error: 'exception'
       });
     }
   }

@@ -1,14 +1,21 @@
 import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { copyPrompts, copyPromptsEnhanced, CopyOptions, CopyResult } from './prompt-copier-enhanced.ts';
+import { copyPromptsEnhanced } from './prompt-copier-enhanced.js';
+import { CopyOptions, CopyResult } from './prompt-copier.js';
 import { 
   PromptConfigManager, 
   PromptPathResolver, 
   PromptValidator,
   formatDuration,
   formatFileSize
-} from './prompt-utils.ts';
-import { logger } from '../logger.ts';
+} from './prompt-utils.js';
+import { Logger } from '../core/logger.js';
+
+// Local function for non-enhanced copying
+async function copyPrompts(options: CopyOptions): Promise<CopyResult> {
+  // Simple implementation - delegate to enhanced version
+  return copyPromptsEnhanced(options);
+}
 
 export interface PromptManagerOptions {
   configPath?: string;
@@ -39,6 +46,7 @@ export class PromptManager extends EventEmitter {
   private configManager: PromptConfigManager;
   private pathResolver: PromptPathResolver;
   private options: Required<PromptManagerOptions>;
+  private logger: Logger;
 
   constructor(options: PromptManagerOptions = {}) {
     super();
@@ -50,6 +58,12 @@ export class PromptManager extends EventEmitter {
       defaultProfile: options.defaultProfile || 'sparc'
     };
 
+    this.logger = new Logger({
+      level: 'info',
+      format: 'text',
+      destination: 'console'
+    });
+
     this.configManager = new PromptConfigManager(
       path.resolve(this.options.basePath, this.options.configPath)
     );
@@ -57,7 +71,7 @@ export class PromptManager extends EventEmitter {
   }
 
   async initialize(): Promise<void> {
-    logger.info('Initializing PromptManager...');
+    this.logger.info('Initializing PromptManager...');
     
     // Load configuration
     await this.configManager.loadConfig();
@@ -66,7 +80,7 @@ export class PromptManager extends EventEmitter {
     if (this.options.autoDiscovery) {
       const discovered = await this.pathResolver.discoverPromptDirectories();
       if (discovered.length > 0) {
-        logger.info(`Auto-discovered ${discovered.length} prompt directories`);
+        this.logger.info(`Auto-discovered ${discovered.length} prompt directories`);
         
         // Update config with discovered directories
         const config = this.configManager.getConfig();
@@ -106,7 +120,7 @@ export class PromptManager extends EventEmitter {
       ...options
     };
 
-    logger.info('Starting prompt copy operation', {
+    this.logger.info('Starting prompt copy operation', {
       source: copyOptions.source,
       destination: copyOptions.destination,
       profile
@@ -146,13 +160,13 @@ export class PromptManager extends EventEmitter {
           ...options
         };
 
-        logger.info(`Copying from source: ${source}`);
+        this.logger.info(`Copying from source: ${source}`);
         const result = await copyPrompts(copyOptions);
         results.push(result);
         
         this.emit('sourceComplete', { source, result });
       } catch (error) {
-        logger.error(`Failed to copy from ${source}:`, error);
+        this.logger.error(`Failed to copy from ${source}:`, error);
         this.emit('sourceError', { source, error });
         
         // Add error result
@@ -162,7 +176,7 @@ export class PromptManager extends EventEmitter {
           copiedFiles: 0,
           failedFiles: 0,
           skippedFiles: 0,
-          errors: [{ file: source, error: error.message, phase: 'read' }],
+          errors: [{ file: source, error: (error as Error).message, phase: 'read' }],
           duration: 0
         });
       }
@@ -226,7 +240,7 @@ export class PromptManager extends EventEmitter {
         }
       }
     } catch (error) {
-      logger.error(`Failed to validate directory ${dirPath}:`, error);
+      this.logger.error(`Failed to validate directory ${dirPath}:`, error);
     }
   }
 

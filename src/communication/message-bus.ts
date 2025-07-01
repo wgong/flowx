@@ -56,6 +56,8 @@ export interface MessageMetadata {
   encoding: string;
   checksum?: string;
   route?: string[];
+  deadLetterReason?: string;
+  deadLetterTimestamp?: Date;
 }
 
 export interface MessageChannel {
@@ -276,23 +278,23 @@ export class MessageBus extends EventEmitter {
   }
 
   private setupEventHandlers(): void {
-    this.eventBus.on('agent:connected', (data) => {
+    this.eventBus.on('agent:connected', (data: any) => {
       this.handleAgentConnected(data.agentId);
     });
 
-    this.eventBus.on('agent:disconnected', (data) => {
+    this.eventBus.on('agent:disconnected', (data: any) => {
       this.handleAgentDisconnected(data.agentId);
     });
 
-    this.deliveryManager.on('delivery:success', (data) => {
+    this.deliveryManager.on('delivery:success', (data: any) => {
       this.handleDeliverySuccess(data);
     });
 
-    this.deliveryManager.on('delivery:failure', (data) => {
+    this.deliveryManager.on('delivery:failure', (data: any) => {
       this.handleDeliveryFailure(data);
     });
 
-    this.retryManager.on('retry:exhausted', (data) => {
+    this.retryManager.on('retry:exhausted', (data: any) => {
       this.handleRetryExhausted(data);
     });
   }
@@ -1124,12 +1126,7 @@ export class MessageBus extends EventEmitter {
       await this.enqueueMessage(queueId, message);
       
     } catch (error) {
-      this.logger.error('Failed to send message to dead letter queue', {
-        messageId: message.id,
-        queueId,
-        reason,
-        error
-      });
+      this.logger.error('Error processing dead letter queue:', (error as Error).message);
     }
   }
 
@@ -1372,7 +1369,7 @@ class RetryManager extends EventEmitter {
           this.logger.warn('Retry attempt failed', {
             messageId: entry.message.id,
             attempt: entry.attempts,
-            error: error.message
+            error: (error as Error).message
           });
         }
       }

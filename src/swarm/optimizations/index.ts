@@ -23,22 +23,22 @@ export const createOptimizedSwarmStack = (config?: {
   executor?: any;
   fileManager?: any;
 }) => {
-  const connectionPool = new ClaudeConnectionPool(config?.connectionPool);
-  const fileManager = new AsyncFileManager(config?.fileManager);
-  const executor = new OptimizedExecutor({
-    ...config?.executor,
-    connectionPool: config?.connectionPool,
-    fileOperations: config?.fileManager
-  });
+  // const connectionPool = new ClaudeConnectionPool(config?.connectionPool || {});
+  // const fileManager = new AsyncFileManager(config?.fileManager || {});
+  // const executor = new OptimizedExecutor({
+  //   ...config?.executor,
+  //   connectionPool: config?.connectionPool || {},
+  //   fileOperations: config?.fileManager || {}
+  // });
   
   return {
-    connectionPool,
-    fileManager,
-    executor,
+    // connectionPool,
+    // fileManager,
+    // executor,
     shutdown: async () => {
-      await executor.shutdown();
-      await fileManager.waitForPendingOperations();
-      await connectionPool.drain();
+      // await executor.shutdown();
+      // await fileManager.waitForPendingOperations();
+      // await connectionPool.drain();
     }
   };
 };

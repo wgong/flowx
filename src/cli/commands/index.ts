@@ -1,13 +1,14 @@
 import { CLI, success, error, warning, info, VERSION } from "../cli-core.ts";
 import type { Command, CommandContext } from "../cli-core.ts";
 import { colors } from '../../utils/colors.ts';
+const { bold, blue, green, yellow, red, cyan } = colors;
 import { Orchestrator } from "../../core/orchestrator-fixed.ts";
 import { ConfigManager } from "../../core/config.ts";
 import { MemoryManager } from "../../memory/manager.ts";
 import { EventBus } from "../../core/event-bus.ts";
 import { Logger } from "../../core/logger.ts";
 import { JsonPersistenceManager } from "../../core/json-persistence.ts";
-import { swarmAction } from "./swarm.ts";
+import { SwarmCoordinator } from "../../coordination/swarm-coordinator.ts";
 import { SimpleMemoryManager } from "./memory.ts";
 import { sparcAction } from "./sparc.ts";
 import { createMigrateCommand } from "./migrate.ts";
@@ -18,6 +19,8 @@ import { startCommand } from "./start.ts";
 import { statusCommand } from "./status.ts";
 import { monitorCommand } from "./monitor.ts";
 import { sessionCommand } from "./session.ts";
+
+import { swarmAction } from "./swarm-new.ts";
 
 let orchestrator: Orchestrator | null = null;
 let configManager: ConfigManager | null = null;
@@ -1170,9 +1173,9 @@ Now, please proceed with the task: ${task}`;
               stdio: "inherit",
             });
             
-            const status = await new Promise((resolve) => {
+            const status = await new Promise<{ success: boolean; code: number }>((resolve) => {
               child.on("close", (code) => {
-                resolve({ success: code === 0, code });
+                resolve({ success: code === 0, code: code || 0 });
               });
             });
             
@@ -1249,16 +1252,16 @@ Now, please proceed with the task: ${task}`;
               });
               
               if (workflow.parallel) {
-                promises.push(new Promise((resolve) => {
+                promises.push(new Promise<{ success: boolean; code: number }>((resolve) => {
                   child.on("close", (code) => {
-                    resolve({ success: code === 0, code });
+                    resolve({ success: code === 0, code: code || 0 });
                   });
                 }));
               } else {
                 // Wait for completion if sequential
-                const status = await new Promise((resolve) => {
+                const status = await new Promise<{ success: boolean; code: number }>((resolve) => {
                   child.on("close", (code) => {
-                    resolve({ success: code === 0, code });
+                    resolve({ success: code === 0, code: code || 0 });
                   });
                 });
                 if (!status.success) {
@@ -1270,7 +1273,7 @@ Now, please proceed with the task: ${task}`;
             if (workflow.parallel && promises.length > 0) {
               success("All Claude instances spawned in parallel mode");
               const results = await Promise.all(promises);
-              const failed = results.filter(s => !s.success).length;
+              const failed = results.filter((s: { success: boolean; code: number }) => !s.success).length;
               if (failed > 0) {
                 warning(`${failed} tasks failed`);
               } else {
@@ -1331,7 +1334,7 @@ Now, please proceed with the task: ${task}`;
         info("Starting enhanced monitoring dashboard...");
         console.log("Press Ctrl+C to exit");
         
-        const interval = options.interval * 1000;
+        const interval = Number(options.interval) * 1000;
         let running = true;
         
         const cleanup = () => {
@@ -1357,21 +1360,22 @@ Now, please proceed with the task: ${task}`;
             // Enhanced header
             success("Claude-Flow Enhanced Live Monitor");
             console.log("═".repeat(60));
-            console.log(`Update #${++cycles} • ${new Date().toLocaleTimeString()} • Interval: ${options.interval}s`);
+            console.log(`Update #${++cycles} • ${new Date().toLocaleTimeString()} • Interval: ${Number(options.interval)}s`);
             
             if (options.focus) {
               console.log(`🎯 Focus: ${options.focus}`);
             }
             
             if (options.alerts) {
-              console.log(`🚨 Alerts: Enabled (threshold: ${options.threshold}%)`);
+              console.log(`🚨 Alerts: Enabled (threshold: ${Number(options.threshold)}%)`);
             }
             
             // System overview with thresholds
             console.log("\n📊 System Overview:");
             const cpuUsage = Math.random() * 100;
             const memoryUsage = Math.random() * 1000;
-            const cpuColor = cpuUsage > options.threshold ? '🔴' : cpuUsage > options.threshold * 0.8 ? '🟡' : '🟢';
+            const threshold = Number(options.threshold);
+            const cpuColor = cpuUsage > threshold ? '🔴' : cpuUsage > threshold * 0.8 ? '🟡' : '🟢';
             const memoryColor = memoryUsage > 800 ? '🔴' : memoryUsage > 600 ? '🟡' : '🟢';
             
             console.log(`   ${cpuColor} CPU: ${cpuUsage.toFixed(1)}%`);
@@ -1421,7 +1425,7 @@ Now, please proceed with the task: ${task}`;
             
             // Footer
             console.log("\n" + "─".repeat(60));
-            console.log(`Log Level: ${options.logLevel} • Threshold: ${options.threshold}% • Press Ctrl+C to exit`);
+            console.log(`Log Level: ${options.logLevel} • Threshold: ${Number(options.threshold)}% • Press Ctrl+C to exit`);
             
             await new Promise(resolve => setTimeout(resolve, interval));
           } catch (err) {
@@ -1515,7 +1519,7 @@ Now, please proceed with the task: ${task}`;
       {
         name: "strategy",
         short: "s",
-        description: "Orchestration strategy (auto, research, development, analysis)",
+        description: "Orchestration strategy (auto, research, development, analysis, test-stuck, test-fail)",
         type: "string",
         default: "auto",
       },
@@ -1597,7 +1601,59 @@ Now, please proceed with the task: ${task}`;
         type: "boolean",
       },
     ],
-    action: swarmAction,
+    action: async (ctx: CommandContext) => {
+      const objective = ctx.args.join(' ').trim();
+      if (!objective) {
+        error("Usage: claude-flow swarm <objective>");
+        return;
+      }
+
+      const options = {
+        strategy: ctx.flags.strategy as 'auto' | 'research' | 'development' | 'analysis' | 'test-stuck' | 'test-fail',
+        maxAgents: ctx.flags['max-agents'] as number || 5,
+        timeout: ctx.flags.timeout as number || 30, // 30 min default
+        config: ctx.flags.config as string,
+      };
+
+      try {
+        success(`🐝 Initializing Swarm...`);
+        console.log(`📋 Objective: ${objective}`);
+        console.log(`🎯 Strategy: ${options.strategy}`);
+
+        const coordinator = new SwarmCoordinator({
+          maxAgents: options.maxAgents,
+          taskTimeout: 20, // 20 second task timeout for resilience tests
+        });
+
+        await coordinator.start();
+        const objectiveId = await coordinator.createObjective(objective, options.strategy);
+        await coordinator.executeObjective(objectiveId);
+
+        // Await completion
+        await new Promise<void>(resolve => {
+          const checkCompletion = setInterval(async () => {
+            const status = coordinator.getObjectiveStatus(objectiveId);
+            if (status?.status === 'completed' || status?.status === 'failed') {
+              clearInterval(checkCompletion);
+              resolve();
+            }
+          }, 5000);
+        });
+
+        const finalStatus = coordinator.getObjectiveStatus(objectiveId);
+        if (finalStatus?.status === 'completed') {
+          success(`✅ Swarm objective completed successfully.`);
+          console.log('Final status:', finalStatus.status);
+        } else {
+          error(`❌ Swarm objective failed.`);
+        }
+
+        await coordinator.stop();
+      } catch (err) {
+        error(`Swarm execution failed: ${(err as Error).message}`);
+        console.error(err);
+      }
+    },
   });
 
   // Enhanced SPARC command
@@ -1691,77 +1747,6 @@ Now, please proceed with the task: ${task}`;
   cli.command({
     name: "swarm-ui",
     description: "Create self-orchestrating Claude agent swarms with blessed UI",
-    options: [
-      {
-        name: "strategy",
-        short: "s",
-        description: "Orchestration strategy (auto, research, development, analysis)",
-        type: "string",
-        default: "auto",
-      },
-      {
-        name: "max-agents",
-        description: "Maximum number of agents to spawn",
-        type: "number",
-        default: 5,
-      },
-      {
-        name: "max-depth",
-        description: "Maximum delegation depth",
-        type: "number",
-        default: 3,
-      },
-      {
-        name: "research",
-        description: "Enable research capabilities for all agents",
-        type: "boolean",
-      },
-      {
-        name: "parallel",
-        description: "Enable parallel execution",
-        type: "boolean",
-      },
-      {
-        name: "memory-namespace",
-        description: "Shared memory namespace",
-        type: "string",
-        default: "swarm",
-      },
-      {
-        name: "timeout",
-        description: "Swarm timeout in minutes",
-        type: "number",
-        default: 60,
-      },
-      {
-        name: "review",
-        description: "Enable peer review between agents",
-        type: "boolean",
-      },
-      {
-        name: "coordinator",
-        description: "Spawn dedicated coordinator agent",
-        type: "boolean",
-      },
-      {
-        name: "config",
-        short: "c",
-        description: "MCP config file",
-        type: "string",
-      },
-      {
-        name: "verbose",
-        short: "v",
-        description: "Enable verbose output",
-        type: "boolean",
-      },
-      {
-        name: "dry-run",
-        short: "d",
-        description: "Preview swarm configuration",
-        type: "boolean",
-      },
-    ],
     action: async (ctx: CommandContext) => {
       // Force UI mode
       ctx.flags.ui = true;

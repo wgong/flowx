@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 
-import { Command } from 'npm:commander';
+import { Command } from 'commander';
 import * as path from 'node:path';
-import { copyPrompts, copyPromptsEnhanced } from './prompt-copier-enhanced.ts';
+import * as fs from 'node:fs/promises';
+import { PromptManager } from './prompt-manager.ts';
+import { copyPromptsEnhanced } from './prompt-copier-enhanced.ts';
+import { CopyOptions, copyPrompts } from './prompt-copier.ts';
 import { 
   PromptConfigManager, 
   PromptPathResolver, 
@@ -11,7 +14,14 @@ import {
   formatFileSize,
   formatDuration
 } from './prompt-utils.ts';
-import { logger } from '../logger.ts';
+
+// Simple logger for this module
+const logger = {
+  info: (msg: string, ...args: any[]) => console.log(`[INFO] ${msg}`, ...args),
+  error: (msg: string, ...args: any[]) => console.error(`[ERROR] ${msg}`, ...args),
+  warn: (msg: string, ...args: any[]) => console.warn(`[WARN] ${msg}`, ...args),
+  debug: (msg: string, ...args: any[]) => console.log(`[DEBUG] ${msg}`, ...args)
+};
 
 const program = new Command();
 
@@ -67,7 +77,7 @@ program
       // Create progress bar
       let progressBar: ReturnType<typeof createProgressBar> | null = null;
       
-      copyOptions.progressCallback = (progress) => {
+      (copyOptions as any).progressCallback = (progress: any) => {
         if (!progressBar) {
           progressBar = createProgressBar(progress.total);
         }
@@ -105,7 +115,7 @@ program
         });
       }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Copy operation failed:', error);
       process.exit(1);
     }

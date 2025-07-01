@@ -8,6 +8,7 @@ import { ILogger } from "../core/logger.ts";
 import { MemoryError } from "../utils/errors.ts";
 import { IMemoryBackend } from "./backends/base.ts";
 import { SQLiteBackend } from "./backends/sqlite.ts";
+import { SqlJsBackend } from "./backends/sqljs.ts";
 import { MarkdownBackend } from "./backends/markdown.ts";
 import { MemoryCache } from "./cache.ts";
 import { MemoryIndexer } from "./indexer.ts";
@@ -47,12 +48,25 @@ export class MemoryManager implements IMemoryManager {
   private banks = new Map<string, MemoryBank>();
   private initialized = false;
   private syncInterval?: number;
+  private cleanupInterval?: number;
+  private maintenanceTimer?: NodeJS.Timeout;
 
   constructor(
     private config: MemoryConfig,
     private eventBus: IEventBus,
     private logger: ILogger,
   ) {
+    // Ensure backend is set with a default if not provided
+    if (!this.config.backend) {
+      this.config.backend = 'sqlite';
+    }
+    
+    // Set other defaults if not provided
+    this.config.cacheSizeMB = this.config.cacheSizeMB || 64;
+    this.config.syncInterval = this.config.syncInterval || 10000;
+    this.config.conflictResolution = this.config.conflictResolution || 'last-write';
+    this.config.retentionDays = this.config.retentionDays || 30;
+    
     // Initialize backend based on configuration
     this.backend = this.createBackend();
     
@@ -84,6 +98,12 @@ export class MemoryManager implements IMemoryManager {
       // Start sync interval
       this.startSyncInterval();
 
+      // Start periodic cleanup
+      const interval = 300000; // Default 5 minutes since maintenanceInterval doesn't exist on config
+      this.cleanupInterval = setInterval(() => {
+        this.performMaintenance();
+      }, interval) as unknown as number;
+
       this.initialized = true;
       this.logger.info('Memory manager initialized');
     } catch (error) {
@@ -103,6 +123,11 @@ export class MemoryManager implements IMemoryManager {
       // Stop sync interval
       if (this.syncInterval) {
         clearInterval(this.syncInterval);
+      }
+
+      // Stop periodic cleanup
+      if (this.cleanupInterval) {
+        clearInterval(this.cleanupInterval);
       }
 
       // Flush cache
@@ -403,6 +428,11 @@ export class MemoryManager implements IMemoryManager {
           this.config.sqlitePath || './claude-flow.db',
           this.logger,
         );
+      case 'sqljs':
+        return new SqlJsBackend(
+          this.config.sqlitePath || './claude-flow.db',
+          this.logger,
+        );
       case 'markdown':
         return new MarkdownBackend(
           this.config.markdownDir || './memory',
@@ -433,7 +463,7 @@ export class MemoryManager implements IMemoryManager {
       } catch (error) {
         this.logger.error('Cache sync error', error);
       }
-    }, this.config.syncInterval);
+    }, this.config.syncInterval) as unknown as number;
   }
 
   private async syncCache(): Promise<void> {

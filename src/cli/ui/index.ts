@@ -6,11 +6,10 @@
 export { 
   CompatibleUI, 
   createCompatibleUI, 
-  isRawModeSupported, 
-  launchUI,
+  isRawModeSupported,
   type UIProcess,
   type UISystemStats 
-} from './compatible-ui.ts';
+} from './compatible-ui.js';
 
 export { 
   handleRawModeError, 
@@ -18,18 +17,19 @@ export {
   checkUISupport, 
   showUISupport,
   type FallbackOptions 
-} from './fallback-handler.ts';
+} from './fallback-handler.js';
 
 /**
  * Main UI launcher that automatically selects the best available UI
  */
 export async function launchBestUI(): Promise<void> {
-  const { checkUISupport, launchUI, handleRawModeError } = await import('./fallback-handler.ts');
+  const { checkUISupport, handleRawModeError } = await import('./fallback-handler.js');
   const support = checkUISupport();
   
   if (support.supported) {
     try {
-      await launchUI();
+      const { launchUI: launchMainUI } = await import('./compatible-ui.js');
+      await launchMainUI();
     } catch (error) {
       if (error instanceof Error) {
         await handleRawModeError(error, { 
@@ -40,8 +40,24 @@ export async function launchBestUI(): Promise<void> {
       }
     }
   } else {
-    const { launchUI: launchCompatibleUI } = await import('./compatible-ui.ts');
+    const { launchUI: launchCompatibleUI } = await import('./compatible-ui.js');
     console.log('🔄 Using compatible UI mode for this environment');
     await launchCompatibleUI();
+  }
+}
+
+/**
+ * Alternative UI launcher with configuration
+ */
+export async function launchUIWithConfig(config: any): Promise<void> {
+  try {
+    // Try to use the compatible UI launcher
+    const compatibleUI = await import('./compatible-ui.js');
+    return await compatibleUI.launchUI();
+  } catch (error) {
+    // Fallback to simple handler
+    const fallbackHandler = await import('./fallback-handler.js');
+    console.log('⚠️ Falling back to basic UI mode');
+    console.log('Config:', config);
   }
 }

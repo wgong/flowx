@@ -1,6 +1,6 @@
 import { Command, CommandContext } from "../cli-core.ts";
 import { success, error, warning, info } from "../cli-core.ts";
-import colors from 'npm:chalk';
+import colors from 'chalk';
 import { ProjectManager, Project } from "../../enterprise/project-manager.ts";
 import { DeploymentManager, Deployment, DeploymentEnvironment } from "../../enterprise/deployment-manager.ts";
 import { CloudManager, CloudProvider, CloudResource } from "../../enterprise/cloud-manager.ts";
@@ -483,7 +483,10 @@ export const enterpriseCommands: Command[] = [
                     region: ctx.flags.region as string || 'us-east-1',
                     provider: (ctx.flags.provider as any) || 'aws',
                     endpoints: ctx.flags.endpoints ? 
-                      (ctx.flags.endpoints as string).split(',') : []
+                      (ctx.flags.endpoints as string).split(',') : [],
+                    secrets: {},
+                    environment_variables: {},
+                    resources: { cpu: '1', memory: '1Gi', storage: '10Gi', replicas: 1 }
                   }
                 });
 
@@ -584,7 +587,10 @@ export const enterpriseCommands: Command[] = [
                   configuration: {
                     defaultRegion: ctx.flags.region as string || 'us-east-1',
                     availableRegions: ctx.flags.regions ? 
-                      (ctx.flags.regions as string).split(',') : []
+                      (ctx.flags.regions as string).split(',') : [],
+                    services: [],
+                    endpoints: {},
+                    features: []
                   }
                 });
 
@@ -1436,6 +1442,9 @@ export const enterpriseCommands: Command[] = [
               type: reportType,
               scope: {
                 timeRange: { start, end: now },
+                systems: [],
+                users: [],
+                events: [],
                 compliance: ctx.flags.framework ? [ctx.flags.framework as string] : []
               }
             });

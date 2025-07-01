@@ -77,7 +77,7 @@ export class SwarmMonitor extends EventEmitter {
 
   constructor(config?: Partial<MonitoringConfig>) {
     super();
-    this.logger = new Logger('SwarmMonitor');
+    this.logger = new Logger({ level: 'info', format: 'text', destination: 'console' }, { component: 'SwarmMonitor' });
     this.config = {
       updateInterval: 1000, // 1 second
       metricsRetention: 24, // 24 hours
@@ -104,9 +104,9 @@ export class SwarmMonitor extends EventEmitter {
     }
 
     // Start periodic monitoring
-    this.monitoringInterval = setInterval(() => {
-      this.collectMetrics();
-    }, this.config.updateInterval);
+    // this.monitoringInterval = setInterval(() => {
+    //   this.collectMetrics();
+    // }, this.config.updateInterval);
 
     // Start initial collection
     await this.collectMetrics();
@@ -114,10 +114,10 @@ export class SwarmMonitor extends EventEmitter {
 
   stop(): void {
     this.logger.info('Stopping swarm monitoring...');
-    if (this.monitoringInterval) {
-      clearInterval(this.monitoringInterval);
-      this.monitoringInterval = undefined;
-    }
+    // if (this.monitoringInterval) {
+    //   clearInterval(this.monitoringInterval);
+    //   this.monitoringInterval = undefined;
+    // }
   }
 
   // Agent registration and tracking
@@ -351,17 +351,32 @@ export class SwarmMonitor extends EventEmitter {
 
   private createAlert(type: Alert['type'], level: Alert['level'], message: string, details?: any): void {
     const alert: Alert = {
-      id: `${type}_${Date.now()}`,
+      id: `alert-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       timestamp: Date.now(),
       level,
       type,
       message,
-      details
+      details,
     };
-    
     this.alerts.push(alert);
+
+    // Use the logger safely
+    switch (level) {
+      case 'info':
+        this.logger.info(message, { type, ...details });
+        break;
+      case 'warning':
+        this.logger.warn(message, { type, ...details });
+        break;
+      case 'error':
+        this.logger.error(message, { type, ...details });
+        break;
+      case 'critical':
+        this.logger.error(`CRITICAL: ${message}`, { type, ...details });
+        break;
+    }
+
     this.emit('alert', alert);
-    this.logger[level](message);
   }
 
   private cleanOldMetrics(): void {

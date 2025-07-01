@@ -3,14 +3,19 @@
  * Provides unified APIs that work in both Deno and Node.js
  */
 
+// Type declarations for Deno when it might not be available
+declare global {
+  var Deno: any;
+}
+
 // Detect runtime environment
-export const isDeno = () => typeof Deno !== 'undefined';
-export const isNode = () => typeof process !== 'undefined' && process.versions?.node;
+export const isDeno = (): boolean => typeof globalThis.Deno !== 'undefined';
+export const isNode = (): boolean => typeof process !== 'undefined' && !!process.versions?.node;
 
 // Environment variables access
 export const getEnv = (key: string): string | undefined => {
   if (isDeno()) {
-    return Deno.env.get(key);
+    return globalThis.Deno.env.get(key);
   } else {
     return process.env[key];
   }
@@ -18,7 +23,7 @@ export const getEnv = (key: string): string | undefined => {
 
 export const setEnv = (key: string, value: string): void => {
   if (isDeno()) {
-    Deno.env.set(key, value);
+    globalThis.Deno.env.set(key, value);
   } else {
     process.env[key] = value;
   }
@@ -27,7 +32,7 @@ export const setEnv = (key: string, value: string): void => {
 // File system operations
 export const readTextFile = async (path: string): Promise<string> => {
   if (isDeno()) {
-    return await Deno.readTextFile(path);
+    return await globalThis.Deno.readTextFile(path);
   } else {
     const { readFile } = await import('node:fs/promises');
     return await readFile(path, 'utf-8');
@@ -36,7 +41,7 @@ export const readTextFile = async (path: string): Promise<string> => {
 
 export const writeTextFile = async (path: string, content: string): Promise<void> => {
   if (isDeno()) {
-    await Deno.writeTextFile(path, content);
+    await globalThis.Deno.writeTextFile(path, content);
   } else {
     const { writeFile } = await import('node:fs/promises');
     await writeFile(path, content, 'utf-8');
@@ -46,7 +51,7 @@ export const writeTextFile = async (path: string, content: string): Promise<void
 export const exists = async (path: string): Promise<boolean> => {
   try {
     if (isDeno()) {
-      await Deno.stat(path);
+      await globalThis.Deno.stat(path);
       return true;
     } else {
       const { access } = await import('node:fs/promises');
@@ -60,7 +65,7 @@ export const exists = async (path: string): Promise<boolean> => {
 
 export const mkdir = async (path: string, options?: { recursive?: boolean }): Promise<void> => {
   if (isDeno()) {
-    await Deno.mkdir(path, options);
+    await globalThis.Deno.mkdir(path, options);
   } else {
     const { mkdir: nodeMkdir } = await import('node:fs/promises');
     await nodeMkdir(path, options);
@@ -70,15 +75,17 @@ export const mkdir = async (path: string, options?: { recursive?: boolean }): Pr
 // Process operations
 export const exit = (code?: number): never => {
   if (isDeno()) {
-    Deno.exit(code);
+    globalThis.Deno.exit(code);
   } else {
     process.exit(code);
   }
+  // This line should never be reached, but TypeScript requires it
+  throw new Error('Process exit failed');
 };
 
 export const cwd = (): string => {
   if (isDeno()) {
-    return Deno.cwd();
+    return globalThis.Deno.cwd();
   } else {
     return process.cwd();
   }
@@ -86,7 +93,7 @@ export const cwd = (): string => {
 
 export const chdir = (path: string): void => {
   if (isDeno()) {
-    Deno.chdir(path);
+    globalThis.Deno.chdir(path);
   } else {
     process.chdir(path);
   }
@@ -123,7 +130,7 @@ export const runCommand = async (
       commandOptions.env = options.env;
     }
     
-    const command = new Deno.Command(cmd, commandOptions);
+    const command = new globalThis.Deno.Command(cmd, commandOptions);
     
     const { code, stdout, stderr } = await command.output();
     
@@ -134,7 +141,6 @@ export const runCommand = async (
     };
   } else {
     const { spawn } = await import('node:child_process');
-    const { promisify } = await import('node:util');
     
     return new Promise((resolve) => {
       const child = spawn(cmd, args, {
@@ -165,19 +171,64 @@ export const runCommand = async (
   }
 };
 
+export const runInteractiveCommand = async (
+  cmd: string,
+  args: string[],
+  options?: { cwd?: string; env?: Record<string, string> }
+): Promise<number> => {
+  if (isDeno()) {
+    const commandOptions: any = {
+      args,
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    };
+    if (options?.cwd) {
+        commandOptions.cwd = options.cwd;
+    }
+    if (options?.env) {
+        commandOptions.env = options.env;
+    }
+    const command = new globalThis.Deno.Command(cmd, commandOptions);
+    const process = command.spawn();
+    const { code } = await process.status;
+    return code ?? 1;
+  } else {
+    const { spawn } = await import('node:child_process');
+    return new Promise((resolve) => {
+      const child = spawn(cmd, args, {
+        cwd: options?.cwd,
+        env: { ...process.env, ...options?.env },
+        stdio: 'inherit',
+      });
+      child.on('close', (code) => {
+        resolve(code ?? 1);
+      });
+    });
+  }
+};
+
+// Simple color utilities (replacing npm:chalk)
+const colors = {
+  red: (text: string) => `\x1b[31m${text}\x1b[0m`,
+  green: (text: string) => `\x1b[32m${text}\x1b[0m`,
+  yellow: (text: string) => `\x1b[33m${text}\x1b[0m`,
+  blue: (text: string) => `\x1b[34m${text}\x1b[0m`,
+  cyan: (text: string) => `\x1b[36m${text}\x1b[0m`,
+  gray: (text: string) => `\x1b[90m${text}\x1b[0m`,
+  bold: (text: string) => `\x1b[1m${text}\x1b[0m`,
+};
+
 // Console utilities with color support
 export const createConsole = () => {
   let chalk: any;
   
   const initChalk = async () => {
     if (!chalk) {
-      if (isDeno()) {
-        chalk = await import('npm:chalk');
-      } else {
-        chalk = await import('npm:chalk');
-      }
+      // Use built-in colors utility instead of npm:chalk
+      chalk = colors;
     }
-    return chalk.default || chalk;
+    return chalk;
   };
   
   return {
@@ -216,7 +267,7 @@ export const createConsole = () => {
 // Export runtime info
 export const getRuntimeInfo = () => ({
   runtime: isDeno() ? 'deno' : 'node',
-  version: isDeno() ? Deno.version.deno : process.version,
-  platform: isDeno() ? Deno.build.os : process.platform,
-  arch: isDeno() ? Deno.build.arch : process.arch,
+  version: isDeno() ? globalThis.Deno.version.deno : process.version,
+  platform: isDeno() ? globalThis.Deno.build.os : process.platform,
+  arch: isDeno() ? globalThis.Deno.build.arch : process.arch,
 }); 

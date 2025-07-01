@@ -4,22 +4,55 @@
  * Converted from Deno to Node.js with commander.js
  */
 
-import { Command } from 'npm:commander';
+import { Command } from 'commander';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { configManager, ConfigError } from "../config/config-manager.ts";
-import chalk from 'npm:chalk';
+
+// Simple color utilities (replacing chalk)
+const colors = {
+  red: (text: string) => `\x1b[31m${text}\x1b[0m`,
+  green: (text: string) => `\x1b[32m${text}\x1b[0m`,
+  yellow: (text: string) => `\x1b[33m${text}\x1b[0m`,
+  blue: (text: string) => `\x1b[34m${text}\x1b[0m`,
+  cyan: (text: string) => `\x1b[36m${text}\x1b[0m`,
+  magenta: (text: string) => `\x1b[35m${text}\x1b[0m`,
+  bold: (text: string) => `\x1b[1m${text}\x1b[0m`,
+  dim: (text: string) => `\x1b[2m${text}\x1b[0m`,
+  hex: (color: string) => (text: string) => {
+    // Simple hex color mapping to nearest ANSI colors
+    const colorMap: Record<string, string> = {
+      '#FFAA00': '\x1b[33m', // yellow
+      '#00AA00': '\x1b[32m', // green  
+      '#0066CC': '\x1b[36m', // cyan
+      '#FF0000': '\x1b[31m', // red
+    };
+    const ansiColor = colorMap[color] || '\x1b[37m'; // default to white
+    return `${ansiColor}${text}\x1b[0m`;
+  }
+};
+
+// Helper functions for common color combinations
+const colorHelpers = {
+  cyanBold: (text: string) => `\x1b[1;36m${text}\x1b[0m`,
+  greenBold: (text: string) => `\x1b[1;32m${text}\x1b[0m`,
+  yellowBold: (text: string) => `\x1b[1;33m${text}\x1b[0m`,
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const VERSION = '1.0.73';
+const VERSION = '1.1.2';
 
 // Simple in-memory storage for the session
 const memoryStore: Map<string, any> = new Map();
 
 function printError(message: string) {
   console.error(`❌ Error: ${message}`);
+}
+
+function printWarning(message: string) {
+  console.warn(`⚠️  Warning: ${message}`);
 }
 
 // Create local wrapper script for easier execution
@@ -124,68 +157,6 @@ function printSuccess(message: string) {
   console.log(`✅ ${message}`);
 }
 
-function printWarning(message: string) {
-  console.warn(`⚠️  Warning: ${message}`);
-}
-
-function simulateSwarmExecution(config: any) {
-  console.log('🔄 Simulating swarm execution...\n');
-  
-  // Simulate task decomposition based on strategy
-  const tasks = [];
-  switch (config.strategy) {
-    case 'research':
-      tasks.push(
-        { agent: 'researcher-1', task: 'Gather information and sources' },
-        { agent: 'analyzer-1', task: 'Analyze collected data' },
-        { agent: 'synthesizer-1', task: 'Synthesize findings into report' }
-      );
-      break;
-    case 'development':
-      tasks.push(
-        { agent: 'architect-1', task: 'Design system architecture' },
-        { agent: 'developer-1', task: 'Implement core functionality' },
-        { agent: 'tester-1', task: 'Write tests and validate' },
-        { agent: 'documenter-1', task: 'Create documentation' }
-      );
-      break;
-    case 'analysis':
-      tasks.push(
-        { agent: 'collector-1', task: 'Collect relevant data' },
-        { agent: 'analyzer-1', task: 'Perform statistical analysis' },
-        { agent: 'visualizer-1', task: 'Create visualizations' }
-      );
-      break;
-    default:
-      tasks.push(
-        { agent: 'coordinator-1', task: 'Analyze objective and plan approach' },
-        { agent: 'executor-1', task: 'Execute main tasks' },
-        { agent: 'validator-1', task: 'Validate and refine results' }
-      );
-  }
-  
-  console.log(`📋 Task Decomposition (${config.mode} mode):`);
-  tasks.forEach((t, i) => {
-    console.log(`  ${i + 1}. ${t.agent}: ${t.task}`);
-  });
-  
-  console.log('\n🤖 Agent Execution:');
-  tasks.forEach((t, i) => {
-    setTimeout(() => {
-      console.log(`  ✅ ${t.agent} completed: ${t.task}`);
-    }, (i + 1) * 500);
-  });
-  
-  setTimeout(() => {
-    console.log('\n📊 Swarm Results:');
-    console.log(`  - Strategy: ${config.strategy}`);
-    console.log(`  - Tasks Completed: ${tasks.length}`);
-    console.log(`  - Execution Time: ${tasks.length * 0.5}s (simulated)`);
-    console.log(`  - Status: Success`);
-    console.log('\n💡 To run actual swarm execution, install Claude Code');
-  }, (tasks.length + 1) * 500);
-}
-
 // Helper function to launch SPARC execution with comprehensive configuration
 async function launchSparcExecution(mode: string, prompt: string, options: any) {
   const { spawn } = await import('node:child_process');
@@ -259,8 +230,8 @@ Mode: ${mode} | ${options.parallel ? 'Parallel' : 'Sequential'} | Memory: ${opti
       shell: false
     });
     
-    claudeProcess.on('error', (error) => {
-      if (error.code === 'ENOENT') {
+    claudeProcess.on('error', (error: Error) => {
+      if ((error as any).code === 'ENOENT') {
         printError('Claude Code is not installed or not in PATH');
         console.log('\n📦 To install Claude Code:');
         console.log('  1. Install via Cursor/VS Code extension');
@@ -280,7 +251,7 @@ Mode: ${mode} | ${options.parallel ? 'Parallel' : 'Sequential'} | Memory: ${opti
       // Cleanup temp file
       try {
         await fs.unlink(promptFile);
-      } catch (err) {
+      } catch (err: unknown) {
         // Ignore cleanup errors
       }
       
@@ -290,8 +261,8 @@ Mode: ${mode} | ${options.parallel ? 'Parallel' : 'Sequential'} | Memory: ${opti
         console.log(`\n⚠️  SPARC ${mode} exited with code ${code}`);
       }
     });
-  } catch (err) {
-    printError(`Failed to create prompt file: ${err.message}`);
+  } catch (err: unknown) {
+    printError(`Failed to create prompt file: ${(err as Error).message}`);
     console.log('\n💡 Fallback - copy this prompt to use manually:');
     console.log('\n' + '─'.repeat(80));
     console.log(fullPrompt);
@@ -458,12 +429,12 @@ async function createProgram() {
   program.configureHelp({
     formatHelp: (cmd, helper) => {
       let output = '';
-      output += `\n${chalk.cyan.bold('🧠 Claude-Flow v' + VERSION)} - Advanced AI Agent Orchestration System\n\n`;
+      output += `\n${colors.cyan(colors.bold('🧠 Claude-Flow v' + VERSION))} - Advanced AI Agent Orchestration System\n\n`;
       
-      output += chalk.hex("#FFAA00")('USAGE:') + '\n';
+      output += colors.hex("#FFAA00")('USAGE:') + '\n';
       output += '  claude-flow <command> [options]\n\n';
       
-      output += chalk.hex("#FFAA00")('INSTALLATION & SETUP:') + '\n';
+      output += colors.hex("#FFAA00")('INSTALLATION & SETUP:') + '\n';
       output += '  npx claude-flow@latest init --sparc  # Initialize SPARC development environment\n';
       output += '  \n';
       output += '  The --sparc flag creates:\n';
@@ -471,7 +442,7 @@ async function createProgram() {
       output += '  • CLAUDE.md for project instructions\n';
       output += '  • Ready-to-use TDD and code generation environment\n\n';
       
-      output += chalk.hex("#FFAA00")('KEY COMMANDS:') + '\n';
+      output += colors.hex("#FFAA00")('KEY COMMANDS:') + '\n';
       output += '  init [--sparc]                       Initialize project with Claude integration\n';
       output += '  start [--ui]                         Start orchestration (--ui for enhanced UI)\n';
       output += '  spawn <type> [--name <name>]         Create AI agent (alias for agent spawn)\n';
@@ -480,14 +451,14 @@ async function createProgram() {
       output += '  memory <subcommand>                  Manage persistent memory\n';
       output += '  status                               Show system status\n\n';
       
-      output += chalk.hex("#FFAA00")('COMMAND CATEGORIES:') + '\n';
-      output += `  ${chalk.hex("#00AA00")('Core:')}         init, start, status, config\n`;
-      output += `  ${chalk.hex("#00AA00")('Agents:')}       agent, task, claude\n`;
-      output += `  ${chalk.hex("#00AA00")('Development:')}  sparc, memory, workflow\n`;
-      output += `  ${chalk.hex("#00AA00")('Infrastructure:')} mcp, terminal, session\n`;
-      output += `  ${chalk.hex("#00AA00")('Enterprise:')}   project, deploy, cloud, security, analytics\n\n`;
+      output += colors.hex("#FFAA00")('COMMAND CATEGORIES:') + '\n';
+      output += `  ${colors.hex("#00AA00")('Core:')}         init, start, status, config\n`;
+      output += `  ${colors.hex("#00AA00")('Agents:')}       agent, task, claude\n`;
+      output += `  ${colors.hex("#00AA00")('Development:')}  sparc, memory, workflow\n`;
+      output += `  ${colors.hex("#00AA00")('Infrastructure:')} mcp, terminal, session\n`;
+      output += `  ${colors.hex("#00AA00")('Enterprise:')}   project, deploy, cloud, security, analytics\n\n`;
       
-      output += chalk.hex("#FFAA00")('QUICK START:') + '\n';
+      output += colors.hex("#FFAA00")('QUICK START:') + '\n';
       output += '  npx -y claude-flow@latest init --sparc # First-time setup with SPARC modes\n';
       output += '  ./claude-flow start --ui              # Interactive process management UI\n';
       output += '  ./claude-flow sparc modes             # List available development modes\n';
@@ -497,7 +468,7 @@ async function createProgram() {
       output += '  ./claude-flow memory store key "data"  # Store information\n';
       output += '  ./claude-flow status                  # Check system status\n\n';
       
-      output += chalk.hex("#FFAA00")('GET DETAILED HELP:') + '\n';
+      output += colors.hex("#FFAA00")('GET DETAILED HELP:') + '\n';
       output += '  claude-flow help <command>           # Show command-specific help\n';
       output += '  claude-flow <command> --help         # Alternative help syntax\n';
       output += '  \n';
@@ -507,26 +478,26 @@ async function createProgram() {
       output += '    claude-flow help memory            # Memory operations\n';
       output += '    claude-flow agent --help           # Agent subcommands\n\n';
       
-      output += chalk.hex("#FFAA00")('COMMON OPTIONS:') + '\n';
+      output += colors.hex("#FFAA00")('COMMON OPTIONS:') + '\n';
       output += '  --verbose, -v                        Enable detailed output\n';
       output += '  --help                               Show command help\n';
       output += '  --config <path>                      Use custom config file\n\n';
       
-      output += `Documentation: ${chalk.hex("#0066CC")('https://github.com/ruvnet/claude-code-flow')}\n\n`;
-      output += `Created by ${chalk.magenta('rUv')} - Built with ${chalk.hex("#FF0000")('❤️')} for the Claude community\n\n`;
+      output += `Documentation: ${colors.hex("#0066CC")('https://github.com/ruvnet/claude-code-flow')}\n\n`;
+      output += `Created by ${colors.magenta('rUv')} - Built with ${colors.hex("#FF0000")('❤️')} for the Claude community\n\n`;
       
       // List registered commands
-      output += '\n' + chalk.hex("#FFAA00")('Registered Commands:') + '\n';
-      const commands = cmd.commands.filter(c => !c._hidden);
-      const maxCmdLength = Math.max(...commands.map(c => c.name().length));
+      output += '\n' + colors.hex("#FFAA00")('Registered Commands:') + '\n';
+      const commands = cmd.commands.filter((c: any) => !c._hidden);
+      const maxCmdLength = Math.max(...commands.map((c: any) => c.name().length));
       
       commands.forEach(subcmd => {
         const name = subcmd.name().padEnd(maxCmdLength + 2);
         const desc = subcmd.description() || '';
-        output += `  ${chalk.hex("#00AA00")(name)} ${desc}\n`;
+        output += `  ${colors.hex("#00AA00")(name)} ${desc}\n`;
       });
       
-      output += `\nUse "${chalk.cyan('claude-flow help <command>')}" for detailed usage information\n`;
+      output += `\nUse "${colors.cyan('claude-flow help <command>')}" for detailed usage information\n`;
       
       return output;
     }
@@ -700,11 +671,11 @@ async function createProgram() {
       }
       
       if (options.dryRun) {
-        console.log(chalk.hex("#FFAA00")('🔍 Dry run - Task configuration shown above'));
+        console.log(colors.hex("#FFAA00")('🔍 Dry run - Task configuration shown above'));
       } else {
-        console.log(chalk.hex("#00AA00")('✅ Task created successfully with full orchestration support'));
-        console.log(chalk.hex("#0066CC")('\n💡 Features: Dependencies, Scheduling, Resource Management, Checkpoints, Rollback'));
-        console.log(chalk.hex("#0066CC")('💡 Use TodoWrite/Memory for coordination in Claude Code'));
+        console.log(colors.hex("#00AA00")('✅ Task created successfully with full orchestration support'));
+        console.log(colors.hex("#0066CC")('\n💡 Features: Dependencies, Scheduling, Resource Management, Checkpoints, Rollback'));
+        console.log(colors.hex("#0066CC")('💡 Use TodoWrite/Memory for coordination in Claude Code'));
       }
     });
 
@@ -734,7 +705,7 @@ async function createProgram() {
       console.log(`📊 Sort: ${options.sort} (${options.sortDir}), Limit: ${options.limit}, Offset: ${options.offset}`);
       console.log(`🎨 Format: ${options.format}, Dependencies: ${options.showDependencies ? 'yes' : 'no'}`);
       console.log('📋 No tasks currently active (orchestrator not running)');
-      console.log(chalk.hex("#0066CC")('\n💡 Full implementation includes: Dependency visualization, Progress tracking, Performance metrics'));
+      console.log(colors.hex("#0066CC")('\n💡 Full implementation includes: Dependency visualization, Progress tracking, Performance metrics'));
     });
 
   // Task Status - Detailed status with progress and metrics
@@ -767,10 +738,10 @@ async function createProgram() {
       }
       
       if (options.watch) {
-        console.log(chalk.hex("#0066CC")('👀 Watching mode would refresh every 5 seconds...'));
+        console.log(colors.hex("#0066CC")('👀 Watching mode would refresh every 5 seconds...'));
       }
       
-      console.log(chalk.hex("#0066CC")('\n💡 Full implementation includes: Real-time metrics, Checkpoint management, Resource tracking'));
+      console.log(colors.hex("#0066CC")('\n💡 Full implementation includes: Real-time metrics, Checkpoint management, Resource tracking'));
     });
 
   // Task Cancel - Safe cancellation with rollback
@@ -789,10 +760,10 @@ async function createProgram() {
       console.log(`🔗 Cascade: ${options.cascade ? 'enabled' : 'disabled'}`);
       
       if (options.dryRun) {
-        console.log(chalk.hex("#FFAA00")('🔍 Dry run - Would cancel task with safe cleanup and rollback'));
+        console.log(colors.hex("#FFAA00")('🔍 Dry run - Would cancel task with safe cleanup and rollback'));
       } else {
-        console.log(chalk.hex("#00AA00")('✅ Task cancelled successfully with cleanup'));
-        console.log(chalk.hex("#0066CC")('💡 Features: Safe rollback, Resource cleanup, Dependent task handling'));
+        console.log(colors.hex("#00AA00")('✅ Task cancelled successfully with cleanup'));
+        console.log(colors.hex("#0066CC")('💡 Features: Safe rollback, Resource cleanup, Dependent task handling'));
       }
     });
 
@@ -815,7 +786,7 @@ async function createProgram() {
           console.log(`⚡ Max concurrent: ${options.maxConcurrent}`);
           console.log(`🎯 Strategy: ${options.strategy}`);
           console.log(`🛡️  Error handling: ${options.errorHandling}`);
-          console.log(chalk.hex("#00AA00")('✅ Workflow created with parallel processing support'));
+          console.log(colors.hex("#00AA00")('✅ Workflow created with parallel processing support'));
         })
     )
     .addCommand(
@@ -827,9 +798,9 @@ async function createProgram() {
         .action((workflowId, options) => {
           printSuccess(`Executing workflow: ${workflowId}`);
           if (options.monitor) {
-            console.log(chalk.hex("#0066CC")('👀 Monitoring execution with real-time progress...'));
+            console.log(colors.hex("#0066CC")('👀 Monitoring execution with real-time progress...'));
           }
-          console.log(chalk.hex("#00AA00")('🚀 Workflow execution started with orchestration'));
+          console.log(colors.hex("#00AA00")('🚀 Workflow execution started with orchestration'));
         })
     )
     .addCommand(
@@ -843,7 +814,7 @@ async function createProgram() {
           if (options.output) {
             console.log(`💾 Output: ${options.output}`);
           }
-          console.log(chalk.hex("#0066CC")('🕸️  Dependency visualization with orchestration flow'));
+          console.log(colors.hex("#0066CC")('🕸️  Dependency visualization with orchestration flow'));
         })
     );
 
@@ -875,8 +846,8 @@ async function createProgram() {
         
         await configManager.createDefaultConfig(options.file);
         printSuccess(`Configuration initialized: ${options.file}`);
-      } catch (error) {
-        printError(`Failed to initialize configuration: ${error.message}`);
+      } catch (error: unknown) {
+        printError(`Failed to initialize configuration: ${(error as Error).message}`);
       }
     });
 
@@ -889,8 +860,8 @@ async function createProgram() {
         await configManager.load(options.file);
         const config = configManager.show();
         console.log(JSON.stringify(config, null, 2));
-      } catch (error) {
-        printError(`Failed to show configuration: ${error.message}`);
+      } catch (error: unknown) {
+        printError(`Failed to show configuration: ${(error as Error).message}`);
       }
     });
 
@@ -909,7 +880,7 @@ async function createProgram() {
         }
         console.log(JSON.stringify(value, null, 2));
       } catch (error) {
-        printError(`Failed to get configuration: ${error.message}`);
+        printError(`Failed to get configuration: ${(error as Error).message}`);
       }
     });
 
@@ -954,7 +925,7 @@ async function createProgram() {
         await configManager.save();
         printSuccess(`Set ${path} = ${JSON.stringify(parsedValue)}`);
       } catch (error) {
-        printError(`Failed to set configuration: ${error.message}`);
+        printError(`Failed to set configuration: ${(error as Error).message}`);
       }
     });
 
@@ -967,7 +938,7 @@ async function createProgram() {
         await configManager.load(options.file);
         printSuccess('Configuration is valid');
       } catch (error) {
-        printError(`Configuration validation failed: ${error.message}`);
+        printError(`Configuration validation failed: ${(error as Error).message}`);
       }
     });
 
@@ -1218,7 +1189,7 @@ async function createProgram() {
     .description('Check terminal UI compatibility')
     .action(async () => {
       try {
-        const chalk = await import('npm:chalk');
+        const chalk = await import('chalk');
         
         // Inline UI support check
         console.log(chalk.default.cyan.bold('🖥️  UI Support Information'));
@@ -1388,7 +1359,7 @@ async function createProgram() {
         // Prevent CLI from exiting
         await new Promise(() => {}); // Keep running
       } catch (error) {
-        printError(`Failed to start MCP server: ${error.message}`);
+        printError(`Failed to start MCP server: ${error instanceof Error ? error.message : String(error)}`);
       }
     });
 
@@ -1441,7 +1412,7 @@ async function createProgram() {
         const { startNodeREPL } = await import("./node-repl.ts");
         await startNodeREPL(options);
       } catch (error) {
-        printError(`Failed to start REPL: ${error.message}`);
+        printError(`Failed to start REPL: ${error instanceof Error ? error.message : String(error)}`);
       }
     });
 
@@ -1729,7 +1700,7 @@ See .claude/commands/swarm/ for detailed documentation on each strategy.
         // Create local wrapper script
         await createLocalWrapper(options.force);
       } catch (error) {
-        printError(`Failed to initialize project: ${error.message}`);
+        console.error('Error during initialization:', (error as Error).message);
       }
     });
 
@@ -1993,8 +1964,8 @@ Follow the red-green-refactor cycle strictly.`;
           shell: false
         });
         
-        claudeProcess.on('error', (error) => {
-          if (error.code === 'ENOENT') {
+        claudeProcess.on('error', (error: Error) => {
+          if ((error as any).code === 'ENOENT') {
             printError('Claude Code is not installed or not in PATH');
             console.log('\n📦 To install Claude Code:');
             console.log('  1. Install via Cursor/VS Code extension');
@@ -2014,7 +1985,7 @@ Follow the red-green-refactor cycle strictly.`;
           // Cleanup temp file
           try {
             await fs.unlink(promptFile);
-          } catch (err) {
+          } catch (err: unknown) {
             // Ignore cleanup errors
           }
           
@@ -2022,8 +1993,8 @@ Follow the red-green-refactor cycle strictly.`;
             console.log(`\n⚠️  Claude Code exited with code ${code}`);
           }
         });
-      } catch (err) {
-        printError(`Failed to create prompt file: ${err.message}`);
+      } catch (err: unknown) {
+        printError(`Failed to create prompt file: ${(err as Error).message}`);
         console.log('\n💡 Fallback - copy this prompt to use manually:');
         console.log('\n' + '─'.repeat(60));
         console.log(fullPrompt);
@@ -2445,9 +2416,9 @@ Follow the red-green-refactor cycle strictly.`;
       const aspects = options.aspects.split(',');
       
       console.log('\n📊 Analysis Results:');
-      models.forEach(model => {
+      models.forEach((model: string) => {
         console.log(`\n🧠 ${model}:`);
-        aspects.forEach(aspect => {
+        aspects.forEach((aspect: string) => {
           const score = Math.random() * 100;
           console.log(`  • ${aspect}: ${score.toFixed(1)}%`);
         });
@@ -2475,7 +2446,7 @@ Follow the red-green-refactor cycle strictly.`;
       const models = options.models.split(',');
       
       console.log('\n📊 Model Comparison Results:');
-      models.forEach((model, index) => {
+      models.forEach((model: string, index: number) => {
         console.log(`\n🧠 ${model}:`);
         console.log(`  Response length: ${Math.floor(Math.random() * 1000) + 500} tokens`);
         console.log(`  Response time: ${Math.floor(Math.random() * 5) + 2}s`);
@@ -2642,15 +2613,15 @@ Follow the red-green-refactor cycle strictly.`;
     .configureHelp({
       formatHelp: () => {
         return `
-${chalk.cyan.bold('🧠 Claude-Flow Swarm')} - AI Agent Coordination
+${colorHelpers.cyanBold('🧠 Claude-Flow Swarm')} - AI Agent Coordination
 
-${chalk.hex("#FFAA00")('USAGE:')}
+${colors.hex("#FFAA00")('USAGE:')}
   claude-flow swarm [objective] [options]
 
-${chalk.hex("#FFAA00")('ARGUMENTS:')}
+${colors.hex("#FFAA00")('ARGUMENTS:')}
   objective                   The goal or task for the swarm to accomplish
 
-${chalk.hex("#FFAA00")('OPTIONS:')}
+${colors.hex("#FFAA00")('OPTIONS:')}
   --strategy <type>          Execution strategy (default: auto)
                              auto, research, development, analysis, testing, 
                              optimization, maintenance
@@ -2665,28 +2636,28 @@ ${chalk.hex("#FFAA00")('OPTIONS:')}
   --dry-run                  Show configuration without executing
   -h, --help                 Display this help message
 
-${chalk.hex("#FFAA00")('EXAMPLES:')}
+${colors.hex("#FFAA00")('EXAMPLES:')}
   $ claude-flow swarm "Build a REST API" --strategy development
   $ claude-flow swarm "Research cloud architecture" --strategy research --mode distributed
   $ claude-flow swarm "Analyze user data" --strategy analysis --parallel --max-agents 10
 
-${chalk.hex("#FFAA00")('STRATEGIES:')}
-  ${chalk.hex("#00AA00")('auto')}         - Automatically determine best approach
-  ${chalk.hex("#00AA00")('research')}     - Information gathering and analysis  
-  ${chalk.hex("#00AA00")('development')}  - Software development and coding
-  ${chalk.hex("#00AA00")('analysis')}     - Data analysis and insights
-  ${chalk.hex("#00AA00")('testing')}      - Quality assurance workflows
-  ${chalk.hex("#00AA00")('optimization')} - Performance improvements
-  ${chalk.hex("#00AA00")('maintenance')}  - System maintenance tasks
+${colors.hex("#FFAA00")('STRATEGIES:')}
+  ${colors.hex("#00AA00")('auto')}         - Automatically determine best approach
+  ${colors.hex("#00AA00")('research')}     - Information gathering and analysis  
+  ${colors.hex("#00AA00")('development')}  - Software development and coding
+  ${colors.hex("#00AA00")('analysis')}     - Data analysis and insights
+  ${colors.hex("#00AA00")('testing')}      - Quality assurance workflows
+  ${colors.hex("#00AA00")('optimization')} - Performance improvements
+  ${colors.hex("#00AA00")('maintenance')}  - System maintenance tasks
 
-${chalk.hex("#FFAA00")('COORDINATION MODES:')}
-  ${chalk.hex("#00AA00")('centralized')}  - Single coordinator (default)
-  ${chalk.hex("#00AA00")('distributed')}  - Multiple coordinators
-  ${chalk.hex("#00AA00")('hierarchical')} - Tree structure
-  ${chalk.hex("#00AA00")('mesh')}         - Peer-to-peer
-  ${chalk.hex("#00AA00")('hybrid')}       - Mixed patterns
+${colors.hex("#FFAA00")('COORDINATION MODES:')}
+  ${colors.hex("#00AA00")('centralized')}  - Single coordinator (default)
+  ${colors.hex("#00AA00")('distributed')}  - Multiple coordinators
+  ${colors.hex("#00AA00")('hierarchical')} - Tree structure
+  ${colors.hex("#00AA00")('mesh')}         - Peer-to-peer
+  ${colors.hex("#00AA00")('hybrid')}       - Mixed patterns
 
-${chalk.hex("#FFAA00")('SUBCOMMANDS:')}
+${colors.hex("#FFAA00")('SUBCOMMANDS:')}
   list                       List recent swarm runs
   status <id>                Show status of a swarm run
 
@@ -2873,8 +2844,8 @@ Use ▶ to indicate actionable items`;
           shell: false
         });
 
-        claudeProcess.on('error', (error) => {
-          if (error.code === 'ENOENT') {
+        claudeProcess.on('error', (error: Error) => {
+          if ((error as any).code === 'ENOENT') {
             printError('Claude Code is not installed or not in PATH');
             console.log('\n📦 To install Claude Code:');
             console.log('  1. Install via Cursor/VS Code extension');
@@ -2894,7 +2865,7 @@ Use ▶ to indicate actionable items`;
           // Cleanup temp file
           try {
             await fs.unlink(promptFile);
-          } catch (err) {
+          } catch (err: unknown) {
             // Ignore cleanup errors
           }
           
@@ -2909,14 +2880,14 @@ Use ▶ to indicate actionable items`;
               await fs.writeFile(resultsPath, JSON.stringify(swarmConfig, null, 2));
               console.log(`📊 Results saved to: ${resultsPath}`);
             } catch (err) {
-              console.error(`Failed to save results: ${err.message}`);
+              console.error(`Failed to save results: ${err instanceof Error ? err.message : String(err)}`);
             }
           } else if (code !== null) {
             console.log(`\n⚠️  Swarm exited with code ${code}`);
           }
         });
       } catch (err) {
-        printError(`Failed to create prompt file: ${err.message}`);
+        printError(`Failed to create prompt file: ${err instanceof Error ? err.message : String(err)}`);
         // Fallback to simulation
         simulateSwarmExecution(swarmConfig);
       }
@@ -3074,7 +3045,8 @@ Use ▶ to indicate actionable items`;
             await fs.writeFile(path.join(sparcDir, file), content);
             console.log(`   ✅ Copied SPARC command file: ${file}`);
           } catch (copyError) {
-            console.log(`   ⚠️  Could not copy ${file}: ${copyError.message}`);
+            console.error('Error copying prompt:', (copyError as Error).message);
+            console.log(`   ⚠️  Could not copy ${file}: ${copyError instanceof Error ? copyError.message : String(copyError)}`);
           }
         }
       }
@@ -3434,7 +3406,7 @@ async function main() {
 
     await program.parseAsync(process.argv);
   } catch (error) {
-    printError(`Failed to execute command: ${error.message}`);
+    printError(`Failed to execute command: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
   }
 }
@@ -3442,4 +3414,28 @@ async function main() {
 // Check if this file is being run directly
 if (import.meta.url === `file://${process.argv[1]}`) {
   await main();
+}
+
+// Add missing simulateSwarmExecution function
+function simulateSwarmExecution(swarmConfig: any): void {
+  printSuccess('🔄 Simulating Swarm Execution');
+  console.log(`📋 Objective: ${swarmConfig.objective}`);
+  console.log(`🎯 Strategy: ${swarmConfig.strategy}`);
+  console.log(`🔗 Mode: ${swarmConfig.mode}`);
+  console.log(`👥 Max Agents: ${swarmConfig.maxAgents}`);
+  console.log(`⏱️  Timeout: ${swarmConfig.timeout} minutes`);
+  
+  console.log('\n🚀 Starting agent coordination...');
+  console.log('✅ Agent 1: Research specialist initialized');
+  console.log('✅ Agent 2: Analysis coordinator initialized');
+  console.log('✅ Agent 3: Implementation specialist initialized');
+  
+  console.log('\n📊 Simulation Results:');
+  console.log('• Total tasks: 12');
+  console.log('• Completed: 12');
+  console.log('• Success rate: 100%');
+  console.log('• Execution time: 2.3s (simulated)');
+  
+  console.log('\n✅ Swarm simulation completed successfully');
+  console.log('💡 This is a simulation - real execution requires full installation');
 }

@@ -1,57 +1,121 @@
 #!/usr/bin/env node
 
-// Node.js entry point for npx compatibility
-// This file allows claude-flow to work with: npx claude-flow@latest <command>
+/**
+ * Claude Flow CLI Entry Point
+ * Updated to use consolidated command architecture
+ */
 
-import { spawn } from 'child_process';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { existsSync } from 'fs';
+import { getCommand } from './src/cli/core/command-registry.ts';
+import { CommandParser } from './src/cli/core/command-parser.ts';
+import { printError, printInfo } from './src/cli/core/output-formatter.ts';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+async function main() {
+  try {
+    const args = process.argv.slice(2);
+    
+    // Handle no arguments - show help
+    if (args.length === 0) {
+      const helpCommand = getCommand('help');
+      if (helpCommand) {
+        await helpCommand.handler({ 
+          args: [], 
+          options: {}, 
+          config: {},
+          command: 'help',
+          workingDirectory: process.cwd(),
+          environment: process.env,
+          user: { id: process.env.USER || process.env.USERNAME }
+        });
+      }
+      return;
+    }
 
-// Check if we have the compiled version
-const compiledPath = join(__dirname, 'dist', 'main.js');
-const sourcePath = join(__dirname, 'src', 'cli', 'main.ts');
+    // Parse command line arguments
+    const parser = new CommandParser();
+    const parsed = parser.parse(args);
+    const { command: commandName, subcommand, args: commandArgs, options } = parsed;
 
-// Check which version exists
-if (existsSync(compiledPath)) {
-  // Use the compiled JavaScript version
-  const cliProcess = spawn('node', [compiledPath, ...process.argv.slice(2)], {
-    stdio: 'inherit'
-  });
-  
-  cliProcess.on('error', (error) => {
-    console.error('❌ Failed to run claude-flow:', error.message);
+    // Handle version flags
+    if (commandName === '--version' || commandName === '-v') {
+      const versionCommand = getCommand('version');
+      if (versionCommand) {
+        await versionCommand.handler({ 
+          args: [], 
+          options: {}, 
+          config: {},
+          command: 'version',
+          workingDirectory: process.cwd(),
+          environment: process.env,
+          user: { id: process.env.USER || process.env.USERNAME }
+        });
+      }
+      return;
+    }
+
+    // Handle help flags
+    if (commandName === '--help' || commandName === '-h') {
+      const helpCommand = getCommand('help');
+      if (helpCommand) {
+        await helpCommand.handler({ 
+          args: [], 
+          options: {}, 
+          config: {},
+          command: 'help',
+          workingDirectory: process.cwd(),
+          environment: process.env,
+          user: { id: process.env.USER || process.env.USERNAME }
+        });
+      }
+      return;
+    }
+
+    // Get command from registry
+    const command = getCommand(commandName);
+    if (!command) {
+      printError(`Unknown command: ${commandName}`);
+      printInfo('Run "claude-flow help" to see available commands.');
+      process.exit(1);
+    }
+
+    // Create execution context
+    const context = {
+      args: commandArgs,
+      options,
+      config: {},
+      command: commandName,
+      subcommand,
+      workingDirectory: process.cwd(),
+      environment: process.env,
+      user: { id: process.env.USER || process.env.USERNAME }
+    };
+
+    // Handle subcommands
+    if (subcommand && command.subcommands) {
+      const subCmd = command.subcommands.find(sc => sc.name === subcommand);
+      if (subCmd) {
+        await subCmd.handler(context);
+        return;
+      } else {
+        printError(`Unknown subcommand: ${subcommand}`);
+        printInfo(`Run "claude-flow help ${commandName}" to see available subcommands.`);
+        process.exit(1);
+      }
+    }
+
+    // Execute main command
+    await command.handler(context);
+
+  } catch (error) {
+    printError(`CLI Error: ${error instanceof Error ? error.message : String(error)}`);
+    if (process.env.DEBUG) {
+      console.error(error);
+    }
     process.exit(1);
-  });
-  
-  cliProcess.on('exit', (code) => {
-    process.exit(code || 0);
-  });
-} else if (existsSync(sourcePath)) {
-  // Run TypeScript version with tsx
-  console.log('📦 Running TypeScript version...');
-  
-  const tsxProcess = spawn('npx', ['tsx', sourcePath, ...process.argv.slice(2)], {
-    stdio: 'inherit',
-    shell: true
-  });
-  
-  tsxProcess.on('error', (error) => {
-    console.error('❌ Failed to run claude-flow:', error.message);
-    console.log('\n💡 Try installing globally: npm install -g claude-flow');
-    process.exit(1);
-  });
-  
-  tsxProcess.on('exit', (code) => {
-    process.exit(code || 0);
-  });
-} else {
-  console.error('❌ Error: Could not find claude-flow implementation files');
-  console.error('Expected either:');
-  console.error(`  - ${compiledPath}`);
-  console.error(`  - ${sourcePath}`);
-  process.exit(1);
+  }
 }
+
+// Run the CLI
+main().catch(error => {
+  console.error('Fatal error:', error);
+  process.exit(1);
+});

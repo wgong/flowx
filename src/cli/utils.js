@@ -1,4 +1,6 @@
 // utils.js - Shared CLI utility functions
+import { promises as fs } from 'node:fs';
+import { spawn } from 'node:child_process';
 
 // Color formatting functions
 export function printSuccess(message) {
@@ -29,10 +31,10 @@ export function validateArgs(args, minLength, usage) {
 // File system helpers
 export async function ensureDirectory(path) {
   try {
-    await Deno.mkdir(path, { recursive: true });
+    await fs.mkdir(path, { recursive: true });
     return true;
   } catch (err) {
-    if (!(err instanceof Deno.errors.AlreadyExists)) {
+    if (err.code !== 'EEXIST') {
       throw err;
     }
     return true;
@@ -41,7 +43,7 @@ export async function ensureDirectory(path) {
 
 export async function fileExists(path) {
   try {
-    await Deno.stat(path);
+    await fs.stat(path);
     return true;
   } catch {
     return false;
@@ -51,7 +53,7 @@ export async function fileExists(path) {
 // JSON helpers
 export async function readJsonFile(path, defaultValue = {}) {
   try {
-    const content = await Deno.readTextFile(path);
+    const content = await fs.readFile(path, 'utf8');
     return JSON.parse(content);
   } catch {
     return defaultValue;
@@ -59,7 +61,7 @@ export async function readJsonFile(path, defaultValue = {}) {
 }
 
 export async function writeJsonFile(path, data) {
-  await Deno.writeTextFile(path, JSON.stringify(data, null, 2));
+  await fs.writeFile(path, JSON.stringify(data, null, 2));
 }
 
 // String helpers
@@ -119,18 +121,33 @@ export function parseFlags(args) {
 // Process execution helpers
 export async function runCommand(command, args = [], options = {}) {
   try {
-    const cmd = new Deno.Command(command, {
-      args,
+    const childProcess = spawn(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
       ...options
     });
     
-    const result = await cmd.output();
+    let stdout = '';
+    let stderr = '';
+    
+    childProcess.stdout?.on('data', (data) => {
+      stdout += data.toString();
+    });
+    
+    childProcess.stderr?.on('data', (data) => {
+      stderr += data.toString();
+    });
+    
+    const code = await new Promise((resolve) => {
+      childProcess.on('close', (code) => {
+        resolve(code || 0);
+      });
+    });
     
     return {
-      success: result.code === 0,
-      code: result.code,
-      stdout: new TextDecoder().decode(result.stdout),
-      stderr: new TextDecoder().decode(result.stderr)
+      success: code === 0,
+      code,
+      stdout,
+      stderr
     };
   } catch (err) {
     return {
@@ -162,7 +179,7 @@ export async function loadConfig(path = 'claude-flow.config.json') {
   };
   
   try {
-    const content = await Deno.readTextFile(path);
+    const content = await fs.readFile(path, 'utf8');
     return { ...defaultConfig, ...JSON.parse(content) };
   } catch {
     return defaultConfig;
@@ -191,11 +208,11 @@ export function chunk(array, size) {
 
 // Environment helpers
 export function getEnvVar(name, defaultValue = null) {
-  return Deno.env.get(name) ?? defaultValue;
+  return process.env[name] ?? defaultValue;
 }
 
 export function setEnvVar(name, value) {
-  Deno.env.set(name, value);
+  process.env[name] = value;
 }
 
 // Validation helpers
@@ -217,15 +234,14 @@ export function isValidUrl(str) {
   }
 }
 
-// Progress and status helpers
+// Progress helpers
 export function showProgress(current, total, message = '') {
-  const percentage = Math.round((current / total) * 100);
-  const bar = '█'.repeat(Math.round(percentage / 5)) + '░'.repeat(20 - Math.round(percentage / 5));
-  console.log(`\r${bar} ${percentage}% ${message}`);
+  const percent = Math.round((current / total) * 100);
+  process.stdout.write(`\r${message} ${percent}% (${current}/${total})`);
 }
 
 export function clearLine() {
-  console.log('\r\x1b[K');
+  process.stdout.write('\r\x1b[K');
 }
 
 // Async helpers
@@ -237,11 +253,11 @@ export async function retry(fn, maxAttempts = 3, delay = 1000) {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await fn();
-    } catch (err) {
+    } catch (error) {
       if (attempt === maxAttempts) {
-        throw err;
+        throw error;
       }
-      await sleep(delay * attempt);
+      await sleep(delay);
     }
   }
 }

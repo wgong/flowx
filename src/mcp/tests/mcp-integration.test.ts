@@ -2,7 +2,8 @@
  * Comprehensive MCP Integration Tests
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi, Mock } from 'vitest';
+// Use Jest instead of Vitest
+type Mock = jest.Mock;
 import { MCPServer } from "../server.ts";
 import { MCPLifecycleManager, LifecycleState } from "../lifecycle-manager.ts";
 import { MCPPerformanceMonitor } from "../performance-monitor.ts";
@@ -16,10 +17,10 @@ import { EventEmitter } from 'node:events';
 
 // Mock logger
 const mockLogger: ILogger = {
-  debug: vi.fn(),
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
+  debug: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
 };
 
 // Mock event bus
@@ -84,7 +85,7 @@ describe('MCP Server', () => {
 
       // Mock transport handler
       const transport = (server as any).transport;
-      transport.onRequest = vi.fn();
+      transport.onRequest = jest.fn();
       
       const response = await (server as any).handleRequest(request);
       
@@ -110,7 +111,7 @@ describe('MCP Server', () => {
             input: { type: 'string' },
           },
         },
-        handler: vi.fn().mockResolvedValue('test result'),
+        handler: jest.fn().mockResolvedValue('test result'),
       };
 
       server.registerTool(tool);
@@ -122,14 +123,14 @@ describe('MCP Server', () => {
         name: 'test/tool1',
         description: 'Test tool 1',
         inputSchema: { type: 'object', properties: {} },
-        handler: vi.fn(),
+        handler: jest.fn(),
       };
 
       const tool2 = {
         name: 'test/tool2',
         description: 'Test tool 2',
         inputSchema: { type: 'object', properties: {} },
-        handler: vi.fn(),
+        handler: jest.fn(),
       };
 
       server.registerTool(tool1);
@@ -172,7 +173,7 @@ describe('MCP Lifecycle Manager', () => {
   let mockServerFactory: Mock;
 
   beforeEach(() => {
-    mockServerFactory = vi.fn(() => new MCPServer(
+    mockServerFactory = jest.fn(() => new MCPServer(
       mockMCPConfig,
       mockEventBus,
       mockLogger,
@@ -378,7 +379,7 @@ describe('Tool Registry', () => {
             input: { type: 'string' },
           },
         },
-        handler: vi.fn().mockResolvedValue('test result'),
+        handler: jest.fn().mockResolvedValue('test result'),
       };
 
       const capability = {
@@ -401,14 +402,14 @@ describe('Tool Registry', () => {
         name: 'file/read',
         description: 'Read files',
         inputSchema: { type: 'object', properties: {} },
-        handler: vi.fn(),
+        handler: jest.fn(),
       };
 
       const tool2 = {
         name: 'memory/query',
         description: 'Query memory',
         inputSchema: { type: 'object', properties: {} },
-        handler: vi.fn(),
+        handler: jest.fn(),
       };
 
       toolRegistry.register(tool1);

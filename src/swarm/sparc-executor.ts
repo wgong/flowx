@@ -26,7 +26,7 @@ export class SparcTaskExecutor {
   private enableTDD: boolean;
   private qualityThreshold: number;
   private enableMemory: boolean;
-  private phases: Map<string, SparcPhase>;
+  private phases: Map<string, SparcPhase> = new Map();
 
   constructor(config: SparcExecutorConfig = {}) {
     this.logger = config.logger || new Logger(
@@ -122,7 +122,7 @@ export class SparcTaskExecutor {
     } catch (error) {
       this.logger.error('SPARC task execution failed', {
         taskId: task.id.id,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       });
       throw error;
     }
@@ -146,7 +146,7 @@ export class SparcTaskExecutor {
       case 'researcher':
         return this.executePseudocodePhase(task, targetDir);
       
-      case 'architect':
+      case 'developer':
       case 'coordinator':
         if (task.name.includes('Architecture') || objective.includes('design')) {
           return this.executeArchitecturePhase(task, targetDir);
@@ -438,13 +438,11 @@ export class SparcTaskExecutor {
   }
 
   private generateUserStories(appType: string): any[] {
-    const stories = {
+    const stories: Record<string, any[]> = {
       'rest-api': [
-        { id: 'US001', story: 'As a developer, I want to create resources via POST endpoints', priority: 'high' },
-        { id: 'US002', story: 'As a developer, I want to retrieve resources via GET endpoints', priority: 'high' },
-        { id: 'US003', story: 'As a developer, I want to update resources via PUT/PATCH endpoints', priority: 'medium' },
-        { id: 'US004', story: 'As a developer, I want to delete resources via DELETE endpoints', priority: 'medium' },
-        { id: 'US005', story: 'As a developer, I want API documentation to understand endpoints', priority: 'high' }
+        { id: 'US001', story: 'As a user, I want to access API endpoints securely', priority: 'high' },
+        { id: 'US002', story: 'As a user, I want to receive consistent JSON responses', priority: 'high' },
+        { id: 'US003', story: 'As a user, I want to handle errors gracefully', priority: 'medium' }
       ],
       'python-web': [
         { id: 'US001', story: 'As a user, I want to access the web application via browser', priority: 'high' },
@@ -464,7 +462,7 @@ export class SparcTaskExecutor {
   }
 
   private generateAcceptanceCriteria(appType: string): any {
-    const criteria = {
+    const criteria: Record<string, any> = {
       'rest-api': {
         endpoints: ['All CRUD operations return appropriate status codes', 'API responses follow consistent format'],
         performance: ['Response time < 200ms for simple queries', 'Can handle 100 concurrent requests'],
@@ -556,7 +554,7 @@ export class SparcTaskExecutor {
   // Utility methods for language-specific details
 
   private getTestFramework(language: string): string {
-    const frameworks = {
+    const frameworks: Record<string, string> = {
       python: 'pytest',
       javascript: 'jest',
       typescript: 'jest',
@@ -566,7 +564,8 @@ export class SparcTaskExecutor {
   }
 
   private getProjectStructure(appType: string, language: string): any {
-    const structures = {
+    const key = `${language}-${appType}`;
+    const structures: Record<string, any> = {
       'python-rest-api': {
         directories: ['src', 'tests', 'docs', 'config', 'migrations', 'scripts'],
         files: ['requirements.txt', 'setup.py', 'pytest.ini', '.gitignore', 'Dockerfile']
@@ -577,7 +576,7 @@ export class SparcTaskExecutor {
       }
     };
     
-    return structures[`${language}-${appType}`] || {
+    return structures[key] || {
       directories: ['src', 'tests', 'docs'],
       files: ['README.md', '.gitignore']
     };
@@ -597,7 +596,7 @@ export class SparcTaskExecutor {
   }
 
   private getSourceFileName(name: string, language: string): string {
-    const extensions = {
+    const extensions: Record<string, string> = {
       python: 'py',
       javascript: 'js',
       typescript: 'ts',
@@ -609,7 +608,7 @@ export class SparcTaskExecutor {
   // Content generation methods
 
   private getFunctionalRequirements(appType: string): string[] {
-    const requirements = {
+    const requirements: Record<string, string[]> = {
       'rest-api': [
         'Implement RESTful endpoints for all resources',
         'Support JSON request/response format',
@@ -637,7 +636,22 @@ export class SparcTaskExecutor {
   }
 
   private getNonFunctionalRequirements(appType: string): string[] {
-    return [
+    const requirements: Record<string, string[]> = {
+      'rest-api': [
+        'Response time < 200ms for simple queries',
+        'Support 1000 concurrent users',
+        'API rate limiting implemented',
+        'Comprehensive error handling'
+      ],
+      'data-pipeline': [
+        'Process 1M records in < 10 minutes',
+        'Memory usage < 2GB for large datasets',
+        'Fault tolerance and recovery',
+        'Data validation and quality checks'
+      ]
+    };
+    
+    return requirements[appType] || [
       'Response time < 500ms for 95% of requests',
       'Support 1000 concurrent users',
       '99.9% uptime availability',
@@ -647,24 +661,30 @@ export class SparcTaskExecutor {
   }
 
   private getTechnicalRequirements(appType: string): string[] {
-    const tech = {
+    const requirements: Record<string, string[]> = {
       'rest-api': [
-        'Use appropriate web framework (Express, Flask, FastAPI)',
-        'Implement database ORM/ODM',
-        'Use environment variables for configuration',
-        'Implement proper error handling',
-        'Add request validation middleware'
+        'Use modern web framework (FastAPI, Express, Spring Boot)',
+        'Implement proper database connection pooling',
+        'Use environment-based configuration',
+        'Implement comprehensive logging',
+        'Use containerization (Docker)'
       ],
       'data-pipeline': [
-        'Use pandas for data manipulation',
-        'Implement parallel processing for large datasets',
-        'Use appropriate data storage (SQL, NoSQL)',
-        'Implement data validation rules',
-        'Add progress tracking for long operations'
+        'Use streaming processing where possible',
+        'Implement data quality checks',
+        'Use appropriate data storage formats',
+        'Implement monitoring and alerting',
+        'Use distributed processing for large datasets'
       ]
     };
     
-    return tech[appType] || ['Follow best practices for the technology stack'];
+    return requirements[appType] || [
+      'Use industry-standard technologies',
+      'Follow security best practices',
+      'Implement proper error handling',
+      'Use version control and CI/CD',
+      'Document all technical decisions'
+    ];
   }
 
   private getBusinessRequirements(appType: string): string[] {
@@ -790,23 +810,29 @@ class TestAPI:
   }
 
   private generateTestFixtures(appType: string): any {
+    // Return minimal test fixtures structure instead of mock data
     return {
-      users: [
-        { id: 1, username: 'user1', email: 'user1@example.com' },
-        { id: 2, username: 'user2', email: 'user2@example.com' }
-      ],
-      products: [
-        { id: 1, name: 'Product 1', price: 99.99 },
-        { id: 2, name: 'Product 2', price: 149.99 }
-      ]
+      users: [],
+      products: [],
+      // Add other fixture types as needed
     };
   }
 
   private generateMocks(appType: string): any {
+    // Return configuration for mocking rather than mock implementations
     return {
-      database: 'Mock database connection',
-      externalAPI: 'Mock external API calls',
-      fileSystem: 'Mock file system operations'
+      database: {
+        type: 'mock',
+        config: 'Configure database mocking in test environment'
+      },
+      externalAPI: {
+        type: 'mock', 
+        config: 'Configure API mocking in test environment'
+      },
+      fileSystem: {
+        type: 'mock',
+        config: 'Configure file system mocking in test environment'
+      }
     };
   }
 

@@ -49,8 +49,8 @@ export class MCPClient {
 
     const response = await this.transport.sendRequest(request);
     
-    if ('error' in response) {
-      throw new Error(response.error.message);
+    if (response.error) {
+      throw new Error(response.error.message || 'MCP request failed');
     }
 
     return response.result;

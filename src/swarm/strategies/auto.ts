@@ -495,7 +495,8 @@ export class AutoStrategy extends BaseStrategy {
         to: 'created',
         reason: 'Task created by AutoStrategy',
         triggeredBy: 'system'
-      }]
+      }],
+      dependsOn: params.dependencies?.map(dep => dep.toString()) || []
     };
   }
 
@@ -729,7 +730,7 @@ export class AutoStrategy extends BaseStrategy {
         endTime: currentTime + duration,
         tasks: [task.id.id],
         agents: [], // To be filled by allocation
-        dependencies: task.constraints.dependencies
+        dependencies: task.constraints.dependencies.map(dep => dep.id)
       });
       currentTime += duration;
     }

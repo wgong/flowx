@@ -3,6 +3,7 @@
  */
 
 import { Command } from 'commander';
+import { promises as fs } from 'node:fs';
 import { colors } from '../../utils/colors.ts';
 import Table from 'cli-table3';
 
@@ -19,7 +20,7 @@ export class SimpleMemoryManager {
 
   async load() {
     try {
-      const content = await Deno.readTextFile(this.filePath);
+      const content = await fs.readFile(this.filePath, 'utf8');
       this.data = JSON.parse(content);
     } catch {
       // File doesn't exist yet
@@ -28,8 +29,8 @@ export class SimpleMemoryManager {
   }
 
   async save() {
-    await Deno.mkdir("./memory", { recursive: true });
-    await Deno.writeTextFile(this.filePath, JSON.stringify(this.data, null, 2));
+    await fs.mkdir("./memory", { recursive: true });
+    await fs.writeFile(this.filePath, JSON.stringify(this.data, null, 2));
   }
 
   async store(key: string, value: string, namespace: string = "default") {
@@ -87,17 +88,17 @@ export class SimpleMemoryManager {
       totalEntries,
       namespaces: Object.keys(this.data).length,
       namespaceStats,
-      sizeBytes: new TextEncoder().encode(JSON.stringify(this.data)).length
+      sizeBytes: Buffer.from(JSON.stringify(this.data)).length
     };
   }
 
   async exportData(filePath: string) {
     await this.load();
-    await Deno.writeTextFile(filePath, JSON.stringify(this.data, null, 2));
+    await fs.writeFile(filePath, JSON.stringify(this.data, null, 2));
   }
 
   async importData(filePath: string) {
-    const content = await Deno.readTextFile(filePath);
+    const content = await fs.readFile(filePath, 'utf8');
     this.data = JSON.parse(content);
     await this.save();
   }
@@ -160,3 +161,22 @@ export function createMemoryCommands(program: Command) {
       }
     });
 }
+
+export const memoryCommand = new Command()
+  .description('Manage persistent memory and knowledge base')
+  .action(() => {
+    console.log(colors.cyan('🧠 Claude-Flow Memory Management System'));
+    console.log('');
+    console.log('Available commands:');
+    console.log('  query <query>      - Query the memory bank');
+    console.log('  store <key> <value> - Store a key-value pair');
+    console.log('  stats              - Show memory statistics');
+    console.log('  export <file>      - Export memory data');
+    console.log('  import <file>      - Import memory data');
+    console.log('  cleanup [days]     - Clean up old entries');
+    console.log('');
+    console.log('Use --help with any command for detailed options.');
+  });
+
+// Add the commands to the memory command
+createMemoryCommands(memoryCommand);

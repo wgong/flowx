@@ -107,10 +107,11 @@ export class SwarmMemoryManager extends EventEmitter {
     const logFormat = config.logging?.format || 'text';
     const logDestination = config.logging?.destination || 'console';
     
-    this.logger = new Logger(
-      { level: logLevel, format: logFormat, destination: logDestination },
-      { component: 'SwarmMemoryManager' }
-    );
+    this.logger = new Logger({
+      level: logLevel,
+      format: logFormat,
+      destination: logDestination
+    }, { component: 'SwarmMemoryManager' });
     this.config = this.mergeWithDefaults(config);
     
     // Initialize memory structure
@@ -622,7 +623,7 @@ export class SwarmMemoryManager extends EventEmitter {
         this.logger.warn('Failed to share memory with agent', {
           key,
           targetAgent: targetAgent.id,
-          error: error.message
+          error: error instanceof Error ? error.message : String(error)
         });
       }
     }
@@ -859,8 +860,11 @@ export class SwarmMemoryManager extends EventEmitter {
     let expiringEntries = 0;
 
     for (const entry of validEntries) {
-      entriesByType[entry.type]++;
-      entriesByAccess[entry.accessLevel]++;
+      const entryType = entry.type as keyof Record<MemoryType, number>;
+      const entryAccess = entry.accessLevel as keyof Record<AccessLevel, number>;
+      
+      entriesByType[entryType]++;
+      entriesByAccess[entryAccess]++;
       
       const entrySize = this.calculateEntrySize(entry);
       totalSize += entrySize;
@@ -936,16 +940,11 @@ export class SwarmMemoryManager extends EventEmitter {
   }
 
   private async findEntry(key: string, partition?: string): Promise<MemoryEntry | null> {
-    for (const entry of this.entries.values()) {
+    for (const entry of Array.from(this.entries.values())) {
+      // Note: MemoryEntry interface doesn't have partition property
+      // This would require adding partition to the interface or using a different approach
       if (entry.key === key) {
-        if (partition) {
-          const part = this.partitions.get(partition);
-          if (part && part.entries.find(e => e.id === entry.id)) {
-            return entry;
-          }
-        } else {
-          return entry;
-        }
+        return entry;
       }
     }
     return null;

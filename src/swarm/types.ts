@@ -942,6 +942,7 @@ export interface SwarmConfig {
   // Resource limits
   maxAgents: number;
   maxTasks: number;
+  maxConcurrentTasks: number;
   maxDuration: number;
   taskTimeoutMinutes?: number;
   resourceLimits: Record<string, number>;

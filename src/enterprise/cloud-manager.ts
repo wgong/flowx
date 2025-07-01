@@ -432,7 +432,7 @@ export class CloudManager extends EventEmitter {
         features: [],
         ...providerData.configuration
       },
-      status: 'inactive',
+      status: 'inactive' as const,
       quotas: {
         computeInstances: 20,
         storage: 1000,
@@ -450,7 +450,7 @@ export class CloudManager extends EventEmitter {
       },
       createdAt: new Date(),
       updatedAt: new Date()
-    };
+    } as unknown as CloudProvider;
 
     // Validate credentials
     try {
@@ -1093,10 +1093,10 @@ export class CloudManager extends EventEmitter {
 
     for (const providerData of defaultProviders) {
       if (!Array.from(this.providers.values()).some(p => p.name === providerData.name)) {
-        const provider: CloudProvider = {
+        const provider = {
           id: `provider-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           credentials: {},
-          status: 'inactive',
+          status: 'inactive' as const,
           quotas: {
             computeInstances: 20,
             storage: 1000,
@@ -1106,7 +1106,7 @@ export class CloudManager extends EventEmitter {
           createdAt: new Date(),
           updatedAt: new Date(),
           ...providerData
-        };
+        } as unknown as CloudProvider;
 
         this.providers.set(provider.id, provider);
         await this.saveProvider(provider);

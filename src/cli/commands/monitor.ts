@@ -2,17 +2,91 @@
  * Monitor command for Claude-Flow - Live dashboard mode
  */
 
-import { Command } from '@cliffy/command';
-import { colors } from '@cliffy/ansi/colors';
-import { Table } from '@cliffy/table';
-import { formatProgressBar, formatDuration, formatStatusIndicator } from "../formatter.ts";
+import { Command } from 'commander';
+import { formatProgressBar, formatDuration, formatStatusIndicator } from "../formatter.js";
+import { existsSync } from "node:fs";
 
-export const monitorCommand = new Command()
+// Color utilities
+const colors = {
+  red: (text: string) => `\x1b[31m${text}\x1b[0m`,
+  green: (text: string) => `\x1b[32m${text}\x1b[0m`,
+  yellow: (text: string) => `\x1b[33m${text}\x1b[0m`,
+  blue: (text: string) => `\x1b[34m${text}\x1b[0m`,
+  magenta: (text: string) => `\x1b[35m${text}\x1b[0m`,
+  cyan: (text: string) => `\x1b[36m${text}\x1b[0m`,
+  white: (text: string) => `\x1b[37m${text}\x1b[0m`,
+  gray: (text: string) => `\x1b[90m${text}\x1b[0m`,
+  bold: (text: string) => `\x1b[1m${text}\x1b[0m`,
+  dim: (text: string) => `\x1b[2m${text}\x1b[0m`,
+};
+
+// Color combination helpers
+const colorCombos = {
+  cyanBold: (text: string) => `\x1b[1;36m${text}\x1b[0m`,
+  whiteBold: (text: string) => `\x1b[1;37m${text}\x1b[0m`,
+  redBold: (text: string) => `\x1b[1;31m${text}\x1b[0m`,
+};
+
+// Simple table utility
+class Table {
+  private headers: string[] = [];
+  private rows: string[][] = [];
+  private hasBorder: boolean = false;
+
+  constructor() {}
+
+  header(headers: string[]): this {
+    this.headers = headers;
+    return this;
+  }
+
+  push(row: string[]): this {
+    this.rows.push(row);
+    return this;
+  }
+
+  border(enabled: boolean): this {
+    this.hasBorder = enabled;
+    return this;
+  }
+
+  render(): void {
+    console.log(this.toString());
+  }
+
+  toString(): string {
+    if (this.headers.length === 0 && this.rows.length === 0) {
+      return '';
+    }
+
+    const allRows = this.headers.length > 0 ? [this.headers, ...this.rows] : this.rows;
+    const colWidths = this.headers.map((_, i) => 
+      Math.max(...allRows.map(row => (row[i] || '').length))
+    );
+
+    let result = '';
+    
+    if (this.headers.length > 0) {
+      result += this.headers.map((header, i) => header.padEnd(colWidths[i])).join(' | ') + '\n';
+      result += colWidths.map(width => '-'.repeat(width)).join('-+-') + '\n';
+    }
+
+    for (const row of this.rows) {
+      result += row.map((cell, i) => (cell || '').padEnd(colWidths[i])).join(' | ') + '\n';
+    }
+
+    return result;
+  }
+}
+
+export const monitorCommand = new Command('monitor')
   .description('Start live monitoring dashboard')
-  .option('-i, --interval <seconds:number>', 'Update interval in seconds', { default: 2 })
+  .option('-i, --interval <seconds>', 'Update interval in seconds', '2')
   .option('-c, --compact', 'Compact view mode')
   .option('--no-graphs', 'Disable ASCII graphs')
-  .option('--focus <component:string>', 'Focus on specific component')
+  .option('--focus <component>', 'Focus on specific component')
+  .option('-e, --export <file>', 'Export monitoring data to file')
+  .option('-t, --threshold <percent>', 'Alert threshold percentage', '80')
   .action(async (options: any) => {
     await startMonitorDashboard(options);
   });
@@ -25,34 +99,54 @@ interface MonitorData {
     agents: number;
     tasks: number;
   };
-  components: Record<string, any>;
+  components: Record<string, ComponentStatus>;
   agents: any[];
   tasks: any[];
   events: any[];
+}
+
+interface ComponentStatus {
+  status: string;
+  load: number;
+  uptime?: number;
+  errors?: number;
+  lastError?: string | undefined;
+}
+
+interface AlertData {
+  id: string;
+  type: 'warning' | 'error' | 'info';
+  message: string;
+  component: string;
+  timestamp: number;
+  acknowledged: boolean;
 }
 
 class Dashboard {
   private data: MonitorData[] = [];
   private maxDataPoints = 60; // 2 minutes at 2-second intervals
   private running = true;
+  private alerts: AlertData[] = [];
+  private startTime = Date.now();
+  private exportData: MonitorData[] = [];
 
   constructor(private options: any) {}
 
   async start(): Promise<void> {
     // Hide cursor and clear screen
-    Deno.stdout.writeSync(new TextEncoder().encode('\x1b[?25l'));
+    process.stdout.write('\x1b[?25l');
     console.clear();
 
     // Setup signal handlers
     const cleanup = () => {
       this.running = false;
-      Deno.stdout.writeSync(new TextEncoder().encode('\x1b[?25h')); // Show cursor
+      process.stdout.write('\x1b[?25h'); // Show cursor
       console.log('\n' + colors.gray('Monitor stopped'));
-      Deno.exit(0);
+      process.exit(0);
     };
 
-    Deno.addSignalListener('SIGINT', cleanup);
-    Deno.addSignalListener('SIGTERM', cleanup);
+    process.on('SIGINT', cleanup);
+    process.on('SIGTERM', cleanup);
 
     // Start monitoring loop
     await this.monitoringLoop();
@@ -79,29 +173,28 @@ class Dashboard {
   }
 
   private async collectData(): Promise<MonitorData> {
-    // Mock data collection - in production, this would connect to the orchestrator
     const timestamp = new Date();
-    const cpuUsage = 10 + Math.random() * 20; // 10-30%
-    const memoryUsage = 200 + Math.random() * 100; // 200-300MB
     
+    // Get real system data instead of mock data
+    const systemData = await this.getRealSystemData();
+    
+    if (systemData) {
+      return systemData;
+    }
+    
+    // If no real data available, return minimal data structure
     return {
       timestamp,
       system: {
-        cpu: cpuUsage,
-        memory: memoryUsage,
-        agents: 3 + Math.floor(Math.random() * 3),
-        tasks: 5 + Math.floor(Math.random() * 10)
+        cpu: 0,
+        memory: 0,
+        agents: 0,
+        tasks: 0
       },
-      components: {
-        orchestrator: { status: 'healthy', load: Math.random() * 100 },
-        terminal: { status: 'healthy', load: Math.random() * 100 },
-        memory: { status: 'healthy', load: Math.random() * 100 },
-        coordination: { status: 'healthy', load: Math.random() * 100 },
-        mcp: { status: 'healthy', load: Math.random() * 100 }
-      },
-      agents: this.generateMockAgents(),
-      tasks: this.generateMockTasks(),
-      events: this.generateMockEvents()
+      components: this.generateComponentStatus(),
+      agents: [],
+      tasks: [],
+      events: []
     };
   }
 
@@ -142,41 +235,36 @@ class Dashboard {
   }
 
   private renderHeader(data: MonitorData): void {
-    const time = data.timestamp.toLocaleTimeString();
-    console.log(colors.cyan.bold('Claude-Flow Live Monitor') + colors.gray(` - ${time}`));
-    console.log('═'.repeat(80));
+    console.log(colorCombos.cyanBold('🧠 Claude-Flow Live Monitor'));
+    console.log(colors.gray('─'.repeat(80)));
   }
 
   private renderSystemOverview(data: MonitorData): void {
-    console.log(colors.white.bold('System Overview'));
-    console.log('─'.repeat(40));
-    
-    const cpuBar = formatProgressBar(data.system.cpu, 100, 20, 'CPU');
-    const memoryBar = formatProgressBar(data.system.memory, 1024, 20, 'Memory');
-    
-    console.log(`${cpuBar} ${data.system.cpu.toFixed(1)}%`);
-    console.log(`${memoryBar} ${data.system.memory.toFixed(0)}MB`);
-    console.log(`${colors.white('Agents:')} ${data.system.agents} active`);
-    console.log(`${colors.white('Tasks:')} ${data.system.tasks} in queue`);
+    console.log(colorCombos.whiteBold('System Overview'));
+    console.log(`CPU: ${this.createMiniProgressBar(data.system.cpu, 100, 20)} ${data.system.cpu.toFixed(1)}%`);
+    console.log(`Memory: ${this.createMiniProgressBar(data.system.memory, 100, 20)} ${data.system.memory.toFixed(1)}%`);
+    console.log(`Agents: ${colors.green(data.system.agents.toString())} active`);
+    console.log(`Tasks: ${colors.blue(data.system.tasks.toString())} running`);
     console.log();
   }
 
   private renderComponentsStatus(data: MonitorData): void {
-    console.log(colors.white.bold('Components'));
-    console.log('─'.repeat(40));
+    console.log(colorCombos.whiteBold('Component Status'));
     
     const table = new Table()
-      .header(['Component', 'Status', 'Load'])
-      .border(false);
+      .header(['Component', 'Status', 'Load', 'Uptime', 'Errors'])
+      .border(true);
 
-    for (const [name, component] of Object.entries(data.components)) {
-      const statusIcon = formatStatusIndicator(component.status);
-      const loadBar = this.createMiniProgressBar(component.load, 100, 10);
+    for (const [name, status] of Object.entries(data.components)) {
+      const statusDisplay = status.status === 'healthy' ? colors.green('●') : 
+                           status.status === 'degraded' ? colors.yellow('●') : colors.red('●');
       
       table.push([
-        colors.cyan(name),
-        `${statusIcon} ${component.status}`,
-        `${loadBar} ${component.load.toFixed(0)}%`
+        name,
+        statusDisplay + ' ' + status.status,
+        `${status.load.toFixed(1)}%`,
+        status.uptime ? formatDuration(status.uptime) : 'N/A',
+        (status.errors || 0).toString()
       ]);
     }
     
@@ -185,90 +273,88 @@ class Dashboard {
   }
 
   private renderAgentsAndTasks(data: MonitorData): void {
-    // Agents table
-    console.log(colors.white.bold('Active Agents'));
-    console.log('─'.repeat(40));
+    console.log(colorCombos.whiteBold('Active Agents'));
     
-    if (data.agents.length > 0) {
+    if (data.agents.length === 0) {
+      console.log(colors.gray('No active agents'));
+    } else {
       const agentTable = new Table()
-        .header(['ID', 'Type', 'Status', 'Tasks'])
-        .border(false);
+        .header(['Agent ID', 'Type', 'Status', 'Tasks', 'Load'])
+        .border(true);
 
-      for (const agent of data.agents.slice(0, 5)) {
-        const statusIcon = formatStatusIndicator(agent.status);
-        
+      for (const agent of data.agents.slice(0, 10)) { // Show top 10
         agentTable.push([
-          colors.gray(agent.id.substring(0, 8) + '...'),
-          colors.cyan(agent.type),
-          `${statusIcon} ${agent.status}`,
-          agent.activeTasks.toString()
+          agent.id,
+          agent.type,
+          agent.status === 'active' ? colors.green('Active') : colors.yellow('Idle'),
+          agent.taskCount?.toString() || '0',
+          `${(agent.load || 0).toFixed(1)}%`
         ]);
       }
       
       agentTable.render();
-    } else {
-      console.log(colors.gray('No active agents'));
     }
-    console.log();
-
-    // Recent tasks
-    console.log(colors.white.bold('Recent Tasks'));
-    console.log('─'.repeat(40));
     
-    if (data.tasks.length > 0) {
+    console.log();
+    console.log(colorCombos.whiteBold('Recent Tasks'));
+    
+    if (data.tasks.length === 0) {
+      console.log(colors.gray('No recent tasks'));
+    } else {
       const taskTable = new Table()
-        .header(['ID', 'Type', 'Status', 'Duration'])
-        .border(false);
+        .header(['Task ID', 'Type', 'Status', 'Agent', 'Duration'])
+        .border(true);
 
-      for (const task of data.tasks.slice(0, 5)) {
-        const statusIcon = formatStatusIndicator(task.status);
+      for (const task of data.tasks.slice(0, 5)) { // Show last 5
+        const statusColor = task.status === 'completed' ? colors.green : 
+                           task.status === 'failed' ? colors.red : colors.yellow;
         
         taskTable.push([
-          colors.gray(task.id.substring(0, 8) + '...'),
-          colors.white(task.type),
-          `${statusIcon} ${task.status}`,
-          task.duration ? formatDuration(task.duration) : '-'
+          task.id,
+          task.type,
+          statusColor(task.status),
+          task.assignedAgent || 'None',
+          task.duration ? formatDuration(task.duration) : 'N/A'
         ]);
       }
       
       taskTable.render();
-    } else {
-      console.log(colors.gray('No recent tasks'));
     }
+    
     console.log();
   }
 
   private renderRecentEvents(data: MonitorData): void {
-    console.log(colors.white.bold('Recent Events'));
-    console.log('─'.repeat(40));
+    console.log(colorCombos.whiteBold('Recent Events'));
     
-    if (data.events.length > 0) {
-      for (const event of data.events.slice(0, 3)) {
-        const time = new Date(event.timestamp).toLocaleTimeString();
-        const icon = this.getEventIcon(event.type);
-        console.log(`${colors.gray(time)} ${icon} ${event.message}`);
-      }
-    } else {
+    if (data.events.length === 0) {
       console.log(colors.gray('No recent events'));
+    } else {
+      for (const event of data.events.slice(0, 5)) {
+        const icon = this.getEventIcon(event.type);
+        const time = new Date(event.timestamp).toLocaleTimeString();
+        console.log(`${icon} ${colors.gray(time)} ${event.message}`);
+      }
     }
+    
     console.log();
   }
 
   private renderPerformanceGraphs(): void {
-    console.log(colors.white.bold('Performance (Last 60s)'));
-    console.log('─'.repeat(40));
+    if (this.options.graphs === false) return;
     
-    if (this.data.length >= 2) {
-      // CPU graph
-      console.log(colors.cyan('CPU Usage:'));
-      console.log(this.createSparkline(this.data.map(d => d.system.cpu), 30));
+    console.log(colorCombos.whiteBold('Performance Trends'));
+    
+    if (this.data.length > 1) {
+      const cpuData = this.data.map(d => d.system.cpu);
+      const memoryData = this.data.map(d => d.system.memory);
       
-      // Memory graph
-      console.log(colors.cyan('Memory Usage:'));
-      console.log(this.createSparkline(this.data.map(d => d.system.memory), 30));
+      console.log(`CPU:    ${this.createSparkline(cpuData, 40)}`);
+      console.log(`Memory: ${this.createSparkline(memoryData, 40)}`);
     } else {
-      console.log(colors.gray('Collecting data...'));
+      console.log(colors.gray('Insufficient data for trends'));
     }
+    
     console.log();
   }
 
@@ -279,7 +365,7 @@ class Dashboard {
       return;
     }
 
-    console.log(colors.white.bold(`${componentName} Details`));
+    console.log(colorCombos.whiteBold(`${componentName} Details`));
     console.log('─'.repeat(40));
     
     const statusIcon = formatStatusIndicator(component.status);
@@ -298,7 +384,7 @@ class Dashboard {
 
   private renderError(error: any): void {
     console.clear();
-    console.log(colors.red.bold('Monitor Error'));
+    console.log(colorCombos.redBold('Monitor Error'));
     console.log('─'.repeat(40));
     
     if ((error as Error).message.includes('ECONNREFUSED')) {
@@ -347,72 +433,6 @@ class Dashboard {
     return icons[type as keyof typeof icons] || colors.blue('•');
   }
 
-  private generateMockAgents(): any[] {
-    return [
-      {
-        id: 'agent-001',
-        type: 'coordinator',
-        status: 'active',
-        activeTasks: Math.floor(Math.random() * 5) + 1
-      },
-      {
-        id: 'agent-002',
-        type: 'researcher',
-        status: 'active',
-        activeTasks: Math.floor(Math.random() * 8) + 1
-      },
-      {
-        id: 'agent-003',
-        type: 'implementer',
-        status: Math.random() > 0.7 ? 'idle' : 'active',
-        activeTasks: Math.floor(Math.random() * 3)
-      }
-    ];
-  }
-
-  private generateMockTasks(): any[] {
-    const types = ['research', 'implementation', 'analysis', 'coordination'];
-    const statuses = ['running', 'pending', 'completed', 'failed'];
-    
-    return Array.from({ length: 8 }, (_, i) => ({
-      id: `task-${String(i + 1).padStart(3, '0')}`,
-      type: types[Math.floor(Math.random() * types.length)],
-      status: statuses[Math.floor(Math.random() * statuses.length)],
-      duration: Math.random() > 0.5 ? Math.floor(Math.random() * 120000) : null
-    }));
-  }
-
-  private generateMockEvents(): any[] {
-    const events = [
-      { type: 'task_completed', message: 'Research task completed successfully' },
-      { type: 'agent_spawned', message: 'New implementer agent spawned' },
-      { type: 'task_assigned', message: 'Task assigned to coordinator agent' },
-      { type: 'system_warning', message: 'High memory usage detected' }
-    ];
-    
-    const eventTypes = [
-      { type: 'task_completed', message: 'Research task completed successfully', level: 'info' as const },
-      { type: 'agent_spawned', message: 'New implementer agent spawned', level: 'info' as const },
-      { type: 'task_assigned', message: 'Task assigned to coordinator agent', level: 'info' as const },
-      { type: 'system_warning', message: 'High memory usage detected', level: 'warn' as const },
-      { type: 'task_failed', message: 'Analysis task failed due to timeout', level: 'error' as const },
-      { type: 'system_info', message: 'System health check completed', level: 'info' as const },
-      { type: 'memory_gc', message: 'Garbage collection triggered', level: 'debug' as const },
-      { type: 'network_event', message: 'MCP connection established', level: 'info' as const }
-    ];
-    
-    const components = ['orchestrator', 'terminal', 'memory', 'coordination', 'mcp'];
-    
-    return Array.from({ length: 6 + Math.floor(Math.random() * 4) }, (_, i) => {
-      const event = eventTypes[Math.floor(Math.random() * eventTypes.length)];
-      return {
-        ...event,
-        timestamp: Date.now() - (i * Math.random() * 300000), // Random intervals up to 5 minutes
-        component: Math.random() > 0.3 ? components[Math.floor(Math.random() * components.length)] : undefined
-      };
-    }).sort((a, b) => b.timestamp - a.timestamp);
-  }
-  
   private async checkSystemRunning(): Promise<boolean> {
     try {
       return await existsSync('.claude-flow.pid');
@@ -422,9 +442,19 @@ class Dashboard {
   }
   
   private async getRealSystemData(): Promise<MonitorData | null> {
-    // This would connect to the actual orchestrator for real data
-    // For now, return null to use mock data
-    return null;
+    try {
+      // Try to get actual system data from running orchestrator
+      const isRunning = await this.checkSystemRunning();
+      if (!isRunning) {
+        return null;
+      }
+      
+      // Connect to actual system APIs here when available
+      // For now, return null to indicate no real data
+      return null;
+    } catch {
+      return null;
+    }
   }
   
   private generateComponentStatus(): Record<string, ComponentStatus> {

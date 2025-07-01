@@ -488,7 +488,7 @@ export class DeploymentManager extends EventEmitter {
 
       await this.completeDeployment(deployment);
     } catch (error) {
-      await this.handleDeploymentError(deployment, error);
+      await this.handleDeploymentError(deployment, error as Error);
     }
   }
 
@@ -537,7 +537,7 @@ export class DeploymentManager extends EventEmitter {
       stage.status = 'failed';
       stage.endTime = new Date();
       
-      this.addLog(stage, 'error', `Stage failed: ${error.message}`, 'system');
+      this.addLog(stage, 'error', `Stage failed: ${(error as Error).message}`, 'system');
       
       // Retry logic
       if (stage.retryPolicy.maxRetries > 0) {
@@ -678,7 +678,7 @@ export class DeploymentManager extends EventEmitter {
     } catch (error) {
       this.addAuditEntry(deployment, userId, 'rollback_failed', 'deployment', {
         deploymentId,
-        error: error.message
+        error: (error as Error).message
       });
 
       this.logger.error(`Rollback failed for deployment ${deploymentId}`, { error });
@@ -1178,7 +1178,7 @@ export class DeploymentManager extends EventEmitter {
     }
   }
 
-  private async handleDeploymentError(deployment: Deployment, error: any): Promise<void> {
+  private async handleDeploymentError(deployment: Deployment, error: Error): Promise<void> {
     deployment.status = 'failed';
     deployment.metrics.endTime = new Date();
     deployment.updatedAt = new Date();
@@ -1191,7 +1191,7 @@ export class DeploymentManager extends EventEmitter {
     await this.saveDeployment(deployment);
     this.emit('deployment:error', { deployment, error });
 
-    this.logger.error(`Deployment error: ${deployment.id}`, { error });
+    this.logger.error('Deployment failed:', error.message);
   }
 
   private async completeDeployment(deployment: Deployment): Promise<void> {

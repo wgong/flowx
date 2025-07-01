@@ -20,7 +20,10 @@
     "format": "prettier --write src",
     "postinstall": "node scripts/install.js",
     "prepublishOnly": "node scripts/prepare-publish.js",
-    "prepare-publish": "node scripts/prepare-publish.js"
+    "prepare-publish": "node scripts/prepare-publish.js",
+    "benchmark": "node benchmark/bin/benchmark-cli.js run \"Benchmark simple task\"",
+    "benchmark:test": "node benchmark/bin/benchmark-cli.js test",
+    "benchmark:example": "node benchmark/examples/basic.js"
   },
   "keywords": [
     "claude",
@@ -50,6 +53,11 @@
     "dist/",
     "src/",
     ".claude/",
+    "benchmark/src/",
+    "benchmark/simple-benchmark.js",
+    "benchmark/bin/",
+    "benchmark/examples/",
+    "benchmark/README.md",
     "scripts/install.js",
     "scripts/swarm-blessed-ui.js",
     "scripts/swarm-simple.js",
@@ -61,6 +69,7 @@
     "SWARM_VISIBILITY.md"
   ],
   "dependencies": {
+    "@anthropic-ai/claude-code": "^1.0.35",
     "@types/better-sqlite3": "^7.6.13",
     "better-sqlite3": "^11.10.0",
     "blessed": "^0.1.81",
@@ -74,6 +83,8 @@
     "nanoid": "^5.0.4",
     "node-pty": "^1.0.0",
     "ora": "^7.0.1",
+    "sql.js": "^1.13.0",
+    "uuid": "^9.0.1",
     "ws": "^8.14.2"
   },
   "devDependencies": {

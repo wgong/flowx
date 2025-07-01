@@ -2,71 +2,180 @@
  * Workflow execution commands for Claude-Flow
  */
 
-import { Command } from '@cliffy/command';
-import { colors } from '@cliffy/ansi/colors';
-import { Table } from '@cliffy/table';
-import { Confirm, Input } from '@cliffy/prompt';
+import { Command } from 'commander';
+import { promises as fs } from 'node:fs';
 import { formatDuration, formatStatusIndicator, formatProgressBar } from "../formatter.ts";
 import { generateId } from "../../utils/helpers.ts";
+import * as readline from 'readline';
+
+// Color utilities with bold combinations
+const colors = {
+  red: (text: string) => `\x1b[31m${text}\x1b[0m`,
+  green: (text: string) => `\x1b[32m${text}\x1b[0m`,
+  yellow: (text: string) => `\x1b[33m${text}\x1b[0m`,
+  blue: (text: string) => `\x1b[34m${text}\x1b[0m`,
+  magenta: (text: string) => `\x1b[35m${text}\x1b[0m`,
+  cyan: (text: string) => `\x1b[36m${text}\x1b[0m`,
+  white: (text: string) => `\x1b[37m${text}\x1b[0m`,
+  gray: (text: string) => `\x1b[90m${text}\x1b[0m`,
+  bold: (text: string) => `\x1b[1m${text}\x1b[0m`,
+  dim: (text: string) => `\x1b[2m${text}\x1b[0m`,
+};
+
+// Color combination helpers
+const colorCombinations = {
+  cyanBold: (text: string) => `\x1b[1;36m${text}\x1b[0m`,
+  greenBold: (text: string) => `\x1b[1;32m${text}\x1b[0m`,
+  redBold: (text: string) => `\x1b[1;31m${text}\x1b[0m`,
+};
+
+// Simple table utility
+class Table {
+  private headers: string[] = [];
+  private rows: string[][] = [];
+
+  constructor() {}
+
+  header(headers: string[]): this {
+    this.headers = headers;
+    return this;
+  }
+
+  body(rows: string[][]): this {
+    this.rows = rows;
+    return this;
+  }
+
+  push(row: string[]): this {
+    this.rows.push(row);
+    return this;
+  }
+
+  render(): void {
+    console.log(this.toString());
+  }
+
+  toString(): string {
+    if (this.headers.length === 0 && this.rows.length === 0) {
+      return '';
+    }
+
+    const allRows = this.headers.length > 0 ? [this.headers, ...this.rows] : this.rows;
+    const colWidths = this.headers.map((_, i) => 
+      Math.max(...allRows.map(row => (row[i] || '').length))
+    );
+
+    let result = '';
+    
+    if (this.headers.length > 0) {
+      result += this.headers.map((header, i) => header.padEnd(colWidths[i])).join(' | ') + '\n';
+      result += colWidths.map(width => '-'.repeat(width)).join('-+-') + '\n';
+    }
+
+    for (const row of this.rows) {
+      result += row.map((cell, i) => (cell || '').padEnd(colWidths[i])).join(' | ') + '\n';
+    }
+
+    return result;
+  }
+}
+
+// Simple prompt utilities
+async function Confirm(options: { message: string; default?: boolean }): Promise<boolean> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    const defaultText = options.default !== undefined ? (options.default ? ' (Y/n)' : ' (y/N)') : ' (y/n)';
+    rl.question(`${options.message}${defaultText}: `, (answer) => {
+      rl.close();
+      const normalized = answer.toLowerCase();
+      if (normalized === 'y' || normalized === 'yes') {
+        resolve(true);
+      } else if (normalized === 'n' || normalized === 'no') {
+        resolve(false);
+      } else {
+        resolve(options.default || false);
+      }
+    });
+  });
+}
+
+async function Input(options: { message: string; default?: string }): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    rl.question(`${options.message}${options.default ? ` (${options.default})` : ''}: `, (answer) => {
+      rl.close();
+      resolve(answer || options.default || '');
+    });
+  });
+}
 
 export const workflowCommand = new Command()
   .description('Execute and manage workflows')
   .action(() => {
-    workflowCommand.showHelp();
-  })
-  .command('run', new Command()
-    .description('Execute a workflow from file')
-    .arguments('<workflow-file:string>')
-    .option('-d, --dry-run', 'Validate workflow without executing')
-    .option('-v, --variables <vars:string>', 'Override variables (JSON format)')
-    .option('-w, --watch', 'Watch workflow execution progress')
-    .option('--parallel', 'Allow parallel execution where possible')
-    .option('--fail-fast', 'Stop on first task failure')
-    .action(async (options: any, workflowFile: string) => {
-      await runWorkflow(workflowFile, options);
-    }),
-  )
-  .command('validate', new Command()
-    .description('Validate a workflow file')
-    .arguments('<workflow-file:string>')
-    .option('--strict', 'Use strict validation mode')
-    .action(async (options: any, workflowFile: string) => {
-      await validateWorkflow(workflowFile, options);
-    }),
-  )
-  .command('list', new Command()
-    .description('List running workflows')
-    .option('--all', 'Include completed workflows')
-    .option('--format <format:string>', 'Output format (table, json)', { default: 'table' })
-    .action(async (options: any) => {
-      await listWorkflows(options);
-    }),
-  )
-  .command('status', new Command()
-    .description('Show workflow execution status')
-    .arguments('<workflow-id:string>')
-    .option('-w, --watch', 'Watch workflow progress')
-    .action(async (options: any, workflowId: string) => {
-      await showWorkflowStatus(workflowId, options);
-    }),
-  )
-  .command('stop', new Command()
-    .description('Stop a running workflow')
-    .arguments('<workflow-id:string>')
-    .option('-f, --force', 'Force stop without cleanup')
-    .action(async (options: any, workflowId: string) => {
-      await stopWorkflow(workflowId, options);
-    }),
-  )
-  .command('template', new Command()
-    .description('Generate workflow templates')
-    .arguments('<template-type:string>')
-    .option('-o, --output <file:string>', 'Output file path')
-    .option('--format <format:string>', 'Template format (json, yaml)', { default: 'json' })
-    .action(async (options: any, templateType: string) => {
-      await generateTemplate(templateType, options);
-    }),
-  );
+    workflowCommand.help();
+  });
+
+workflowCommand
+  .command('run <workflow-file>')
+  .description('Execute a workflow from file')
+  .option('-d, --dry-run', 'Validate workflow without executing')
+  .option('-v, --variables <vars>', 'Override variables (JSON format)')
+  .option('-w, --watch', 'Watch workflow execution progress')
+  .option('--parallel', 'Allow parallel execution where possible')
+  .option('--fail-fast', 'Stop on first task failure')
+  .action(async (workflowFile: string, options: any) => {
+    await runWorkflow(workflowFile, options);
+  });
+
+workflowCommand
+  .command('validate <workflow-file>')
+  .description('Validate a workflow file')
+  .option('--strict', 'Use strict validation mode')
+  .action(async (workflowFile: string, options: any) => {
+    await validateWorkflow(workflowFile, options);
+  });
+
+workflowCommand
+  .command('list')
+  .description('List running workflows')
+  .option('--all', 'Include completed workflows')
+  .option('--format <format>', 'Output format (table, json)', 'table')
+  .action(async (options: any) => {
+    await listWorkflows(options);
+  });
+
+workflowCommand
+  .command('status <workflow-id>')
+  .description('Show workflow execution status')
+  .option('-w, --watch', 'Watch workflow progress')
+  .action(async (workflowId: string, options: any) => {
+    await showWorkflowStatus(workflowId, options);
+  });
+
+workflowCommand
+  .command('stop <workflow-id>')
+  .description('Stop a running workflow')
+  .option('-f, --force', 'Force stop without cleanup')
+  .action(async (workflowId: string, options: any) => {
+    await stopWorkflow(workflowId, options);
+  });
+
+workflowCommand
+  .command('template <template-type>')
+  .description('Generate workflow templates')
+  .option('-o, --output <file>', 'Output file path')
+  .option('--format <format>', 'Template format (json, yaml)', 'json')
+  .action(async (templateType: string, options: any) => {
+    await generateTemplate(templateType, options);
+  });
 
 interface WorkflowDefinition {
   name: string;
@@ -155,7 +264,7 @@ async function runWorkflow(workflowFile: string, options: any): Promise<void> {
     // Create execution plan
     const execution = await createExecution(workflow);
     
-    console.log(colors.cyan.bold('Starting workflow execution'));
+    console.log(colors.bold(colors.cyan('Starting workflow execution')));
     console.log(`${colors.white('Workflow:')} ${workflow.name}`);
     console.log(`${colors.white('ID:')} ${execution.id}`);
     console.log(`${colors.white('Tasks:')} ${execution.tasks.length}`);
@@ -169,7 +278,7 @@ async function runWorkflow(workflowFile: string, options: any): Promise<void> {
     }
   } catch (error) {
     console.error(colors.red('Workflow execution failed:'), (error as Error).message);
-    Deno.exit(1);
+    process.exit(1);
   }
 }
 
@@ -189,7 +298,7 @@ async function validateWorkflow(workflowFile: string, options: any): Promise<voi
     }
   } catch (error) {
     console.error(colors.red('✗ Workflow validation failed:'), (error as Error).message);
-    Deno.exit(1);
+    process.exit(1);
   }
 }
 
@@ -208,12 +317,10 @@ async function listWorkflows(options: any): Promise<void> {
       return;
     }
 
-    console.log(colors.cyan.bold(`Workflows (${workflows.length})`));
+    console.log(colors.bold(colors.cyan(`Workflows (${workflows.length})`)));
     console.log('─'.repeat(60));
 
-    const table = new Table()
-      .header(['ID', 'Name', 'Status', 'Progress', 'Started', 'Duration'])
-      .border(true);
+    const table = new Table().header(['ID', 'Name', 'Status', 'Progress', 'Started', 'Duration']);
 
     for (const workflow of workflows) {
       const statusIcon = formatStatusIndicator(workflow.status);
@@ -266,7 +373,7 @@ async function stopWorkflow(workflowId: string, options: any): Promise<void> {
     }
 
     if (!options.force) {
-      const confirmed = await Confirm.prompt({
+      const confirmed = await Confirm({
         message: `Stop workflow "${execution.workflowName}"?`,
         default: false,
       });
@@ -414,7 +521,7 @@ async function generateTemplate(templateType: string, options: any): Promise<voi
     content = JSON.stringify(template, null, 2);
   }
 
-  await Deno.writeTextFile(outputFile, content);
+  await fs.writeFile(outputFile, content, 'utf-8');
 
   console.log(colors.green('✓ Workflow template generated'));
   console.log(`${colors.white('Template:')} ${templateType}`);
@@ -425,7 +532,7 @@ async function generateTemplate(templateType: string, options: any): Promise<voi
 
 async function loadWorkflow(workflowFile: string): Promise<WorkflowDefinition> {
   try {
-    const content = await Deno.readTextFile(workflowFile);
+    const content = await fs.readFile(workflowFile, 'utf-8');
     
     if (workflowFile.endsWith('.yaml') || workflowFile.endsWith('.yml')) {
       // In production, use a proper YAML parser
@@ -578,9 +685,9 @@ async function executeWorkflow(execution: WorkflowExecution, workflow: WorkflowD
   const duration = formatDuration(execution.completedAt.getTime() - execution.startedAt.getTime());
   
   if (execution.status === 'completed') {
-    console.log(colors.green.bold('✓ Workflow completed successfully'));
+    console.log(colorCombinations.greenBold('✓ Workflow completed successfully'));
   } else {
-    console.log(colors.red.bold('✗ Workflow completed with failures'));
+    console.log(colorCombinations.redBold('✗ Workflow completed with failures'));
   }
   
   console.log(`${colors.white('Duration:')} ${duration}`);
@@ -636,7 +743,7 @@ async function watchWorkflowStatus(workflowId: string): Promise<void> {
 }
 
 function displayWorkflowStatus(execution: WorkflowExecution): void {
-  console.log(colors.cyan.bold('Workflow Status'));
+  console.log(colorCombinations.cyanBold('Workflow Status'));
   console.log('─'.repeat(50));
   
   const statusIcon = formatStatusIndicator(execution.status);
@@ -664,12 +771,11 @@ function displayWorkflowStatus(execution: WorkflowExecution): void {
   console.log();
 
   // Task details
-  console.log(colors.cyan.bold('Tasks'));
+  console.log(colorCombinations.cyanBold('Tasks'));
   console.log('─'.repeat(50));
   
   const table = new Table()
-    .header(['Task', 'Status', 'Duration', 'Agent'])
-    .border(true);
+    .header(['Task', 'Status', 'Duration', 'Agent']);
 
   for (const taskExec of execution.tasks) {
     const statusIcon = formatStatusIndicator(taskExec.status);

@@ -2,11 +2,11 @@
  * HTTP transport for MCP
  */
 
-import express, { Express, Request, Response } from 'npm:express';
+import express, { Express, Request, Response } from 'express';
 import { createServer, Server } from 'node:http';
-import { WebSocketServer, WebSocket } from 'npm:ws';
-import cors from 'npm:cors';
-import helmet from 'npm:helmet';
+import { WebSocketServer, WebSocket } from 'ws';
+import cors from 'cors';
+import helmet from 'helmet';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ITransport, RequestHandler, NotificationHandler } from "./base.ts";

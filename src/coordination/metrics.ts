@@ -2,9 +2,9 @@
  * Metrics and monitoring for coordination performance
  */
 
-import { ILogger } from "../core/logger.ts";
-import { IEventBus } from "../core/event-bus.ts";
-import { SystemEvents } from "../utils/types.ts";
+import { ILogger } from "../core/logger.js";
+import { IEventBus } from "../core/event-bus.js";
+import { SystemEvents } from "../utils/types.js";
 
 export interface CoordinationMetrics {
   timestamp: Date;
@@ -123,7 +123,15 @@ export class CoordinationMetricsCollector {
     private eventBus: IEventBus,
     private collectionIntervalMs = 30000, // 30 seconds
   ) {
+    // Initialize config first
+    this.config = {
+      maxSamples: 10000,
+      retentionPeriod: 24 * 60 * 60 * 1000, // 24 hours
+      cleanupInterval: 60 * 60 * 1000, // 1 hour
+    };
+    
     this.setupEventHandlers();
+    this.startCleanupTimer();
   }
 
   /**
@@ -134,7 +142,7 @@ export class CoordinationMetricsCollector {
     
     this.collectionInterval = setInterval(() => {
       this.collectMetrics();
-    }, this.collectionIntervalMs);
+    }, this.collectionIntervalMs) as unknown as number;
   }
 
   /**
@@ -452,13 +460,23 @@ export class CoordinationMetricsCollector {
    * Get tasks grouped by priority
    */
   private getTasksByPriority(): Record<string, number> {
-    const priorities = ['low', 'medium', 'high', 'critical'];
-    const result: Record<string, number> = {};
+    const priorities = new Set<string>();
     
-    for (const priority of priorities) {
-      result[priority] = this.samples.filter(s => 
-        s.metric === 'task.created' && s.tags?.priority === priority
-      ).length;
+    // Collect all priority values from recent samples
+    const recentSamples = this.samples.filter(s => 
+      s.metric === 'task.created' && 
+      s.tags?.priority
+    );
+    
+    for (const sample of recentSamples) {
+      if (sample.tags?.priority) {
+        priorities.add(sample.tags.priority);
+      }
+    }
+    
+    const result: Record<string, number> = {};
+    for (const priority of Array.from(priorities)) {
+      result[priority] = recentSamples.filter(s => s.tags?.priority === priority).length;
     }
     
     return result;
@@ -470,17 +488,21 @@ export class CoordinationMetricsCollector {
   private getTasksByType(): Record<string, number> {
     const types = new Set<string>();
     
-    for (const sample of this.samples) {
-      if (sample.metric === 'task.created' && sample.tags?.type) {
+    // Collect all type values from recent samples
+    const recentSamples = this.samples.filter(s => 
+      s.metric === 'task.created' && 
+      s.tags?.type
+    );
+    
+    for (const sample of recentSamples) {
+      if (sample.tags?.type) {
         types.add(sample.tags.type);
       }
     }
     
     const result: Record<string, number> = {};
-    for (const type of types) {
-      result[type] = this.samples.filter(s => 
-        s.metric === 'task.created' && s.tags?.type === type
-      ).length;
+    for (const type of Array.from(types)) {
+      result[type] = recentSamples.filter(s => s.tags?.type === type).length;
     }
     
     return result;
@@ -581,5 +603,29 @@ export class CoordinationMetricsCollector {
     }
     
     this.logger.info('Coordination metrics cleared');
+  }
+
+  // Start cleanup interval
+  private cleanupInterval = setInterval(() => {
+    this.cleanupOldMetrics();
+  }, this.config.cleanupInterval) as unknown as number;
+
+  private cleanupOldMetrics(): void {
+    // Clean up old metrics data
+    const cutoffTime = Date.now() - (24 * 60 * 60 * 1000); // 24 hours
+    // Implementation would clean up old metrics
+    this.logger.debug('Cleaning up old metrics data');
+  }
+
+  private config: {
+    maxSamples: number;
+    retentionPeriod: number;
+    cleanupInterval: number;
+  };
+
+  private startCleanupTimer(): void {
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupOldMetrics();
+    }, this.config.cleanupInterval) as unknown as number;
   }
 }

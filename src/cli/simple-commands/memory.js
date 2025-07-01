@@ -1,5 +1,6 @@
 // memory.js - Memory management commands
 import { printSuccess, printError, printWarning } from "../utils.ts";
+import { promises as fs } from 'node:fs';
 
 export async function memoryCommand(subArgs, flags) {
   const memorySubcommand = subArgs[0];
@@ -8,7 +9,7 @@ export async function memoryCommand(subArgs, flags) {
   // Helper to load memory data
   async function loadMemory() {
     try {
-      const content = await Deno.readTextFile(memoryStore);
+      const content = await fs.readFile(memoryStore, 'utf8');
       return JSON.parse(content);
     } catch {
       return {};
@@ -17,8 +18,8 @@ export async function memoryCommand(subArgs, flags) {
   
   // Helper to save memory data
   async function saveMemory(data) {
-    await Deno.mkdir('./memory', { recursive: true });
-    await Deno.writeTextFile(memoryStore, JSON.stringify(data, null, 2));
+    await fs.mkdir('./memory', { recursive: true });
+    await fs.writeFile(memoryStore, JSON.stringify(data, null, 2));
   }
   
   switch (memorySubcommand) {
@@ -87,7 +88,7 @@ async function storeMemory(subArgs, loadMemory, saveMemory) {
     printSuccess('Stored successfully');
     console.log(`📝 Key: ${key}`);
     console.log(`📦 Namespace: ${namespace}`);
-    console.log(`💾 Size: ${new TextEncoder().encode(value).length} bytes`);
+    console.log(`💾 Size: ${Buffer.from(value).length} bytes`);
   } catch (err) {
     printError(`Failed to store: ${err.message}`);
   }
@@ -155,7 +156,7 @@ async function showMemoryStats(loadMemory) {
     printSuccess('Memory Bank Statistics:');
     console.log(`   Total Entries: ${totalEntries}`);
     console.log(`   Namespaces: ${Object.keys(data).length}`);
-    console.log(`   Size: ${(new TextEncoder().encode(JSON.stringify(data)).length / 1024).toFixed(2)} KB`);
+    console.log(`   Size: ${(Buffer.from(JSON.stringify(data)).length / 1024).toFixed(2)} KB`);
     
     if (Object.keys(data).length > 0) {
       console.log('\n📁 Namespace Breakdown:');
@@ -180,7 +181,7 @@ async function exportMemory(subArgs, loadMemory) {
       exportData = { [namespace]: data[namespace] || [] };
     }
     
-    await Deno.writeTextFile(filename, JSON.stringify(exportData, null, 2));
+    await fs.writeFile(filename, JSON.stringify(exportData, null, 2));
     printSuccess(`Memory exported to ${filename}`);
     
     let totalEntries = 0;
@@ -202,7 +203,7 @@ async function importMemory(subArgs, saveMemory) {
   }
   
   try {
-    const importContent = await Deno.readTextFile(filename);
+    const importContent = await fs.readFile(filename, 'utf8');
     const importData = JSON.parse(importContent);
     
     // Load existing memory
@@ -235,7 +236,7 @@ async function clearMemory(subArgs, saveMemory) {
   
   if (!namespace) {
     printError('Usage: memory clear --namespace <namespace>');
-    printWarning('This will clear all entries in the specified namespace');
+    printWarning('Use --namespace to specify which namespace to clear');
     return;
   }
   
@@ -243,15 +244,15 @@ async function clearMemory(subArgs, saveMemory) {
     const data = await loadMemory();
     
     if (!data[namespace]) {
-      printWarning(`Namespace '${namespace}' does not exist`);
+      printWarning(`Namespace '${namespace}' doesn't exist`);
       return;
     }
     
-    const entryCount = data[namespace].length;
+    const count = data[namespace].length;
     delete data[namespace];
     
     await saveMemory(data);
-    printSuccess(`Cleared ${entryCount} entries from namespace '${namespace}'`);
+    printSuccess(`Cleared ${count} entries from namespace '${namespace}'`);
   } catch (err) {
     printError(`Failed to clear memory: ${err.message}`);
   }
@@ -269,8 +270,7 @@ async function listNamespaces(loadMemory) {
     
     printSuccess('Available namespaces:');
     for (const namespace of namespaces) {
-      const count = data[namespace].length;
-      console.log(`  ${namespace} (${count} entries)`);
+      console.log(`   📁 ${namespace} (${data[namespace].length} entries)`);
     }
   } catch (err) {
     printError(`Failed to list namespaces: ${err.message}`);
@@ -278,23 +278,17 @@ async function listNamespaces(loadMemory) {
 }
 
 function getNamespaceFromArgs(subArgs) {
-  const namespaceIndex = subArgs.indexOf('--namespace');
-  if (namespaceIndex !== -1 && namespaceIndex + 1 < subArgs.length) {
-    return subArgs[namespaceIndex + 1];
-  }
-  
-  const nsIndex = subArgs.indexOf('--ns');
+  const nsIndex = subArgs.indexOf('--namespace');
   if (nsIndex !== -1 && nsIndex + 1 < subArgs.length) {
     return subArgs[nsIndex + 1];
   }
-  
   return null;
 }
 
 // Helper to load memory data (needed for import function)
 async function loadMemory() {
   try {
-    const content = await Deno.readTextFile('./memory/memory-store.json');
+    const content = await fs.readFile('./memory/memory-store.json', 'utf8');
     return JSON.parse(content);
   } catch {
     return {};
@@ -302,23 +296,29 @@ async function loadMemory() {
 }
 
 function showMemoryHelp() {
-  console.log('Memory commands:');
-  console.log('  store <key> <value>    Store a key-value pair');
-  console.log('  query <search>         Search for entries');
-  console.log('  stats                  Show memory statistics');
-  console.log('  export [filename]      Export memory to file');
-  console.log('  import <filename>      Import memory from file');
-  console.log('  clear --namespace <ns> Clear a namespace');
-  console.log('  list                   List all namespaces');
-  console.log();
-  console.log('Options:');
-  console.log('  --namespace <ns>       Specify namespace for operations');
-  console.log('  --ns <ns>              Short form of --namespace');
-  console.log();
-  console.log('Examples:');
-  console.log('  memory store previous_work "Research findings from yesterday"');
-  console.log('  memory query research --namespace sparc');
-  console.log('  memory export backup.json --namespace default');
-  console.log('  memory import project-memory.json');
-  console.log('  memory stats');
+  console.log(`
+🧠 Memory Management Commands
+
+USAGE:
+  claude-flow memory <command> [options]
+
+COMMANDS:
+  store <key> <value>     Store a key-value pair
+  query <search>          Search for entries
+  stats                   Show memory statistics
+  export [filename]       Export memory to file
+  import <filename>       Import memory from file
+  clear                   Clear namespace entries
+  list                    List all namespaces
+
+OPTIONS:
+  --namespace <name>      Specify namespace (default: "default")
+
+EXAMPLES:
+  claude-flow memory store "api_key" "sk-..." --namespace config
+  claude-flow memory query "authentication" --namespace docs
+  claude-flow memory stats
+  claude-flow memory export backup.json --namespace project
+  claude-flow memory clear --namespace temp
+`);
 }

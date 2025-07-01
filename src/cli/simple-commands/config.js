@@ -51,7 +51,7 @@ async function initConfig(subArgs, flags) {
     
     // Create default configuration
     const defaultConfig = {
-      version: "1.0.73",
+      version: "1.1.2",
       terminal: {
         poolSize: 10,
         recycleAfter: 20,

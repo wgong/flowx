@@ -44,7 +44,7 @@ export class ProcessUI {
     console.clear();
     
     // Show welcome
-    printSuccess('🧠 Claude-Flow Process Management UI v1.0.43');
+    printSuccess('🧠 Claude-Flow Process Management UI v1.1.2');
     console.log('─'.repeat(60));
     console.log();
     

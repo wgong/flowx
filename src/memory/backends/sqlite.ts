@@ -1,8 +1,9 @@
 /**
- * SQLite backend implementation for memory storage
+ * SQLite backend implementation for memory storage using sql.js
  */
 
-import Database from 'npm:better-sqlite3';
+// @ts-ignore - sql.js doesn't have proper type definitions
+import initSqlJs from 'sql.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { IMemoryBackend } from "./base.ts";
@@ -11,10 +12,11 @@ import { ILogger } from "../../core/logger.ts";
 import { MemoryBackendError } from "../../utils/errors.ts";
 
 /**
- * SQLite-based memory backend
+ * SQLite-based memory backend using sql.js
  */
 export class SQLiteBackend implements IMemoryBackend {
-  private db?: Database.Database;
+  private db?: any;
+  private SQL?: any;
 
   constructor(
     private dbPath: string,
@@ -22,29 +24,37 @@ export class SQLiteBackend implements IMemoryBackend {
   ) {}
 
   async initialize(): Promise<void> {
-    this.logger.info('Initializing SQLite backend', { dbPath: this.dbPath });
+    this.logger.info('Initializing SQLite backend with sql.js', { dbPath: this.dbPath });
 
     try {
+      // Initialize sql.js
+      this.SQL = await initSqlJs();
+      
       // Ensure directory exists
       const dir = path.dirname(this.dbPath);
       await fs.mkdir(dir, { recursive: true });
 
-      // Open SQLite connection
-      this.db = new Database(this.dbPath);
+      // Try to load existing database file
+      let dbData: Uint8Array | undefined;
+      try {
+        const buffer = await fs.readFile(this.dbPath);
+        dbData = new Uint8Array(buffer);
+        this.logger.info('Loaded existing database file');
+      } catch (error) {
+        this.logger.info('Creating new database file');
+        dbData = undefined;
+      }
 
-      // Enable WAL mode for better performance
-      this.db.pragma('journal_mode = WAL');
-      this.db.pragma('synchronous = NORMAL');
-      this.db.pragma('cache_size = 1000');
-      this.db.pragma('temp_store = memory');
+      // Create database instance
+      this.db = new this.SQL.Database(dbData);
 
-      // Create tables
+      // Create tables if they don't exist
       this.createTables();
 
       // Create indexes
       this.createIndexes();
 
-      this.logger.info('SQLite backend initialized');
+      this.logger.info('SQLite backend initialized with sql.js');
     } catch (error) {
       throw new MemoryBackendError('Failed to initialize SQLite backend', { error });
     }
@@ -54,8 +64,22 @@ export class SQLiteBackend implements IMemoryBackend {
     this.logger.info('Shutting down SQLite backend');
 
     if (this.db) {
+      // Save database to file before closing
+      await this.saveToFile();
       this.db.close();
       delete this.db;
+    }
+  }
+
+  private async saveToFile(): Promise<void> {
+    if (!this.db) return;
+
+    try {
+      const data = this.db.export();
+      await fs.writeFile(this.dbPath, Buffer.from(data));
+      this.logger.debug('Database saved to file', { dbPath: this.dbPath });
+    } catch (error) {
+      this.logger.error('Failed to save database to file', { error });
     }
   }
 
@@ -86,8 +110,9 @@ export class SQLiteBackend implements IMemoryBackend {
     ];
 
     try {
-      const stmt = this.db.prepare(sql);
-      stmt.run(...params);
+      this.db.run(sql, params);
+      // Auto-save after each write operation
+      await this.saveToFile();
     } catch (error) {
       throw new MemoryBackendError('Failed to store entry', { error });
     }
@@ -102,13 +127,13 @@ export class SQLiteBackend implements IMemoryBackend {
     
     try {
       const stmt = this.db.prepare(sql);
-      const row = stmt.get(id);
+      const result = stmt.getAsObject([id]);
       
-      if (!row) {
+      if (!result || Object.keys(result).length === 0) {
         return undefined;
       }
 
-      return this.rowToEntry(row as Record<string, unknown>);
+      return this.rowToEntry(result);
     } catch (error) {
       throw new MemoryBackendError('Failed to retrieve entry', { error });
     }
@@ -127,8 +152,8 @@ export class SQLiteBackend implements IMemoryBackend {
     const sql = 'DELETE FROM memory_entries WHERE id = ?';
     
     try {
-      const stmt = this.db.prepare(sql);
-      stmt.run(id);
+      this.db.run(sql, [id]);
+      await this.saveToFile();
     } catch (error) {
       throw new MemoryBackendError('Failed to delete entry', { error });
     }
@@ -201,8 +226,14 @@ export class SQLiteBackend implements IMemoryBackend {
 
     try {
       const stmt = this.db.prepare(sql);
-      const rows = stmt.all(...params);
-      return rows.map((row: any) => this.rowToEntry(row as Record<string, unknown>));
+      const results: MemoryEntry[] = [];
+      
+      while (stmt.step()) {
+        const row = stmt.getAsObject();
+        results.push(this.rowToEntry(row));
+      }
+      
+      return results;
     } catch (error) {
       throw new MemoryBackendError('Failed to query entries', { error });
     }
@@ -213,12 +244,16 @@ export class SQLiteBackend implements IMemoryBackend {
       throw new MemoryBackendError('Database not initialized');
     }
 
-    const sql = 'SELECT * FROM memory_entries ORDER BY timestamp DESC';
-    
     try {
-      const stmt = this.db.prepare(sql);
-      const rows = stmt.all();
-      return rows.map((row: any) => this.rowToEntry(row as Record<string, unknown>));
+      const stmt = this.db.prepare('SELECT * FROM memory_entries ORDER BY timestamp DESC');
+      const results: MemoryEntry[] = [];
+      
+      while (stmt.step()) {
+        const row = stmt.getAsObject();
+        results.push(this.rowToEntry(row));
+      }
+      
+      return results;
     } catch (error) {
       throw new MemoryBackendError('Failed to get all entries', { error });
     }
@@ -229,40 +264,44 @@ export class SQLiteBackend implements IMemoryBackend {
     error?: string; 
     metrics?: Record<string, number>;
   }> {
-    if (!this.db) {
-      return {
-        healthy: false,
-        error: 'Database not initialized',
-      };
-    }
-
     try {
-      // Check database connectivity
-      this.db.prepare('SELECT 1').get();
+      if (!this.db) {
+        return { healthy: false, error: 'Database not initialized' };
+      }
 
-      // Get metrics
-      const countResult = this.db.prepare('SELECT COUNT(*) as count FROM memory_entries').get() as any;
-      const entryCount = countResult.count;
+      // Test basic query
+      const stmt = this.db.prepare('SELECT COUNT(*) as count FROM memory_entries');
+      stmt.step();
+      const result = stmt.getAsObject();
+      const count = result.count as number;
 
-      const sizeResult = this.db.prepare('SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()').get() as any;
-      const dbSize = sizeResult.size;
+      // Get database file size
+      let fileSize = 0;
+      try {
+        const stats = await fs.stat(this.dbPath);
+        fileSize = stats.size;
+      } catch {
+        // File might not exist yet
+      }
 
       return {
         healthy: true,
         metrics: {
-          entryCount,
-          dbSizeBytes: dbSize,
-        },
+          totalEntries: count,
+          fileSizeBytes: fileSize,
+        }
       };
     } catch (error) {
-      return {
-        healthy: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+      return { 
+        healthy: false, 
+        error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
   }
 
   private createTables(): void {
+    if (!this.db) return;
+
     const sql = `
       CREATE TABLE IF NOT EXISTS memory_entries (
         id TEXT PRIMARY KEY,
@@ -270,21 +309,21 @@ export class SQLiteBackend implements IMemoryBackend {
         session_id TEXT NOT NULL,
         type TEXT NOT NULL,
         content TEXT NOT NULL,
-        context TEXT NOT NULL,
+        context TEXT,
         timestamp TEXT NOT NULL,
-        tags TEXT NOT NULL,
-        version INTEGER NOT NULL,
+        tags TEXT,
+        version INTEGER DEFAULT 1,
         parent_id TEXT,
-        metadata TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        metadata TEXT
       )
     `;
 
-    this.db!.exec(sql);
+    this.db.run(sql);
   }
 
   private createIndexes(): void {
+    if (!this.db) return;
+
     const indexes = [
       'CREATE INDEX IF NOT EXISTS idx_agent_id ON memory_entries(agent_id)',
       'CREATE INDEX IF NOT EXISTS idx_session_id ON memory_entries(session_id)',
@@ -293,33 +332,23 @@ export class SQLiteBackend implements IMemoryBackend {
       'CREATE INDEX IF NOT EXISTS idx_parent_id ON memory_entries(parent_id)',
     ];
 
-    for (const sql of indexes) {
-      this.db!.exec(sql);
-    }
+    indexes.forEach(sql => this.db.run(sql));
   }
 
   private rowToEntry(row: Record<string, unknown>): MemoryEntry {
-    const entry: MemoryEntry = {
+    return {
       id: row.id as string,
       agentId: row.agent_id as string,
       sessionId: row.session_id as string,
-      type: row.type as MemoryEntry['type'],
+      type: (row.type as "error" | "observation" | "insight" | "decision" | "artifact"),
       content: row.content as string,
-      context: JSON.parse(row.context as string),
+      context: row.context ? JSON.parse(row.context as string) : {},
       timestamp: new Date(row.timestamp as string),
-      tags: JSON.parse(row.tags as string),
-      version: row.version as number,
+      tags: row.tags ? JSON.parse(row.tags as string) : [],
+      version: (row.version as number) || 1,
+      parentId: row.parent_id as string | undefined,
+      metadata: row.metadata ? JSON.parse(row.metadata as string) : undefined,
     };
-    
-    if (row.parent_id) {
-      entry.parentId = row.parent_id as string;
-    }
-    
-    if (row.metadata) {
-      entry.metadata = JSON.parse(row.metadata as string);
-    }
-    
-    return entry;
   }
 }
 

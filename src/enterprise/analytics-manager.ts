@@ -995,7 +995,7 @@ export class AnalyticsManager extends EventEmitter {
       {
         name: 'System Performance',
         description: 'Real-time system performance metrics',
-        type: 'operational' as const,
+        type: "operational" as const,
         widgets: [
           {
             title: 'CPU Usage',
@@ -1164,7 +1164,7 @@ export class AnalyticsManager extends EventEmitter {
         name: 'request-rate',
         description: 'Requests per second',
         type: 'counter',
-        category: 'usage',
+        category: 'usage' as const,
         unit: 'requests/sec',
         value: Math.random() * 100 + 10,
         tags: { service: 'api' },
@@ -1227,7 +1227,7 @@ export class AnalyticsManager extends EventEmitter {
         title: `Anomaly detected in ${metric.name}`,
         description: `The metric ${metric.name} has deviated significantly from its normal pattern`,
         type: 'anomaly',
-        category: metric.category,
+        category: 'quality',
         confidence: Math.min(95, deviation * 20),
         impact: deviation > 3 ? 'high' : 'medium',
         priority: deviation > 3 ? 'high' : 'medium',

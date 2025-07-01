@@ -73,19 +73,19 @@ export class MigrationLogger {
 
     try {
       const logDir = path.dirname(this.logFile);
-      await fs.ensureDir(logDir);
+      await fs.mkdir(logDir, { recursive: true });
 
       const logLine = JSON.stringify(entry) + '\n';
       await fs.appendFile(this.logFile, logLine);
     } catch (error) {
       // Prevent recursive logging
-      console.error('Failed to write to log file:', error.message);
+      console.error('Failed to write to log file:', error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
   async saveToFile(filePath: string): Promise<void> {
-    await fs.ensureDir(path.dirname(filePath));
-    await fs.writeJson(filePath, this.entries, { spaces: 2 });
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(this.entries, null, 2));
   }
 
   getEntries(): LogEntry[] {

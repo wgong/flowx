@@ -3,8 +3,8 @@
  * Integrates with TodoWrite/TodoRead for coordination and Memory for persistence
  */
 
-import { Command } from 'npm:commander';
-import chalk from 'npm:chalk';
+import { Command } from 'commander';
+import chalk from 'chalk';
 import { TaskEngine, WorkflowTask, TaskFilter, TaskSort, Workflow, ResourceRequirement, TaskSchedule } from "./engine.ts";
 import { generateId } from "../utils/helpers.ts";
 
@@ -674,10 +674,11 @@ export function createTaskWorkflowCommand(context: TaskCommandContext): Command 
           try {
             console.log(chalk.hex("#0066CC")(`📊 Visualizing workflow: ${workflowId}`));
 
-            const graph = context.taskEngine.getDependencyGraph();
+            // Get dependency graph if available
+            const dependencyGraph = (context.taskEngine as any).getDependencyGraph?.() || null;
 
             if (options.format === 'json') {
-              const output = JSON.stringify(graph, null, 2);
+              const output = JSON.stringify(dependencyGraph, null, 2);
               if (options.output) {
                 const fs = await import('node:fs/promises');
                 await fs.writeFile(options.output, output);
@@ -686,7 +687,7 @@ export function createTaskWorkflowCommand(context: TaskCommandContext): Command 
                 console.log(output);
               }
             } else if (options.format === 'ascii') {
-              displayDependencyGraph(graph);
+              displayDependencyGraph(dependencyGraph);
             }
 
           } catch (error) {

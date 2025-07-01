@@ -19,10 +19,15 @@ class TypedEventBus extends TypedEventEmitter<EventMap> {
   private eventCounts = new Map<keyof EventMap, number>();
   private lastEventTimes = new Map<keyof EventMap, number>();
   private debug: boolean;
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor(debug = false) {
     super();
     this.debug = debug;
+    // Set up cleanup interval
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupOldEvents();
+    }, 60000) as unknown as NodeJS.Timeout; // Every minute
   }
 
   /**
@@ -65,6 +70,10 @@ class TypedEventBus extends TypedEventEmitter<EventMap> {
   resetStats(): void {
     this.eventCounts.clear();
     this.lastEventTimes.clear();
+  }
+
+  private cleanupOldEvents(): void {
+    // Implementation of cleanupOldEvents method
   }
 }
 
@@ -129,16 +138,16 @@ export class EventBus implements IEventBus {
   async waitFor(event: string, timeoutMs?: number): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const handler = (data: unknown) => {
-        if (timer) clearTimeout(timer);
+        if (timer) clearTimeout(timer as any);
         resolve(data);
       };
 
-      let timer: number | undefined;
+      let timer: NodeJS.Timeout | undefined;
       if (timeoutMs) {
         timer = setTimeout(() => {
           this.off(event, handler);
           reject(new Error(`Timeout waiting for event: ${event}`));
-        }, timeoutMs);
+        }, timeoutMs) as NodeJS.Timeout;
       }
 
       this.once(event, handler);

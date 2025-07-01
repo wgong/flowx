@@ -60,7 +60,7 @@ export async function initCommand(options: InitOptions = {}) {
     }
     
   } catch (error) {
-    printError(`Failed to initialize project: ${error.message}`);
-    throw error;
+    printError(`Failed to initialize project: ${(error as Error).message}`);
+    process.exit(1);
   }
 }

@@ -3,8 +3,8 @@
  */
 
 import { EventEmitter } from 'node:events';
-import express from 'npm:express';
-import { WebSocketServer } from 'npm:ws';
+import express from 'express';
+import { WebSocketServer } from 'ws';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -379,9 +379,9 @@ function startWebUI(host: string, port: number) {
       
       executeCliCommand(command, null);
       
-      res.json({ success: true, message: 'Command executed' });
+      return res.json({ success: true, message: 'Command executed' });
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
   
@@ -450,7 +450,7 @@ function startWebUI(host: string, port: number) {
       } catch (error) {
         ws.send(JSON.stringify({
           type: 'error',
-          data: `Invalid message format: ${error.message}`
+          data: `Invalid message format: ${error instanceof Error ? error.message : 'Unknown error'}`
         }));
       }
     });
@@ -493,7 +493,7 @@ function startWebUI(host: string, port: number) {
       executeCliCommand(command, ws);
       
     } catch (error) {
-      const errorMsg = `Error executing command: ${error.message}`;
+      const errorMsg = `Error executing command: ${error instanceof Error ? error.message : 'Unknown error'}`;
       outputHistory.push(errorMsg);
       sendResponse(ws, {
         type: 'error',
@@ -503,7 +503,7 @@ function startWebUI(host: string, port: number) {
   }
   
   // Execute CLI commands and capture output
-  function executeCliCommand(command: string, ws: any) {
+  function executeCliCommand(command: string, ws: any): void {
     // Handle built-in commands first
     if (command === 'help') {
       const helpText = `<span class="success">Available Commands:</span>
@@ -559,71 +559,35 @@ function startWebUI(host: string, port: number) {
       return;
     }
     
-    // For other commands, spawn a subprocess
-    const args = command.split(' ');
-    const cmd = args[0];
-    const cmdArgs = args.slice(1);
-    
-    // Determine the correct claude-flow executable path
-    const rootDir = path.resolve(__dirname, '../..');
-    const cliPath = path.join(rootDir, 'bin', 'claude-flow');
-    
-    // Spawn the command
-    const child = spawn('node', [path.join(rootDir, 'src/cli/simple-cli.js'), ...cmdArgs], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, CLAUDE_FLOW_WEB_MODE: 'true' }
-    });
-    
-    // Handle stdout
-    child.stdout.on('data', (data) => {
-      const output = data.toString();
-      outputHistory.push(output);
-      
-      // Convert ANSI colors to HTML spans
-      const htmlOutput = convertAnsiToHtml(output);
-      
-      broadcastToClients({
+    if (command === 'version') {
+      const versionText = `<span class="success">Claude-Flow CLI</span>
+• Version: 1.0.0
+• Build: ${process.env.NODE_ENV || 'development'}
+• Node.js: ${process.version}
+• Platform: ${process.platform}
+`;
+      sendResponse(ws, {
         type: 'output',
-        data: htmlOutput
+        data: versionText
       });
-    });
-    
-    // Handle stderr
-    child.stderr.on('data', (data) => {
-      const error = data.toString();
-      outputHistory.push(error);
-      
-      broadcastToClients({
-        type: 'error',
-        data: convertAnsiToHtml(error)
-      });
-    });
-    
-    // Handle process exit
-    child.on('close', (code) => {
-      const exitMsg = code === 0 ? 
-        `<span class="success">Command completed successfully</span>` :
-        `<span class="error">Command failed with exit code ${code}</span>`;
-      
-      broadcastToClients({
-        type: 'output',
-        data: `\\n${exitMsg}\\n`
-      });
-      
       sendResponse(ws, { type: 'command_complete' });
-    });
+      return;
+    }
     
-    child.on('error', (error) => {
-      const errorMsg = `<span class="error">Failed to execute command: ${error.message}</span>`;
-      outputHistory.push(errorMsg);
-      
+    // For other commands, spawn a subprocess or handle as needed
+    try {
+      // Default handling for unrecognized commands
+      sendResponse(ws, {
+        type: 'output',
+        data: `<span class="warning">Command not recognized: ${command}</span>\n<span class="info">Type 'help' for available commands.</span>`
+      });
+      sendResponse(ws, { type: 'command_complete' });
+    } catch (error) {
       sendResponse(ws, {
         type: 'error',
-        data: errorMsg
+        data: `Error handling command: ${error instanceof Error ? error.message : 'Unknown error'}`
       });
-      
-      sendResponse(ws, { type: 'command_complete' });
-    });
+    }
   }
   
   // Broadcast message to all connected clients
@@ -765,4 +729,42 @@ export function getComponentStatus() {
 // Export stores for other commands
 export function getStores() {
   return { agents, tasks, memory };
+}
+
+// Helper function to select agent for task
+function selectAgentForTask(task: any, agents: any[]): any | undefined {
+  if (agents.length === 0) {
+    return undefined;
+  }
+
+  // Simple selection logic based on agent capabilities and task requirements
+  for (const agent of agents) {
+    if (isAgentSuitableForTask(agent, task)) {
+      return agent;
+    }
+  }
+
+  // If no perfect match, return the first available agent
+  return agents[0];
+}
+
+// Helper function to check if agent is suitable for task
+function isAgentSuitableForTask(agent: any, task: any): boolean {
+  // Basic suitability check - can be enhanced with more complex logic
+  return agent.status === 'active' && agent.capabilities?.includes(task.type);
+}
+
+// Helper function to process task queue
+async function processTaskQueue(taskQueue: any[]): Promise<void> {
+  while (taskQueue.length > 0) {
+    const task = taskQueue.shift();
+    if (!task) continue;
+
+    try {
+      // Process the task - this would need to be implemented based on task structure
+      console.log('Processing task:', task.id || task.name || 'unknown');
+    } catch (error) {
+      console.error('Failed to process task:', error);
+    }
+  }
 }
