@@ -4,7 +4,11 @@
  */
 
 import type { CLICommand, CLIContext } from '../../interfaces/index.ts';
-import { formatTable, formatBytes, formatDuration, formatRelativeTime, successBold, infoBold, warningBold, errorBold } from '../../core/output-formatter.ts';
+import { formatTable, formatDuration, formatRelativeTime, successBold, infoBold, warningBold, errorBold, printSuccess, printError, printWarning, printInfo } from '../../core/output-formatter.ts';
+import { getPersistenceManager, getMemoryManager } from '../../core/global-initialization.ts';
+import { execSync } from 'child_process';
+import { readFileSync, existsSync } from 'fs';
+import * as os from 'os';
 
 export const statusCommand: CLICommand = {
   name: 'status',
@@ -14,71 +18,76 @@ export const statusCommand: CLICommand = {
   examples: [
     'claude-flow status',
     'claude-flow status --detailed',
-    'claude-flow status --format json',
-    'claude-flow status --watch'
+    'claude-flow status --services',
+    'claude-flow status --agents'
   ],
   options: [
     {
       name: 'detailed',
       short: 'd',
-      description: 'Show detailed status information',
+      description: 'Show detailed system information',
       type: 'boolean'
     },
     {
-      name: 'format',
-      short: 'f',
-      description: 'Output format',
-      type: 'string',
-      choices: ['table', 'json', 'yaml'],
-      default: 'table'
+      name: 'services',
+      short: 's',
+      description: 'Show only service status',
+      type: 'boolean'
+    },
+    {
+      name: 'agents',
+      short: 'a',
+      description: 'Show only agent status',
+      type: 'boolean'
+    },
+    {
+      name: 'swarms',
+      description: 'Show only swarm status',
+      type: 'boolean'
+    },
+    {
+      name: 'resources',
+      short: 'r',
+      description: 'Show only resource usage',
+      type: 'boolean'
+    },
+    {
+      name: 'json',
+      short: 'j',
+      description: 'Output in JSON format',
+      type: 'boolean'
     },
     {
       name: 'watch',
       short: 'w',
-      description: 'Watch for status changes',
+      description: 'Watch mode (refresh every 5 seconds)',
       type: 'boolean'
-    },
-    {
-      name: 'interval',
-      short: 'i',
-      description: 'Watch interval in seconds',
-      type: 'number',
-      default: 2
     }
   ],
   handler: async (context: CLIContext) => {
     const { options } = context;
-
-    if (options.watch) {
-      return await watchStatus(context);
-    }
-
-    const status = await getSystemStatus(options.detailed);
     
-    switch (options.format) {
-      case 'json':
+    try {
+      if (options.watch) {
+        await watchMode(options);
+        return;
+      }
+      
+      const status = await getSystemStatus(options.detailed);
+      
+      if (options.json) {
         console.log(JSON.stringify(status, null, 2));
-        break;
-      case 'yaml':
-        console.log(formatAsYaml(status));
-        break;
-      default:
-        displayStatusTable(status);
-        break;
+        return;
+      }
+      
+      await displaySystemStatus(status, options);
+      
+    } catch (error) {
+      printError(`Failed to get system status: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
     }
   }
 };
-
-interface SystemStatus {
-  timestamp: Date;
-  uptime: number;
-  services: ServiceStatus[];
-  processes: ProcessStatus[];
-  resources: ResourceStatus;
-  health: HealthStatus;
-  agents?: AgentStatus[];
-  swarms?: SwarmStatus[];
-}
 
 interface ServiceStatus {
   name: string;
@@ -89,13 +98,12 @@ interface ServiceStatus {
   cpu?: number;
   port?: number;
   lastCheck: Date;
-  error?: string;
 }
 
 interface ProcessStatus {
   name: string;
   pid: number;
-  status: 'running' | 'sleeping' | 'stopped' | 'zombie';
+  status: 'running' | 'zombie' | 'stopped';
   cpu: number;
   memory: number;
   uptime: number;
@@ -129,24 +137,17 @@ interface ResourceStatus {
 }
 
 interface HealthStatus {
-  overall: 'healthy' | 'warning' | 'critical' | 'unknown';
-  checks: HealthCheck[];
-  score: number;
-}
-
-interface HealthCheck {
-  name: string;
-  status: 'pass' | 'warn' | 'fail';
-  message: string;
-  details?: any;
-  lastCheck: Date;
+  overall: 'healthy' | 'warning' | 'critical';
+  services: number;
+  agents: number;
+  issues: string[];
 }
 
 interface AgentStatus {
   id: string;
   name: string;
   type: string;
-  status: 'active' | 'idle' | 'busy' | 'error' | 'offline';
+  status: string;
   uptime: number;
   tasksCompleted: number;
   currentTask?: string;
@@ -156,12 +157,23 @@ interface AgentStatus {
 interface SwarmStatus {
   id: string;
   name: string;
-  status: 'active' | 'idle' | 'stopped' | 'error';
+  status: string;
   agents: number;
   activeTasks: number;
   completedTasks: number;
   uptime: number;
   coordinator: string;
+}
+
+interface SystemStatus {
+  timestamp: Date;
+  uptime: number;
+  services: ServiceStatus[];
+  processes: ProcessStatus[];
+  resources: ResourceStatus;
+  health: HealthStatus;
+  agents?: AgentStatus[];
+  swarms?: SwarmStatus[];
 }
 
 async function getSystemStatus(detailed: boolean = false): Promise<SystemStatus> {
@@ -185,274 +197,458 @@ async function getSystemStatus(detailed: boolean = false): Promise<SystemStatus>
 async function getServiceStatuses(): Promise<ServiceStatus[]> {
   const services: ServiceStatus[] = [];
   
-  // Check core services
-  const coreServices = [
-    'claude-flow-orchestrator',
-    'claude-flow-memory',
-    'claude-flow-swarm-coordinator',
-    'claude-flow-mcp-server'
-  ];
-
-  for (const serviceName of coreServices) {
-    try {
-      const status = await checkService(serviceName);
-      services.push(status);
-    } catch (error) {
-      services.push({
-        name: serviceName,
-        status: 'error',
-        lastCheck: new Date(),
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
+  // Check for actual Claude Flow processes
+  const claudeFlowProcesses = await findClaudeFlowProcesses();
+  
+  for (const proc of claudeFlowProcesses) {
+    services.push({
+      name: proc.name,
+      status: 'running',
+      pid: proc.pid,
+      uptime: proc.uptime,
+      memory: proc.memory,
+      cpu: proc.cpu,
+      lastCheck: new Date()
+    });
   }
-
+  
+  // Check MCP server if configured
+  const mcpStatus = await checkMCPServer();
+  if (mcpStatus) {
+    services.push(mcpStatus);
+  }
+  
   return services;
 }
 
-async function checkService(name: string): Promise<ServiceStatus> {
-  // This would normally check actual service status
-  // For now, return mock data
-  return {
-    name,
-    status: Math.random() > 0.1 ? 'running' : 'stopped',
-    pid: Math.floor(Math.random() * 65535) + 1000,
-    uptime: Math.floor(Math.random() * 86400000),
-    memory: Math.floor(Math.random() * 100) * 1024 * 1024,
-    cpu: Math.random() * 100,
-    port: 3000 + Math.floor(Math.random() * 1000),
-    lastCheck: new Date()
-  };
+async function findClaudeFlowProcesses(): Promise<ProcessStatus[]> {
+  try {
+    // Use ps to find Node.js processes related to claude-flow
+    const psOutput = execSync('ps aux | grep -E "(claude-flow|node.*cli\\.js)" | grep -v grep', { encoding: 'utf8' });
+    const lines = psOutput.trim().split('\n').filter(line => line.length > 0);
+    
+    const processes: ProcessStatus[] = [];
+    
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length >= 11) {
+        const pid = parseInt(parts[1]);
+        const cpu = parseFloat(parts[2]);
+        const memory = parseFloat(parts[3]) * 1024 * 1024; // Convert to bytes
+        const command = parts.slice(10).join(' ');
+        
+        // Determine process name
+        let name = 'claude-flow';
+        if (command.includes('agent-')) {
+          name = 'claude-flow-agent';
+        } else if (command.includes('swarm')) {
+          name = 'claude-flow-swarm';
+        } else if (command.includes('mcp')) {
+          name = 'claude-flow-mcp';
+        }
+        
+        processes.push({
+          name,
+          pid,
+          status: 'running',
+          cpu,
+          memory,
+          uptime: 0, // Would need more complex logic to get actual uptime
+          command
+        });
+      }
+    }
+    
+    return processes;
+  } catch (error) {
+    // If ps command fails, return empty array
+    return [];
+  }
+}
+
+async function checkMCPServer(): Promise<ServiceStatus | null> {
+  try {
+    // Check if MCP config exists
+    const mcpConfigPath = './mcp_config/mcp.json';
+    if (!existsSync(mcpConfigPath)) {
+      return null;
+    }
+    
+    const mcpConfig = JSON.parse(readFileSync(mcpConfigPath, 'utf8'));
+    const port = mcpConfig.port || 3000;
+    
+    // Try to check if port is in use
+    try {
+      execSync(`lsof -i :${port}`, { stdio: 'pipe' });
+      return {
+        name: 'mcp-server',
+        status: 'running',
+        port,
+        lastCheck: new Date()
+      };
+    } catch {
+      return {
+        name: 'mcp-server',
+        status: 'stopped',
+        port,
+        lastCheck: new Date()
+      };
+    }
+  } catch (error) {
+    return null;
+  }
 }
 
 async function getProcessStatuses(): Promise<ProcessStatus[]> {
-  const processes: ProcessStatus[] = [];
-  
-  // This would normally get actual process information
-  // For now, return mock data for claude-flow processes
-  const processNames = [
-    'claude-flow',
-    'node (claude-flow)',
-    'swarm-coordinator',
-    'memory-manager'
-  ];
-
-  for (const name of processNames) {
-    processes.push({
-      name,
-      pid: Math.floor(Math.random() * 65535) + 1000,
-      status: 'running',
-      cpu: Math.random() * 100,
-      memory: Math.floor(Math.random() * 100) * 1024 * 1024,
-      uptime: Math.floor(Math.random() * 86400000),
-      command: `node /usr/local/bin/${name}`
-    });
-  }
-
-  return processes;
+  return await findClaudeFlowProcesses();
 }
 
 async function getResourceStatus(): Promise<ResourceStatus> {
-  // This would normally get actual system resources
-  // For now, return mock data
-  const memTotal = 16 * 1024 * 1024 * 1024;
-  const memUsed = Math.floor(Math.random() * 12) * 1024 * 1024 * 1024;
-  const diskTotal = 1024 * 1024 * 1024 * 1024;
-  const diskUsed = Math.floor(Math.random() * 800) * 1024 * 1024 * 1024;
-  
-  return {
-    cpu: {
-      usage: Math.random() * 100,
-      cores: 8,
-      model: 'Apple M1 Pro'
-    },
-    memory: {
-      total: memTotal,
-      used: memUsed,
-      free: memTotal - memUsed,
-      usage: (memUsed / memTotal) * 100
-    },
-    disk: {
-      total: diskTotal,
-      used: diskUsed,
-      free: diskTotal - diskUsed,
-      usage: (diskUsed / diskTotal) * 100
-    },
-    network: {
-      bytesIn: Math.floor(Math.random() * 1000000000),
-      bytesOut: Math.floor(Math.random() * 1000000000),
-      packetsIn: Math.floor(Math.random() * 1000000),
-      packetsOut: Math.floor(Math.random() * 1000000)
+  try {
+    const cpus = os.cpus();
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const usedMem = totalMem - freeMem;
+    
+    // Get disk usage (Unix-like systems)
+    let diskTotal = 0;
+    let diskUsed = 0;
+    let diskFree = 0;
+    
+    try {
+      // Use different df command for macOS vs Linux
+      const dfCommand = process.platform === 'darwin' ? 'df -k / | tail -1' : 'df -B1 / | tail -1';
+      const dfOutput = execSync(dfCommand, { encoding: 'utf8' });
+      const dfParts = dfOutput.trim().split(/\s+/);
+      if (dfParts.length >= 4) {
+        if (process.platform === 'darwin') {
+          // macOS df returns KB, convert to bytes
+          diskTotal = parseInt(dfParts[1]) * 1024;
+          diskUsed = parseInt(dfParts[2]) * 1024;
+          diskFree = parseInt(dfParts[3]) * 1024;
+        } else {
+          diskTotal = parseInt(dfParts[1]);
+          diskUsed = parseInt(dfParts[2]);
+          diskFree = parseInt(dfParts[3]);
+        }
+      }
+    } catch {
+      // Fallback values if df command fails
+      diskTotal = 1024 * 1024 * 1024 * 1024; // 1TB
+      diskUsed = diskTotal * 0.5; // 50% used
+      diskFree = diskTotal - diskUsed;
     }
-  };
+    
+    // Get network stats (simplified)
+    let networkBytesIn = 0;
+    let networkBytesOut = 0;
+    
+    try {
+      if (process.platform === 'darwin') {
+        const netstatOutput = execSync('netstat -ibn | grep -E "en[0-9]" | head -1', { encoding: 'utf8' });
+        const netParts = netstatOutput.trim().split(/\s+/);
+        if (netParts.length >= 7) {
+          networkBytesIn = parseInt(netParts[6]) || 0;
+          networkBytesOut = parseInt(netParts[9]) || 0;
+        }
+      }
+    } catch {
+      // Fallback if network stats unavailable
+    }
+    
+    return {
+      cpu: {
+        usage: await getCPUUsage(),
+        cores: cpus.length,
+        model: cpus[0]?.model || 'Unknown'
+      },
+      memory: {
+        total: totalMem,
+        used: usedMem,
+        free: freeMem,
+        usage: (usedMem / totalMem) * 100
+      },
+      disk: {
+        total: diskTotal,
+        used: diskUsed,
+        free: diskFree,
+        usage: diskTotal > 0 ? (diskUsed / diskTotal) * 100 : 0
+      },
+      network: {
+        bytesIn: networkBytesIn,
+        bytesOut: networkBytesOut,
+        packetsIn: 0, // Would need more complex implementation
+        packetsOut: 0
+      }
+    };
+  } catch (error) {
+    // Return basic fallback data
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const usedMem = totalMem - freeMem;
+    
+    return {
+      cpu: {
+        usage: 0,
+        cores: os.cpus().length,
+        model: 'Unknown'
+      },
+      memory: {
+        total: totalMem,
+        used: usedMem,
+        free: freeMem,
+        usage: (usedMem / totalMem) * 100
+      },
+      disk: {
+        total: 0,
+        used: 0,
+        free: 0,
+        usage: 0
+      },
+      network: {
+        bytesIn: 0,
+        bytesOut: 0,
+        packetsIn: 0,
+        packetsOut: 0
+      }
+    };
+  }
+}
+
+async function getCPUUsage(): Promise<number> {
+  return new Promise((resolve) => {
+    const startUsage = process.cpuUsage();
+    const startTime = process.hrtime.bigint();
+    
+    setTimeout(() => {
+      const endUsage = process.cpuUsage(startUsage);
+      const endTime = process.hrtime.bigint();
+      
+      const elapsedTime = Number(endTime - startTime) / 1000000; // Convert to milliseconds
+      const totalCPUTime = (endUsage.user + endUsage.system) / 1000; // Convert to milliseconds
+      
+      const cpuPercent = (totalCPUTime / elapsedTime) * 100;
+      resolve(Math.min(cpuPercent, 100)); // Cap at 100%
+    }, 100);
+  });
 }
 
 async function getHealthStatus(): Promise<HealthStatus> {
-  const checks: HealthCheck[] = [
-    {
-      name: 'Memory Usage',
-      status: 'pass',
-      message: 'Memory usage is within normal limits',
-      lastCheck: new Date()
-    },
-    {
-      name: 'Disk Space',
-      status: 'pass',
-      message: 'Sufficient disk space available',
-      lastCheck: new Date()
-    },
-    {
-      name: 'Service Connectivity',
-      status: 'pass',
-      message: 'All services are responding',
-      lastCheck: new Date()
-    },
-    {
-      name: 'Database Connection',
-      status: 'pass',
-      message: 'Database is accessible',
-      lastCheck: new Date()
+  const issues: string[] = [];
+  let serviceCount = 0;
+  let agentCount = 0;
+  
+  try {
+    // Check services
+    const services = await getServiceStatuses();
+    serviceCount = services.length;
+    const failedServices = services.filter(s => s.status !== 'running');
+    if (failedServices.length > 0) {
+      issues.push(`${failedServices.length} service(s) not running`);
     }
-  ];
-
-  const passCount = checks.filter(c => c.status === 'pass').length;
-  const score = (passCount / checks.length) * 100;
-
+    
+    // Check agents
+    const persistenceManager = await getPersistenceManager();
+    const agents = await persistenceManager.getActiveAgents();
+    agentCount = agents.length;
+    
+    // Check memory system
+    const memoryManager = await getMemoryManager();
+    const memoryHealth = await memoryManager.getHealthStatus();
+    if (!memoryHealth.healthy) {
+      issues.push(`Memory system unhealthy: ${memoryHealth.error || 'Unknown error'}`);
+    }
+    if (memoryHealth.metrics?.corruptedEntries && memoryHealth.metrics.corruptedEntries > 0) {
+      issues.push(`${memoryHealth.metrics.corruptedEntries} corrupted memory entries detected`);
+    }
+    if (memoryHealth.metrics?.expiredEntries && memoryHealth.metrics.expiredEntries > 10) {
+      issues.push(`${memoryHealth.metrics.expiredEntries} expired memory entries need cleanup`);
+    }
+    
+    // Check disk space
+    const resources = await getResourceStatus();
+    if (resources.disk.usage > 90) {
+      issues.push('Disk usage above 90%');
+    }
+    if (resources.memory.usage > 90) {
+      issues.push('Memory usage above 90%');
+    }
+    
+  } catch (error) {
+    issues.push('Health check failed: ' + (error instanceof Error ? error.message : String(error)));
+  }
+  
+  let overall: 'healthy' | 'warning' | 'critical' = 'healthy';
+  if (issues.length > 0) {
+    overall = issues.some(issue => issue.includes('failed') || issue.includes('critical')) ? 'critical' : 'warning';
+  }
+  
   return {
-    overall: score >= 90 ? 'healthy' : score >= 70 ? 'warning' : 'critical',
-    checks,
-    score
+    overall,
+    services: serviceCount,
+    agents: agentCount,
+    issues
   };
 }
 
 async function getAgentStatuses(): Promise<AgentStatus[]> {
-  // Mock agent data
-  return [
-    {
-      id: 'agent-001',
-      name: 'Research Agent',
-      type: 'researcher',
-      status: 'active',
-      uptime: 3600000,
-      tasksCompleted: 15,
-      currentTask: 'Analyzing market trends',
-      lastActivity: new Date()
-    },
-    {
-      id: 'agent-002',
-      name: 'Code Agent',
-      type: 'developer',
-      status: 'idle',
-      uptime: 7200000,
-      tasksCompleted: 8,
-      lastActivity: new Date(Date.now() - 300000)
-    }
-  ];
+  try {
+    const persistenceManager = await getPersistenceManager();
+    const agents = await persistenceManager.getAllAgents();
+    
+    return agents.map(agent => ({
+      id: agent.id,
+      name: agent.name,
+      type: agent.type,
+      status: agent.status,
+      uptime: Date.now() - agent.createdAt,
+      tasksCompleted: 0, // Would need task tracking system
+      lastActivity: new Date(agent.createdAt)
+    }));
+  } catch (error) {
+    return [];
+  }
 }
 
 async function getSwarmStatuses(): Promise<SwarmStatus[]> {
-  // Mock swarm data
-  return [
-    {
-      id: 'swarm-001',
-      name: 'Development Swarm',
-      status: 'active',
-      agents: 3,
-      activeTasks: 2,
-      completedTasks: 25,
-      uptime: 14400000,
-      coordinator: 'coordinator-001'
-    }
-  ];
+  try {
+    // This would connect to actual swarm coordinator
+    // For now, return empty array since swarm system needs implementation
+    return [];
+  } catch (error) {
+    return [];
+  }
 }
 
-function displayStatusTable(status: SystemStatus): void {
-  console.log(successBold('\n🧠 Claude Flow System Status\n'));
+async function displaySystemStatus(status: SystemStatus, options: any): Promise<void> {
+  console.log(successBold('\n🚀 Claude Flow System Status\n'));
   
-  // System Overview
-  console.log(infoBold('System Overview:'));
-  console.log(`  Timestamp: ${status.timestamp.toLocaleString()}`);
-  console.log(`  Uptime: ${formatDuration(status.uptime)}`);
-  console.log(`  Health: ${getHealthStatusColor(status.health.overall)} (${status.health.score.toFixed(1)}%)`);
-  console.log();
-
-  // Services
-  if (status.services.length > 0) {
-    console.log(infoBold('Services:'));
-    const serviceTable = formatTable(status.services, [
-      { header: 'Service', key: 'name' },
-      { header: 'Status', key: 'status', formatter: (v) => getStatusColor(v) },
-      { header: 'PID', key: 'pid', formatter: (v) => v ? String(v) : '-' },
-      { header: 'Uptime', key: 'uptime', formatter: (v) => v ? formatDuration(v) : '-' },
-      { header: 'Memory', key: 'memory', formatter: (v) => v ? formatBytes(v) : '-' },
-      { header: 'CPU %', key: 'cpu', formatter: (v) => v ? v.toFixed(1) + '%' : '-' }
-    ]);
-    console.log(serviceTable);
+  // Health overview
+  const healthColor = status.health.overall === 'healthy' ? successBold : 
+                     status.health.overall === 'warning' ? warningBold : errorBold;
+  console.log(`Overall Health: ${healthColor(status.health.overall.toUpperCase())}`);
+  console.log(`System Uptime: ${formatUptime(status.uptime)}`);
+  console.log(`Last Check: ${status.timestamp.toLocaleString()}\n`);
+  
+  if (status.health.issues.length > 0) {
+    console.log(warningBold('⚠️  Issues Detected:'));
+    status.health.issues.forEach(issue => console.log(`  • ${issue}`));
     console.log();
   }
-
+  
+  // Services
+  if (!options.agents && !options.swarms && !options.resources) {
+    if (status.services.length > 0) {
+      console.log(infoBold('📊 Services:'));
+      const serviceTable = formatTable(status.services, [
+        { header: 'Service', key: 'name' },
+        { header: 'Status', key: 'status', formatter: (v) => getStatusColor(String(v || 'unknown')) },
+        { header: 'PID', key: 'pid', formatter: (v) => v ? String(v) : '-' },
+        { header: 'Memory', key: 'memory', formatter: (v) => (v && typeof v === 'number') ? formatBytes(v) : '-' },
+        { header: 'CPU %', key: 'cpu', formatter: (v) => (v && typeof v === 'number') ? v.toFixed(1) + '%' : '-' },
+        { header: 'Port', key: 'port', formatter: (v) => v ? String(v) : '-' }
+      ]);
+      console.log(serviceTable);
+      console.log();
+    }
+  }
+  
   // Resources
-  console.log(infoBold('Resource Usage:'));
-  console.log(`  CPU: ${status.resources.cpu.usage.toFixed(1)}% (${status.resources.cpu.cores} cores)`);
-  console.log(`  Memory: ${formatBytes(status.resources.memory.used)} / ${formatBytes(status.resources.memory.total)} (${status.resources.memory.usage.toFixed(1)}%)`);
-  console.log(`  Disk: ${formatBytes(status.resources.disk.used)} / ${formatBytes(status.resources.disk.total)} (${status.resources.disk.usage.toFixed(1)}%)`);
-  console.log();
-
-  // Health Checks
-  if (status.health.checks.length > 0) {
-    console.log(infoBold('Health Checks:'));
-    for (const check of status.health.checks) {
-      const statusIcon = check.status === 'pass' ? '✅' : check.status === 'warn' ? '⚠️' : '❌';
-      console.log(`  ${statusIcon} ${check.name}: ${check.message}`);
+  if (options.resources || options.detailed) {
+    console.log(infoBold('💻 System Resources:'));
+    console.log(`CPU: ${status.resources.cpu.usage.toFixed(1)}% (${status.resources.cpu.cores} cores)`);
+    console.log(`Memory: ${formatBytes(status.resources.memory.used)} / ${formatBytes(status.resources.memory.total)} (${status.resources.memory.usage.toFixed(1)}%)`);
+    console.log(`Disk: ${formatBytes(status.resources.disk.used)} / ${formatBytes(status.resources.disk.total)} (${status.resources.disk.usage.toFixed(1)}%)`);
+    if (status.resources.network.bytesIn > 0 || status.resources.network.bytesOut > 0) {
+      console.log(`Network: ↓${formatBytes(status.resources.network.bytesIn)} ↑${formatBytes(status.resources.network.bytesOut)}`);
     }
     console.log();
   }
-
-  // Agents (if detailed)
-  if (status.agents && status.agents.length > 0) {
-    console.log(infoBold('Agents:'));
+  
+  // Agents
+  if ((options.agents || options.detailed) && status.agents && status.agents.length > 0) {
+    console.log(infoBold('🤖 Agents:'));
     const agentTable = formatTable(status.agents, [
+      { header: 'ID', key: 'id' },
       { header: 'Name', key: 'name' },
       { header: 'Type', key: 'type' },
-      { header: 'Status', key: 'status', formatter: (v) => getStatusColor(v) },
-      { header: 'Uptime', key: 'uptime', formatter: (v) => formatDuration(v) },
-      { header: 'Tasks', key: 'tasksCompleted' },
-      { header: 'Current Task', key: 'currentTask', formatter: (v) => v || '-' }
+      { header: 'Status', key: 'status', formatter: (v) => getStatusColor(String(v || 'unknown')) },
+      { header: 'Uptime', key: 'uptime', formatter: (v) => (v && typeof v === 'number') ? formatUptime(v) : '-' }
     ]);
     console.log(agentTable);
     console.log();
   }
-
-  // Swarms (if detailed)
-  if (status.swarms && status.swarms.length > 0) {
-    console.log(infoBold('Swarms:'));
+  
+  // Swarms
+  if ((options.swarms || options.detailed) && status.swarms && status.swarms.length > 0) {
+    console.log(infoBold('🐝 Swarms:'));
     const swarmTable = formatTable(status.swarms, [
+      { header: 'ID', key: 'id' },
       { header: 'Name', key: 'name' },
-      { header: 'Status', key: 'status', formatter: (v) => getStatusColor(v) },
-      { header: 'Agents', key: 'agents' },
-      { header: 'Active Tasks', key: 'activeTasks' },
-      { header: 'Completed', key: 'completedTasks' },
-      { header: 'Uptime', key: 'uptime', formatter: (v) => formatDuration(v) }
+      { header: 'Status', key: 'status', formatter: (v) => getStatusColor(String(v || 'unknown')) },
+      { header: 'Agents', key: 'agents', formatter: (v) => v ? String(v) : '0' },
+      { header: 'Active Tasks', key: 'activeTasks', formatter: (v) => v ? String(v) : '0' }
     ]);
     console.log(swarmTable);
     console.log();
   }
+  
+  // Summary
+  console.log(infoBold('📈 Summary:'));
+  console.log(`  Services: ${status.services.length} running`);
+  console.log(`  Agents: ${status.health.agents} active`);
+  if (status.swarms) {
+    console.log(`  Swarms: ${status.swarms.length} configured`);
+  }
 }
+
+async function watchMode(options: any): Promise<void> {
+  console.clear();
+  printInfo('🔄 Watch mode enabled (Press Ctrl+C to exit)\n');
+  
+  const interval = setInterval(async () => {
+    try {
+      console.clear();
+      printInfo('🔄 Watch mode - Refreshing every 5 seconds (Press Ctrl+C to exit)\n');
+      
+      const status = await getSystemStatus(options.detailed);
+      await displaySystemStatus(status, options);
+      
+    } catch (error) {
+      printError(`Error in watch mode: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, 5000);
+  
+  // Handle Ctrl+C
+  process.on('SIGINT', () => {
+    clearInterval(interval);
+    console.clear();
+    printInfo('Watch mode stopped');
+    process.exit(0);
+  });
+  
+  // Initial display
+  try {
+    const status = await getSystemStatus(options.detailed);
+    await displaySystemStatus(status, options);
+  } catch (error) {
+    printError(`Error getting initial status: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+// Helper functions
 
 function getStatusColor(status: string): string {
   switch (status.toLowerCase()) {
     case 'running':
     case 'active':
-    case 'pass':
     case 'healthy':
       return successBold(status);
-    case 'idle':
-    case 'warn':
     case 'warning':
+    case 'idle':
       return warningBold(status);
     case 'stopped':
     case 'error':
-    case 'fail':
     case 'critical':
     case 'offline':
       return errorBold(status);
@@ -461,69 +657,32 @@ function getStatusColor(status: string): string {
   }
 }
 
-function getHealthStatusColor(status: string): string {
-  switch (status.toLowerCase()) {
-    case 'healthy':
-      return successBold(status);
-    case 'warning':
-      return warningBold(status);
-    case 'critical':
-      return errorBold(status);
-    default:
-      return status;
+function formatUptime(milliseconds: number): string {
+  if (!milliseconds || typeof milliseconds !== 'number' || isNaN(milliseconds)) {
+    return '0s';
   }
+  
+  const seconds = Math.floor(milliseconds / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  
+  if (days > 0) return `${days}d ${hours % 24}h`;
+  if (hours > 0) return `${hours}h ${minutes % 60}m`;
+  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+  return `${seconds}s`;
 }
 
-async function watchStatus(context: CLIContext): Promise<void> {
-  const { options } = context;
-  const interval = (options.interval as number) * 1000;
-
-  console.log(infoBold(`Watching system status (updating every ${options.interval}s)...\n`));
-  console.log('Press Ctrl+C to stop\n');
-
-  const updateStatus = async () => {
-    // Clear screen
-    process.stdout.write('\x1b[2J\x1b[H');
-    
-    const status = await getSystemStatus(options.detailed);
-    displayStatusTable(status);
-  };
-
-  // Initial display
-  await updateStatus();
-
-  // Set up interval
-  const intervalId = setInterval(updateStatus, interval);
-
-  // Handle Ctrl+C
-  process.on('SIGINT', () => {
-    clearInterval(intervalId);
-    console.log('\nStatus monitoring stopped.');
-    process.exit(0);
-  });
-}
-
-function formatAsYaml(obj: any, indent: number = 0): string {
-  const spaces = ' '.repeat(indent);
-  let result = '';
-
-  if (Array.isArray(obj)) {
-    for (const item of obj) {
-      result += `${spaces}- ${formatAsYaml(item, indent + 2)}\n`;
-    }
-  } else if (obj && typeof obj === 'object') {
-    for (const [key, value] of Object.entries(obj)) {
-      if (typeof value === 'object' && value !== null) {
-        result += `${spaces}${key}:\n${formatAsYaml(value, indent + 2)}`;
-      } else {
-        result += `${spaces}${key}: ${value}\n`;
-      }
-    }
-  } else {
-    return String(obj);
+function formatBytes(bytes: number): string {
+  if (!bytes || typeof bytes !== 'number' || isNaN(bytes) || bytes === 0) {
+    return '0 B';
   }
-
-  return result;
+  
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
 export default statusCommand; 

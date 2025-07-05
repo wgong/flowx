@@ -9,7 +9,7 @@ import { CoordinationError, DeadlockError } from "../utils/errors.ts";
 import { TaskScheduler } from "./scheduler.ts";
 import { ResourceManager } from "./resources.ts";
 import { MessageRouter } from "./messaging.ts";
-import { AdvancedTaskScheduler } from "./advanced-scheduler.ts";
+import { TaskOrchestrator } from "./task-orchestrator.ts";
 import { ConflictResolver } from "./conflict-resolution.ts";
 import { CoordinationMetricsCollector } from "./metrics.ts";
 
@@ -422,14 +422,7 @@ export class CoordinationManager implements ICoordinationManager {
     this.logger.info('Enabling advanced scheduling features');
     
     // Replace basic scheduler with advanced one
-    const advancedScheduler = new AdvancedTaskScheduler(
-      this.config,
-      this.eventBus,
-      this.logger,
-    );
-
-    // Transfer state if needed (in a real implementation)
-    this.scheduler = advancedScheduler;
+    const taskOrchestrator = this.createTaskOrchestrator();
     this.advancedSchedulingEnabled = true;
   }
 
@@ -456,5 +449,21 @@ export class CoordinationManager implements ICoordinationManager {
         error,
       });
     }
+  }
+
+  /**
+   * Create task orchestrator for intelligent scheduling
+   */
+  private createTaskOrchestrator(): TaskOrchestrator {
+    const taskOrchestrator = new TaskOrchestrator(
+      this.config,
+      this.eventBus,
+      this.logger,
+    );
+    
+    this.scheduler = taskOrchestrator;
+    
+    this.logger.info('Task orchestrator created');
+    return taskOrchestrator;
   }
 }

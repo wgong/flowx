@@ -4,8 +4,7 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { Logger } from "../../core/logger.js";
-import { ClaudeAPI } from "../../services/claude/api.ts";
+import { Logger } from "../../core/logger.ts";
 
 // Claude API interface (simplified)
 interface ClaudeAPI {
@@ -194,7 +193,7 @@ export class ClaudeConnectionPool extends EventEmitter {
     } catch (error) {
       this.logger.warn('Connection health check failed', { 
         id: conn.id, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+        error: error instanceof Error ? error.message : String(error)
       });
       return false;
     }

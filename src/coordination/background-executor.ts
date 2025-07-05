@@ -4,6 +4,7 @@ import { Logger } from "../core/logger.ts";
 import { generateId } from "../utils/helpers.ts";
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { Buffer } from 'node:buffer';
 
 export interface BackgroundTask {
   id: string;
@@ -18,7 +19,7 @@ export interface BackgroundTask {
     detached?: boolean;
   };
   status: 'pending' | 'running' | 'completed' | 'failed';
-  pid?: number;
+  pid?: number | undefined;
   output?: string;
   error?: string;
   startTime?: Date;
@@ -43,8 +44,8 @@ export class BackgroundExecutor extends EventEmitter {
   private processes: Map<string, ChildProcess>;
   private queue: string[];
   private isRunning: boolean = false;
-  private checkTimer?: NodeJS.Timeout;
-  private cleanupTimer?: NodeJS.Timeout;
+  private checkTimer?: ReturnType<typeof setInterval> | null;
+  private cleanupTimer?: ReturnType<typeof setInterval> | null;
 
   constructor(config: Partial<BackgroundExecutorConfig> = {}) {
     super();
@@ -63,6 +64,8 @@ export class BackgroundExecutor extends EventEmitter {
     this.tasks = new Map();
     this.processes = new Map();
     this.queue = [];
+    this.checkTimer = null;
+    this.cleanupTimer = null;
   }
 
   async start(): Promise<void> {
@@ -98,13 +101,13 @@ export class BackgroundExecutor extends EventEmitter {
 
     // Clear timers
     if (this.checkTimer) {
-      clearInterval(this.checkTimer);
-      this.checkTimer = undefined;
+      clearInterval(this.checkTimer as any);
+      this.checkTimer = null;
     }
 
     if (this.cleanupTimer) {
-      clearInterval(this.cleanupTimer);
-      this.cleanupTimer = undefined;
+      clearInterval(this.cleanupTimer as any);
+      this.cleanupTimer = null;
     }
 
     // Kill all running processes

@@ -3,7 +3,8 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { ChildProcess, spawn } from 'child_process';
+import { ChildProcess, spawn } from 'node:child_process';
+import { Buffer } from 'node:buffer';
 import { ILogger } from "../core/logger.ts";
 import { IEventBus } from "../core/event-bus.ts";
 import { 
@@ -139,8 +140,8 @@ export class AgentManager extends EventEmitter {
 
   // Health monitoring
   private healthChecks = new Map<string, AgentHealth>();
-  private healthInterval?: NodeJS.Timeout;
-  private heartbeatInterval?: NodeJS.Timeout;
+  private healthInterval?: NodeJS.Timeout | number;
+  private heartbeatInterval?: NodeJS.Timeout | number;
 
   // Scaling and policies
   private scalingPolicies = new Map<string, ScalingPolicy>();
@@ -411,8 +412,8 @@ export class AgentManager extends EventEmitter {
     this.logger.info('Shutting down agent manager');
 
     // Stop monitoring
-    if (this.healthInterval) clearInterval(this.healthInterval);
-    if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+    if (this.healthInterval) clearInterval(this.healthInterval as any);
+    if (this.heartbeatInterval) clearInterval(this.heartbeatInterval as any);
 
     // Gracefully shutdown all agents
     const shutdownPromises = Array.from(this.agents.keys()).map(agentId =>
@@ -740,7 +741,7 @@ export class AgentManager extends EventEmitter {
   private startHealthMonitoring(): void {
     this.healthInterval = setInterval(() => {
       this.performHealthChecks();
-    }, this.config.healthCheckInterval);
+    }, this.config.healthCheckInterval) as unknown as number;
 
     this.logger.info('Started health monitoring', { 
       interval: this.config.healthCheckInterval 
@@ -750,7 +751,7 @@ export class AgentManager extends EventEmitter {
   private startHeartbeatMonitoring(): void {
     this.heartbeatInterval = setInterval(() => {
       this.checkHeartbeats();
-    }, this.config.heartbeatInterval);
+    }, this.config.heartbeatInterval) as unknown as number;
 
     this.logger.info('Started heartbeat monitoring', { 
       interval: this.config.heartbeatInterval 

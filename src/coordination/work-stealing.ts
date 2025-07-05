@@ -75,6 +75,16 @@ export class WorkStealingCoordinator {
     this.workloads.set(agentId, { ...existing, ...workload });
   }
 
+  /**
+   * Update agent loads from a map of agent IDs to load values
+   * This method provides compatibility with SwarmCoordinator
+   */
+  updateLoads(workloads: Map<string, number>): void {
+    for (const [agentId, load] of workloads) {
+      this.updateAgentWorkload(agentId, { taskCount: load });
+    }
+  }
+
   recordTaskDuration(agentId: string, duration: number): void {
     if (!this.taskDurations.has(agentId)) {
       this.taskDurations.set(agentId, []);

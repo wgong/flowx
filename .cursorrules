@@ -1,0 +1,47 @@
+# Claude Flow - Zero Technical Debt Policy
+
+## 🚨 CRITICAL: NO TECHNICAL DEBT ALLOWED
+
+### Core Principles
+1. **ONE IMPLEMENTATION PER FUNCTION** - Never create multiple ways to do the same thing
+2. **CONSOLIDATE BEFORE CREATING** - Always check for existing implementations before building new ones
+3. **DELETE REDUNDANT CODE** - Remove unused, duplicate, or overlapping implementations immediately
+4. **REFACTOR OVER REWRITE** - Improve existing code rather than creating parallel implementations
+
+### Mandatory Checks Before Any Code Changes
+- [ ] Does this functionality already exist elsewhere?
+- [ ] Am I creating a duplicate implementation?
+- [ ] Can I extend/improve existing code instead?
+- [ ] Will this create maintenance burden?
+- [ ] Is this the single source of truth for this functionality?
+
+### Forbidden Patterns
+❌ Multiple agent spawning implementations
+❌ Duplicate database/persistence layers
+❌ Overlapping CLI command structures
+❌ Similar but slightly different interfaces
+❌ Copy-paste code with minor modifications
+❌ Multiple ways to achieve the same goal
+❌ Temporary implementations that become permanent
+❌ "Quick fixes" that bypass existing systems
+
+### Required Actions
+✅ Consolidate similar implementations into one
+✅ Use composition over duplication
+✅ Create unified interfaces for common operations
+✅ Delete unused/redundant code immediately
+✅ Document the single source of truth for each feature
+✅ Refactor existing code to be more flexible instead of creating new implementations
+
+### Emergency Protocol
+If technical debt is identified:
+1. STOP current development
+2. Assess scope of duplication
+3. Create consolidation plan
+4. Implement unified solution
+5. Delete redundant implementations
+6. Update all references
+7. Test thoroughly
+8. Document the single source of truth
+
+## Remember: Technical debt compounds exponentially. Prevention is 1000x easier than cleanup.

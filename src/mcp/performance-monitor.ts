@@ -39,7 +39,7 @@ export interface RequestMetrics {
   endTime?: number;
   duration?: number;
   success?: boolean;
-  error?: string;
+  error?: string | undefined;
   requestSize?: number;
   responseSize?: number;
 }
@@ -94,9 +94,9 @@ export class MCPPerformanceMonitor extends EventEmitter {
   private activeAlerts = new Map<string, Alert>();
   private optimizationSuggestions: OptimizationSuggestion[] = [];
   
-  private metricsTimer?: NodeJS.Timeout;
-  private alertCheckTimer?: NodeJS.Timeout;
-  private cleanupTimer?: NodeJS.Timeout;
+  private metricsTimer?: number | null;
+  private alertCheckTimer?: number | null;
+  private cleanupTimer?: number | null;
   
   private readonly config = {
     metricsInterval: 10000, // 10 seconds
@@ -343,18 +343,18 @@ export class MCPPerformanceMonitor extends EventEmitter {
    */
   stop(): void {
     if (this.metricsTimer) {
-      clearInterval(this.metricsTimer);
-      this.metricsTimer = undefined;
+      clearInterval(this.metricsTimer as any);
+      this.metricsTimer = null;
     }
 
     if (this.alertCheckTimer) {
-      clearInterval(this.alertCheckTimer);
-      this.alertCheckTimer = undefined;
+      clearInterval(this.alertCheckTimer as any);
+      this.alertCheckTimer = null;
     }
 
     if (this.cleanupTimer) {
-      clearInterval(this.cleanupTimer);
-      this.cleanupTimer = undefined;
+      clearInterval(this.cleanupTimer as any);
+      this.cleanupTimer = null;
     }
 
     this.logger.info('Performance monitoring stopped');
@@ -372,18 +372,18 @@ export class MCPPerformanceMonitor extends EventEmitter {
       }
       
       this.emit('metricsCollected', metrics);
-    }, this.config.metricsInterval);
+    }, this.config.metricsInterval) as unknown as number;
 
     // Check alerts periodically
     this.alertCheckTimer = setInterval(() => {
       this.checkAlerts();
-    }, this.config.alertCheckInterval);
+    }, this.config.alertCheckInterval) as unknown as number;
 
     // Cleanup old data
     this.cleanupTimer = setInterval(() => {
       this.cleanup();
       this.generateOptimizationSuggestions();
-    }, this.config.cleanupInterval);
+    }, this.config.cleanupInterval) as unknown as number;
 
     this.logger.info('Performance monitoring started');
   }

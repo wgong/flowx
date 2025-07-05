@@ -2,8 +2,8 @@
  * Memory cache implementation with LRU eviction
  */
 
-import { MemoryEntry } from "../utils/types.ts";
-import { ILogger } from "../core/logger.ts";
+import { MemoryEntry } from "../utils/types.js";
+import { ILogger } from "../core/logger.js";
 
 interface CacheEntry {
   data: MemoryEntry;
@@ -89,7 +89,7 @@ export class MemoryCache {
   getByPrefix(prefix: string): MemoryEntry[] {
     const results: MemoryEntry[] = [];
     
-    for (const [id, entry] of this.cache) {
+    for (const [id, entry] of Array.from(this.cache.entries())) {
       if (id.startsWith(prefix)) {
         entry.lastAccessed = Date.now();
         results.push(entry.data);
@@ -105,7 +105,7 @@ export class MemoryCache {
   getDirtyEntries(): MemoryEntry[] {
     const dirtyEntries: MemoryEntry[] = [];
     
-    for (const entry of this.cache.values()) {
+    for (const entry of Array.from(this.cache.values())) {
       if (entry.dirty) {
         dirtyEntries.push(entry.data);
       }

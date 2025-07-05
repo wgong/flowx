@@ -129,7 +129,7 @@ export interface DeploymentLog {
   level: 'debug' | 'info' | 'warn' | 'error';
   message: string;
   source: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, any> | undefined;
 }
 
 export interface RollbackCondition {

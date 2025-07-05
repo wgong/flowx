@@ -1,93 +1,136 @@
-#!/usr/bin/env -S deno run --allow-all
+#!/usr/bin/env node
 /**
- * Batch Initialization Demo Script
- * Demonstrates all batch initialization features
+ * Claude-Flow Batch Initialization Demo
+ * Showcases batch operations for multiple projects and workflows
  */
-
-import { batchInitCommand, PROJECT_TEMPLATES, ENVIRONMENT_CONFIGS } from '../src/cli/simple-commands/init/batch-init.js';
 
 console.log('🚀 Claude-Flow Batch Initialization Demo');
 console.log('========================================\n');
 
-// Demo 1: Simple batch initialization
-console.log('📋 Demo 1: Simple Batch Initialization');
+// Demo 1: Basic Batch Project Initialization
+console.log('📋 Demo 1: Batch Project Initialization');
 console.log('--------------------------------------');
-console.log('Command: claude-flow init --batch-init demo-api,demo-web,demo-cli');
-console.log('This would create 3 basic projects with default settings.\n');
+console.log('Command: node cli.js batch init --projects "demo-api,demo-web,demo-cli" --template basic');
+console.log('This creates 3 basic projects with standardized structure.\n');
 
-// Demo 2: Template-based batch initialization
-console.log('📋 Demo 2: Template-Based Batch Initialization');
-console.log('----------------------------------------------');
-console.log('Command: claude-flow init --batch-init api-v1,api-v2 --template web-api --sparc');
-console.log('Creates 2 web API projects with SPARC development environment.\n');
+// Demo 2: Advanced Batch with Configuration
+console.log('📋 Demo 2: Batch with Configuration File');
+console.log('---------------------------------------');
+console.log('Command: node cli.js batch config create enterprise-batch.json');
+console.log('Command: node cli.js batch init --config enterprise-batch.json --parallel');
+console.log('Uses configuration file for enterprise-grade batch initialization.\n');
 
-// Demo 3: Multi-environment batch initialization
-console.log('📋 Demo 3: Multi-Environment Batch Initialization');
-console.log('-----------------------------------------------');
-console.log('Command: claude-flow init --batch-init myapp --environments dev,staging,prod');
-console.log('Creates myapp-dev, myapp-staging, and myapp-prod projects.\n');
+// Demo 3: Batch SPARC Operations
+console.log('📋 Demo 3: Batch SPARC Operations');
+console.log('--------------------------------');
+console.log('Command: node cli.js batch sparc architect "Design microservices system" --modes "architect,code,review"');
+console.log('Executes multiple SPARC modes in sequence or parallel.\n');
 
-// Demo 4: Configuration file batch initialization
-console.log('📋 Demo 4: Configuration File Batch Initialization');
-console.log('------------------------------------------------');
-console.log('Command: claude-flow init --config batch-config-enterprise.json');
-console.log('Uses complex configuration file for multiple projects.\n');
+// Demo 4: Batch Swarm Creation
+console.log('📋 Demo 4: Batch Swarm Management');
+console.log('--------------------------------');
+console.log('Command: node cli.js batch swarm create --swarms "dev-team,qa-team,ops-team" --parallel');
+console.log('Creates multiple coordinated swarms for different purposes.\n');
 
-// Demo 5: Available templates
-console.log('📋 Demo 5: Available Project Templates');
-console.log('-------------------------------------');
-for (const [key, template] of Object.entries(PROJECT_TEMPLATES)) {
-  console.log(`• ${key}: ${template.description}`);
+// Demo 5: Batch Templates
+console.log('📋 Demo 5: Available Batch Templates');
+console.log('-----------------------------------');
+try {
+  const { execSync } = require('child_process');
+  const result = execSync('node cli.js batch templates', { encoding: 'utf8', stdio: 'pipe' });
+  console.log(result);
+} catch (error) {
+  console.log('⚠️ Demo mode - would show available batch templates');
+  console.log('Templates: microservices, fullstack, enterprise, development, research\n');
 }
-console.log();
 
-// Demo 6: Available environments
-console.log('📋 Demo 6: Available Environment Configurations');
-console.log('---------------------------------------------');
-for (const [key, env] of Object.entries(ENVIRONMENT_CONFIGS)) {
-  console.log(`• ${key}: ${env.name} (${env.features.join(', ')})`);
-}
-console.log();
-
-// Demo 7: Batch manager utilities
-console.log('📋 Demo 7: Batch Manager Utilities');
+// Demo 6: Batch Status Monitoring
+console.log('📋 Demo 6: Batch Operations Status');
 console.log('---------------------------------');
-console.log('claude-flow batch create-config --interactive  # Create interactive config');
-console.log('claude-flow batch validate-config my-batch.json # Validate configuration');
-console.log('claude-flow batch estimate my-batch.json        # Estimate time/resources');
-console.log('claude-flow batch list-templates                # List all templates');
-console.log('claude-flow batch list-environments             # List all environments');
-console.log();
+try {
+  const { execSync } = require('child_process');
+  const result = execSync('node cli.js batch status', { encoding: 'utf8', stdio: 'pipe' });
+  console.log(result);
+} catch (error) {
+  console.log('⚠️ Demo mode - would show batch operation status');
+  console.log('Status: Running operations, completion times, success rates\n');
+}
 
-// Performance demonstration
-console.log('📊 Performance Features');
+// Demo 7: Dry Run Examples
+console.log('📋 Demo 7: Dry Run Mode');
 console.log('----------------------');
-console.log('• Parallel Processing: Up to 20 concurrent operations');
-console.log('• Resource Management: Memory and CPU usage limits');
-console.log('• Progress Tracking: Real-time progress bars and statistics');
-console.log('• Validation: Pre-flight checks for all configurations');
-console.log('• Error Recovery: Continues processing even if some projects fail');
-console.log('• Detailed Reporting: Success/failure statistics and timing');
-console.log();
+console.log('Command: node cli.js batch init --projects "test1,test2,test3" --dry-run');
+console.log('Shows what would be executed without actually running.\n');
 
-console.log('🛠️  Integration with SPARC');
-console.log('------------------------');
-console.log('All batch operations support SPARC development environment:');
-console.log('• --sparc flag enables SPARC modes for all projects');
-console.log('• Creates .claude/commands/ with specialized slash commands');
-console.log('• Generates optimized prompts for parallel processing');
-console.log('• Integrates with TDD workflows and automated testing');
-console.log();
+try {
+  const { execSync } = require('child_process');
+  const result = execSync('node cli.js batch init --projects "test1,test2,test3" --dry-run', { encoding: 'utf8', stdio: 'pipe' });
+  console.log(result);
+} catch (error) {
+  console.log('⚠️ Demo mode - would show dry run output\n');
+}
 
-console.log('💡 Tips for Effective Batch Operations');
+// Demo 8: Real Batch Execution Examples
+console.log('📋 Demo 8: Real Batch Command Examples');
 console.log('------------------------------------');
-console.log('1. Use configuration files for complex multi-project setups');
-console.log('2. Validate configurations before running batch operations');
-console.log('3. Estimate time and resources for large batch operations');
-console.log('4. Use templates to ensure consistency across projects');
-console.log('5. Leverage parallel processing for faster initialization');
-console.log('6. Monitor progress with built-in tracking features');
-console.log();
+console.log('# Initialize multiple microservices:');
+console.log('node cli.js batch init --projects "user-service,order-service,payment-service" --template microservices\n');
 
-console.log('🚀 Ready to try batch initialization!');
-console.log('Run any of the demo commands above to get started.');
+console.log('# Batch SPARC workflow:');
+console.log('node cli.js batch sparc architect "E-commerce platform" --modes "architect,code,tdd,security" --parallel\n');
+
+console.log('# Create development environment:');
+console.log('node cli.js batch init --template development --projects "frontend,backend,database" --force\n');
+
+console.log('# Batch swarm coordination:');
+console.log('node cli.js batch swarm create --swarms "dev,staging,prod" --agents 5 --parallel\n');
+
+// Demo 9: Configuration Management
+console.log('📋 Demo 9: Batch Configuration Management');
+console.log('---------------------------------------');
+console.log('# Create configuration:');
+console.log('node cli.js batch config create my-project-batch.json\n');
+
+console.log('# Validate configuration:');
+console.log('node cli.js batch config validate my-project-batch.json\n');
+
+console.log('# List available configurations:');
+console.log('node cli.js batch config list\n');
+
+// Demo 10: Integration with Other Commands
+console.log('📋 Demo 10: Integration Examples');
+console.log('------------------------------');
+console.log('# Batch + Memory integration:');
+console.log('node cli.js memory store "batch-template" "Standard microservices setup"');
+console.log('node cli.js batch init --projects "service1,service2" --template microservices\n');
+
+console.log('# Batch + Monitoring:');
+console.log('node cli.js batch init --projects "app1,app2,app3" --template enterprise');
+console.log('node cli.js monitor start --track-batch\n');
+
+console.log('# Batch + SPARC + Swarm workflow:');
+console.log('node cli.js batch sparc architect "Multi-service system" --modes "architect,code"');
+console.log('node cli.js batch swarm create --swarms "implementation-team" --objective "Build architected system"\n');
+
+console.log('🎯 Batch Operations Benefits');
+console.log('===========================');
+console.log('✅ Consistent project structure across multiple services');
+console.log('✅ Parallel execution for faster development setup');
+console.log('✅ Configuration-driven batch operations');
+console.log('✅ Integration with SPARC methodology and Swarm coordination');
+console.log('✅ Real-time monitoring and status tracking');
+console.log('✅ Template-based standardization');
+console.log('✅ Dry-run mode for safe planning');
+
+console.log('\n💡 Best Practices');
+console.log('================');
+console.log('1. Use configuration files for complex batch operations');
+console.log('2. Start with --dry-run to validate operations');
+console.log('3. Leverage templates for consistent project structure');
+console.log('4. Use parallel execution for independent operations');
+console.log('5. Monitor batch operations with status commands');
+console.log('6. Integrate with memory bank for reusable patterns');
+
+console.log('\n🚀 Ready to scale your development with batch operations!');
+console.log('Run any of the commands above to get started.');
+console.log('Use "node cli.js batch --help" for complete batch command reference.');

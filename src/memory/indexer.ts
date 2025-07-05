@@ -1,9 +1,9 @@
 /**
- * Memory indexer for fast querying
+ * Memory indexer for fast search and retrieval
  */
 
-import { MemoryEntry, MemoryQuery } from "../utils/types.ts";
-import { ILogger } from "../core/logger.ts";
+import { MemoryEntry, MemoryQuery } from "../utils/types";
+import { ILogger } from "../core/logger";
 
 interface Index<T> {
   get(key: T): Set<string>;
@@ -166,7 +166,7 @@ export class MemoryIndexer {
 
     // Convert IDs to entries
     const results: MemoryEntry[] = [];
-    for (const id of resultIds) {
+    for (const id of Array.from(resultIds)) {
       const entry = this.entries.get(id);
       if (entry) {
         results.push(entry);
@@ -218,7 +218,7 @@ export class MemoryIndexer {
     }
 
     const result = new Set<string>();
-    for (const item of set1) {
+    for (const item of Array.from(set1)) {
       if (set2.has(item)) {
         result.add(item);
       }
@@ -229,7 +229,7 @@ export class MemoryIndexer {
   private unionSets(...sets: Set<string>[]): Set<string> {
     const result = new Set<string>();
     for (const set of sets) {
-      for (const item of set) {
+      for (const item of Array.from(set)) {
         result.add(item);
       }
     }

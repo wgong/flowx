@@ -1,10 +1,23 @@
 {
-  "projects": ["api-service", "web-frontend", "admin-dashboard"],
-  "baseOptions": {
-    "sparc": true,
-    "parallel": true,
-    "maxConcurrency": 3,
-    "template": "web-api",
-    "environments": ["dev", "staging"]
-  }
+  "name": "Default Batch Configuration",
+  "version": "1.0.0",
+  "template": "basic",
+  "projects": [
+    "api-service",
+    "web-frontend",
+    "mobile-app"
+  ],
+  "sparc": true,
+  "swarm": true,
+  "parallel": true,
+  "features": [
+    "monitoring",
+    "testing",
+    "deployment"
+  ],
+  "environments": [
+    "development",
+    "staging",
+    "production"
+  ]
 }

@@ -7,7 +7,7 @@ import { Application, ApplicationModule, ApplicationConfig } from './application
 import { Container } from './container.ts';
 import { PluginManager } from './plugin-system.ts';
 import { createValidator } from './validation.ts';
-import { CLIApplication } from '../cli/architecture.ts';
+import { CLIApplication } from '../cli/core/application.ts';
 import { ILogger } from './logger.ts';
 import { IEventBus, EventBus } from './event-bus.ts';
 
@@ -161,22 +161,25 @@ export class Bootstrap {
           const eventBus = await container.resolve<IEventBus>('eventBus');
           const memory = await container.resolve('memory') as any;
           return new RealTimeMonitor({
-            enableCpuMonitoring: true,
-            enableMemoryMonitoring: true,
-            enableErrorRateMonitoring: true,
-            enableDiskMonitoring: true,
-            enableResponseTimeMonitoring: true,
-            enableQueueDepthMonitoring: true,
-            enableAgentHealthMonitoring: true,
-            enableSwarmUtilizationMonitoring: true,
-            cpuThreshold: { warning: 70, critical: 80 },
-            memoryThreshold: { warning: 75, critical: 85 },
-            errorRateThreshold: { warning: 3, critical: 5 },
-            diskThreshold: { warning: 80, critical: 90 },
-            responseTimeThreshold: { warning: 1000, critical: 2000 },
-            queueDepthThreshold: { warning: 100, critical: 200 },
-            agentHealthThreshold: { warning: 80, critical: 60 },
-            swarmUtilizationThreshold: { warning: 85, critical: 95 }
+            updateInterval: 5000,
+            retentionPeriod: 86400000,
+            alertingEnabled: true,
+            alertThresholds: {
+              cpu: { warning: 70, critical: 80 },
+              memory: { warning: 75, critical: 85 },
+              errorRate: { warning: 3, critical: 5 },
+              disk: { warning: 80, critical: 90 },
+              responseTime: { warning: 1000, critical: 2000 },
+              queueDepth: { warning: 100, critical: 200 },
+              agentHealth: { warning: 80, critical: 60 },
+              swarmUtilization: { warning: 85, critical: 95 }
+            },
+            metricsEnabled: true,
+            tracingEnabled: true,
+            dashboardEnabled: true,
+            exportEnabled: false,
+            exportFormat: 'json',
+            debugMode: false
           }, logger, eventBus, memory);
         });
       },

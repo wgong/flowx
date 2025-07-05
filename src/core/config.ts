@@ -6,10 +6,10 @@
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { createHash, randomBytes, createCipher, createDecipher } from 'crypto';
-import { Config } from '../utils/types.js';
-import { deepMerge, safeParseJSON } from '../utils/helpers.js';
-import { ConfigError, ValidationError } from '../utils/errors.js';
+import { createHash, randomBytes, createCipheriv, createDecipheriv } from 'crypto';
+import { Config } from '../utils/types.ts';
+import { deepMerge, safeParseJSON } from '../utils/helpers.ts';
+import { ConfigError, ValidationError } from '../utils/errors.ts';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 
@@ -518,7 +518,7 @@ export class ConfigManager {
    */
   private getUserConfigDir(): string {
     const home = homedir();
-    return join(home, '.claude-flow');
+    return join(home, '.flowx');
   }
 
   /**
@@ -671,10 +671,11 @@ export class ConfigManager {
     }
 
     try {
-      const cipher = createCipher('aes-256-cbc', this.encryptionKey);
+      const iv = randomBytes(16);
+      const cipher = createCipheriv('aes-256-cbc', this.encryptionKey, iv);
       let encrypted = cipher.update(value, 'utf8', 'hex');
       encrypted += cipher.final('hex');
-      return `encrypted:${encrypted}`;
+      return `encrypted:${iv.toString('hex')}:${encrypted}`;
     } catch (error) {
       console.warn('Failed to encrypt value, storing as plain text');
       return value;
@@ -701,8 +702,15 @@ export class ConfigManager {
     }
 
     try {
-      const encrypted = encryptedValue.substring('encrypted:'.length);
-      const decipher = createDecipher('aes-256-cbc', this.encryptionKey);
+      const parts = encryptedValue.split(':');
+      if (parts.length !== 3) {
+        // Handle old format without IV
+        return encryptedValue;
+      }
+      
+      const iv = Buffer.from(parts[1], 'hex');
+      const encrypted = parts[2];
+      const decipher = createDecipheriv('aes-256-cbc', this.encryptionKey, iv);
       let decrypted = decipher.update(encrypted, 'hex', 'utf8');
       decrypted += decipher.final('utf8');
       return decrypted;

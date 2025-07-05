@@ -7,7 +7,29 @@ import type { CLICommand } from '../interfaces/index.ts';
 
 // System Commands
 import { statusCommand } from '../commands/system/status-command.ts';
+import { configCommand } from '../commands/system/config-command.ts';
+import { monitorCommand } from '../commands/system/monitor-command.ts';
+import { logsCommand } from '../commands/system/logs-command.ts';
 import { initCommand } from '../commands/system/initialization-command.ts';
+import { startCommand } from '../commands/system/start-command-integration.ts';
+import { stopCommand } from '../commands/system/stop-command.ts';
+import { restartCommand } from '../commands/system/restart-command.ts';
+import { sparcCommand } from '../commands/system/sparc-command.ts';
+import { batchCommand } from '../commands/system/batch-command.ts';
+import { taskCommand } from '../commands/tasks/unified-task-command-simple.ts';
+import { workflowCommand } from '../commands/system/workflow-command.ts';
+import { migrationCommand } from '../commands/system/migration-command.ts';
+import { uiCommand } from '../commands/system/ui-command.ts';
+import { terminalCommand } from '../commands/system/terminal-command.ts';
+import { benchmarkCommand } from '../commands/system/benchmark-command.ts';
+import { healthCommand } from '../commands/system/health-command.ts';
+import { validateCommand } from '../commands/system/validate-command.ts';
+import { scaleCommand } from '../commands/system/scale-command.ts';
+import { backupCommand } from '../commands/system/backup-command.ts';
+import { restoreCommand } from '../commands/system/restore-command.ts';
+import { daemonCommand } from '../commands/system/daemon-command.ts';
+import { servicesCommand } from '../commands/system/services-command.ts';
+import { systemCommand } from '../commands/system/system-command.ts';
 
 // Agent Commands
 import { agentCommand } from '../commands/agents/agent-management-command.ts';
@@ -18,155 +40,100 @@ import { swarmCommand } from '../commands/swarm/swarm-management-command.ts';
 // Memory Commands
 import { memoryCommand } from '../commands/memory/memory-management-command.ts';
 
-// Workflow Commands (placeholder for future implementation)
-const workflowCommand: CLICommand = {
-  name: 'workflow',
-  description: 'Manage workflows and automation',
-  category: 'Workflows',
-  usage: 'claude-flow workflow <subcommand>',
-  examples: ['claude-flow workflow list', 'claude-flow workflow run my-workflow'],
-  handler: async () => {
-    console.log('Workflow management coming soon...');
-  }
-};
-
-// Task Commands (placeholder for future implementation)
-const taskCommand: CLICommand = {
-  name: 'task',
-  description: 'Manage tasks and execution',
-  category: 'Tasks',
-  usage: 'claude-flow task <subcommand>',
-  examples: ['claude-flow task list', 'claude-flow task create "My task"'],
-  handler: async () => {
-    console.log('Task management coming soon...');
-  }
-};
-
-// Integration Commands (placeholder for future implementation)
-const integrationCommand: CLICommand = {
-  name: 'integration',
-  description: 'Manage external integrations',
-  category: 'Integration',
-  usage: 'claude-flow integration <subcommand>',
-  examples: ['claude-flow integration list', 'claude-flow integration add mcp'],
-  handler: async () => {
-    console.log('Integration management coming soon...');
-  }
-};
-
-// Utility Commands
-const helpCommand: CLICommand = {
-  name: 'help',
-  description: 'Show help information',
-  category: 'Utilities',
-  usage: 'claude-flow help [COMMAND]',
-  examples: ['claude-flow help', 'claude-flow help agent'],
-  handler: async (context) => {
-    const { args } = context;
-    const commandName = args[0];
-    
-    if (commandName) {
-      const command = getCommand(commandName);
-      if (command) {
-        showCommandHelp(command);
-      } else {
-        console.log(`Unknown command: ${commandName}`);
-        console.log('Run "claude-flow help" to see all available commands.');
-      }
-    } else {
-      showGeneralHelp();
-    }
-  }
-};
-
-const versionCommand: CLICommand = {
-  name: 'version',
-  description: 'Show version information',
-  category: 'Utilities',
-  usage: 'claude-flow version',
-  examples: ['claude-flow version'],
-  handler: async () => {
-    console.log('Claude Flow CLI v1.0.0');
-    console.log('Enterprise AI Automation Platform');
-  }
-};
-
-// Command Registry
-const commands = new Map<string, CLICommand>([
+/**
+ * Command Registry
+ * Maps command names to their implementations
+ */
+export const commandRegistry = new Map<string, CLICommand>([
   // System Commands
   ['status', statusCommand],
+  ['config', configCommand],
+  ['monitor', monitorCommand],
+  ['logs', logsCommand],
   ['init', initCommand],
-  
+  ['start', startCommand],
+  ['stop', stopCommand],
+  ['restart', restartCommand],
+  ['sparc', sparcCommand],
+  ['batch', batchCommand],
+  ['task', taskCommand],
+  ['workflow', workflowCommand],
+  ['migration', migrationCommand],
+  ['ui', uiCommand],
+  ['terminal', terminalCommand],
+  ['benchmark', benchmarkCommand],
+  ['health', healthCommand],
+  ['validate', validateCommand],
+  ['scale', scaleCommand],
+  ['backup', backupCommand],
+  ['restore', restoreCommand],
+  ['daemon', daemonCommand],
+  ['services', servicesCommand],
+  ['system', systemCommand],
+
   // Agent Commands
   ['agent', agentCommand],
-  
+
   // Swarm Commands
   ['swarm', swarmCommand],
-  
+
   // Memory Commands
-  ['memory', memoryCommand],
-  
-  // Workflow Commands
-  ['workflow', workflowCommand],
-  
-  // Task Commands
-  ['task', taskCommand],
-  
-  // Integration Commands
-  ['integration', integrationCommand],
-  
-  // Utility Commands
-  ['help', helpCommand],
-  ['version', versionCommand]
+  ['memory', memoryCommand]
 ]);
 
 // Command aliases
 const aliases = new Map<string, string>([
-  ['--version', 'version'],
-  ['-v', 'version'],
-  ['--help', 'help'],
-  ['-h', 'help'],
-  ['stat', 'status'],
-  ['initialize', 'init'],
+  ['ps', 'agent'],
   ['agents', 'agent'],
   ['swarms', 'swarm'],
   ['mem', 'memory'],
-  ['workflows', 'workflow'],
-  ['tasks', 'task']
+  ['cfg', 'config'],
+  ['conf', 'config'],
+  ['svc', 'services'],
+  ['service', 'services'],
+  ['sys', 'system'],
+  ['systemctl', 'services']
 ]);
+
+/**
+ * Get all registered commands
+ */
+export function getAllCommands(): CLICommand[] {
+  return Array.from(commandRegistry.values());
+}
+
+/**
+ * Get command by name
+ */
+export function getCommand(name: string): CLICommand | undefined {
+  return commandRegistry.get(name);
+}
 
 /**
  * Get a command by name or alias
  */
-export function getCommand(name: string): CLICommand | undefined {
+export function getCommandByNameOrAlias(name: string): CLICommand | undefined {
   // Check direct command name
-  if (commands.has(name)) {
-    return commands.get(name);
+  if (commandRegistry.has(name)) {
+    return commandRegistry.get(name);
   }
   
   // Check aliases
   const aliasTarget = aliases.get(name);
-  if (aliasTarget && commands.has(aliasTarget)) {
-    return commands.get(aliasTarget);
+  if (aliasTarget && commandRegistry.has(aliasTarget)) {
+    return commandRegistry.get(aliasTarget);
   }
   
   return undefined;
 }
 
 /**
- * Get all registered commands
- */
-export function getAllCommands(): CLICommand[] {
-  return Array.from(commands.values());
-}
-
-/**
- * Get commands by category
+ * Get commands grouped by category
  */
 export function getCommandsByCategory(): Map<string, CLICommand[]> {
   const categorized = new Map<string, CLICommand[]>();
   
-  for (const command of commands.values()) {
+  for (const command of commandRegistry.values()) {
     const category = command.category || 'General';
     if (!categorized.has(category)) {
       categorized.set(category, []);
@@ -180,125 +147,23 @@ export function getCommandsByCategory(): Map<string, CLICommand[]> {
 /**
  * Register a new command
  */
-export function registerCommand(command: CLICommand): void {
-  commands.set(command.name, command);
+export function registerCommand(name: string, command: CLICommand): void {
+  commandRegistry.set(name, command);
 }
 
 /**
- * Register a command alias
+ * Unregister a command
  */
-export function registerAlias(alias: string, commandName: string): void {
-  aliases.set(alias, commandName);
-}
-
-/**
- * Show help for a specific command
- */
-function showCommandHelp(command: CLICommand): void {
-  console.log(`\n${command.name} - ${command.description}\n`);
-  
-  console.log('USAGE:');
-  console.log(`  ${command.usage}\n`);
-  
-  if (command.arguments && command.arguments.length > 0) {
-    console.log('ARGUMENTS:');
-    command.arguments.forEach(arg => {
-      const required = arg.required ? ' (required)' : ' (optional)';
-      console.log(`  ${arg.name}${required}`);
-      console.log(`    ${arg.description}`);
-    });
-    console.log();
-  }
-  
-  if (command.options && command.options.length > 0) {
-    console.log('OPTIONS:');
-    command.options.forEach(opt => {
-      const short = opt.short ? `-${opt.short}, ` : '    ';
-      const defaultVal = opt.default ? ` (default: ${opt.default})` : '';
-      console.log(`  ${short}--${opt.name}${defaultVal}`);
-      console.log(`    ${opt.description}`);
-    });
-    console.log();
-  }
-  
-  if (command.subcommands && command.subcommands.length > 0) {
-    console.log('SUBCOMMANDS:');
-    command.subcommands.forEach(sub => {
-      console.log(`  ${sub.name.padEnd(15)} ${sub.description}`);
-    });
-    console.log();
-  }
-  
-  if (command.examples && command.examples.length > 0) {
-    console.log('EXAMPLES:');
-    command.examples.forEach(example => {
-      console.log(`  ${example}`);
-    });
-    console.log();
-  }
-}
-
-/**
- * Show general help
- */
-function showGeneralHelp(): void {
-  console.log('\n🚀 Claude Flow CLI - Enterprise AI Automation Platform\n');
-  
-  console.log('USAGE:');
-  console.log('  claude-flow <command> [subcommand] [options]\n');
-  
-  const categorized = getCommandsByCategory();
-  
-  // Sort categories for consistent display
-  const sortedCategories = Array.from(categorized.keys()).sort((a, b) => {
-    const order = ['System', 'Agents', 'Swarm', 'Memory', 'Workflows', 'Tasks', 'Integration', 'Utilities'];
-    const aIndex = order.indexOf(a);
-    const bIndex = order.indexOf(b);
-    
-    if (aIndex !== -1 && bIndex !== -1) {
-      return aIndex - bIndex;
-    } else if (aIndex !== -1) {
-      return -1;
-    } else if (bIndex !== -1) {
-      return 1;
-    } else {
-      return a.localeCompare(b);
-    }
-  });
-  
-  for (const category of sortedCategories) {
-    const categoryCommands = categorized.get(category)!;
-    console.log(`${category.toUpperCase()} COMMANDS:`);
-    
-    categoryCommands.forEach(command => {
-      console.log(`  ${command.name.padEnd(15)} ${command.description}`);
-    });
-    console.log();
-  }
-  
-  console.log('GLOBAL OPTIONS:');
-  console.log('  -h, --help       Show help information');
-  console.log('  -v, --version    Show version information');
-  console.log();
-  
-  console.log('EXAMPLES:');
-  console.log('  claude-flow status                    # Show system status');
-  console.log('  claude-flow init my-project           # Initialize new project');
-  console.log('  claude-flow agent list                # List all agents');
-  console.log('  claude-flow swarm create dev-swarm    # Create new swarm');
-  console.log('  claude-flow memory query "search"     # Search memory bank');
-  console.log('  claude-flow help agent                # Show agent command help');
-  console.log();
-  
-  console.log('For more information on a specific command, run:');
-  console.log('  claude-flow help <command>');
-  console.log();
+export function unregisterCommand(name: string): boolean {
+  return commandRegistry.delete(name);
 }
 
 export default {
-  getCommand,
+  commandRegistry,
   getAllCommands,
+  getCommand,
+  getCommandByNameOrAlias,
   getCommandsByCategory,
   registerCommand,
-  registerAlias
+  unregisterCommand
 }; 

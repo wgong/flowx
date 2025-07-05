@@ -237,7 +237,7 @@ export class OptimizedExecutor extends EventEmitter {
             success: false,
             error: {
               type: error instanceof Error ? error.constructor.name : 'UnknownError',
-              message: error instanceof Error ? error.message : 'Unknown error',
+              message: error instanceof Error ? error.message : String(error),
               code: (error as any).code,
               stack: error instanceof Error ? error.stack : undefined,
               context: { taskId: task.id.id, agentId: agentId.id },

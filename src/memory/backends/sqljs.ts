@@ -1,16 +1,17 @@
 /**
- * SQL.js backend for memory storage - pure JavaScript SQLite implementation
+ * SQL.js-based memory backend for cross-platform compatibility
  */
 
-import { MemoryEntry, MemoryQuery } from "../../utils/types.ts";
-import { IMemoryBackend } from "./base.ts";
-import { ILogger } from "../../core/logger.ts";
-import { MemoryError } from "../../utils/errors.ts";
+import { MemoryEntry, MemoryQuery } from "../../utils/types.js";
+import { IMemoryBackend } from "./base.js";
+import { ILogger } from "../../core/logger.js";
+import { MemoryError } from "../../utils/errors.js";
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Import sql.js - pure JavaScript SQLite
-const initSqlJs = require('sql.js');
+// Import sql.js with dynamic import for ES module compatibility
+// @ts-ignore - sql.js doesn't have proper TypeScript declarations
+let initSqlJs: any;
 
 export class SqlJsBackend implements IMemoryBackend {
   private db: any = null;
@@ -28,6 +29,13 @@ export class SqlJsBackend implements IMemoryBackend {
     this.logger.info('Initializing SQL.js backend...', { dbPath: this.dbPath });
 
     try {
+      // Dynamically import sql.js for ES module compatibility
+      if (!initSqlJs) {
+        // @ts-ignore - sql.js doesn't have proper TypeScript declarations
+        const sqlJsModule = await import('sql.js');
+        initSqlJs = sqlJsModule.default || sqlJsModule;
+      }
+      
       // Initialize SQL.js
       this.SQL = await initSqlJs({
         // For Node.js, we don't need to specify locateFile

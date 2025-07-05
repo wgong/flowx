@@ -2,7 +2,9 @@
  * Base interface for memory backends
  */
 
-import { MemoryEntry, MemoryQuery } from "../../utils/types.ts";
+import { MemoryEntry, MemoryQuery } from "../../utils/types.js";
+import { ILogger } from "../../core/logger.js";
+import { MemoryError } from "../../utils/errors.js";
 
 export interface IMemoryBackend {
   initialize(): Promise<void>;

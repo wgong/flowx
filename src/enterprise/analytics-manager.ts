@@ -1,8 +1,8 @@
-import { EventEmitter } from 'node:events';
-import { writeFile, readFile, mkdir, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
-import { Logger } from "../core/logger.ts";
-import { ConfigManager } from "../core/config.ts";
+import { EventEmitter } from 'events';
+import { readFile, writeFile, mkdir, readdir } from 'fs/promises';
+import { join } from 'path';
+import { Logger } from '../core/logger.ts';
+import { ConfigManager } from '../core/config.ts';
 
 export interface AnalyticsMetric {
   id: string;
@@ -1007,10 +1007,9 @@ export class AnalyticsManager extends EventEmitter {
               metrics: ['cpu-usage'],
               aggregation: 'avg' as const,
               timeRange: '1h',
-              groupBy: []
+              groupBy: [] as string[]
             },
             visualization: {
-              chartType: 'gauge' as const,
               options: { max: 100, unit: '%' },
               thresholds: { warning: 70, critical: 90 }
             },
@@ -1026,10 +1025,9 @@ export class AnalyticsManager extends EventEmitter {
               metrics: ['memory-usage'],
               aggregation: 'avg' as const,
               timeRange: '1h',
-              groupBy: []
+              groupBy: [] as string[]
             },
             visualization: {
-              chartType: 'gauge' as const,
               options: { max: 100, unit: '%' },
               thresholds: { warning: 80, critical: 95 }
             },
@@ -1070,7 +1068,7 @@ export class AnalyticsManager extends EventEmitter {
               metrics: ['active-users'],
               aggregation: 'count' as const,
               timeRange: '24h',
-              groupBy: []
+              groupBy: [] as string[]
             },
             visualization: {
               options: { unit: 'users' }

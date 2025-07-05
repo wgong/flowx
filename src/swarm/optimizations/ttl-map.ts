@@ -12,19 +12,19 @@ interface TTLItem<T> {
 }
 
 export interface TTLMapOptions {
-  defaultTTL?: number;
-  cleanupInterval?: number;
-  maxSize?: number;
-  onExpire?: <K, V>(key: K, value: V) => void;
+  defaultTTL?: number | undefined;
+  cleanupInterval?: number | undefined;
+  maxSize?: number | undefined;
+  onExpire?: (<K, V>(key: K, value: V) => void) | undefined;
 }
 
 export class TTLMap<K, V> {
   private items = new Map<K, TTLItem<V>>();
-  private cleanupTimer?: NodeJS.Timeout;
+  private cleanupTimer?: NodeJS.Timeout | undefined;
   private defaultTTL: number;
   private cleanupInterval: number;
-  private maxSize?: number;
-  private onExpire?: <K, V>(key: K, value: V) => void;
+  private maxSize?: number | undefined;
+  private onExpire?: (<K, V>(key: K, value: V) => void) | undefined;
   private stats = {
     hits: 0,
     misses: 0,
@@ -35,8 +35,8 @@ export class TTLMap<K, V> {
   constructor(options: TTLMapOptions = {}) {
     this.defaultTTL = options.defaultTTL || 3600000; // 1 hour default
     this.cleanupInterval = options.cleanupInterval || 60000; // 1 minute default
-    this.maxSize = options.maxSize;
-    this.onExpire = options.onExpire;
+    this.maxSize = options.maxSize ?? undefined;
+    this.onExpire = options.onExpire ?? undefined;
     
     this.startCleanup();
   }
@@ -207,7 +207,7 @@ export class TTLMap<K, V> {
   private startCleanup(): void {
     this.cleanupTimer = setInterval(() => {
       this.cleanup();
-    }, this.cleanupInterval);
+    }, this.cleanupInterval) as unknown as NodeJS.Timeout;
   }
   
   private cleanup(): void {
@@ -254,7 +254,7 @@ export class TTLMap<K, V> {
    */
   destroy(): void {
     if (this.cleanupTimer) {
-      clearInterval(this.cleanupTimer);
+      clearInterval(this.cleanupTimer as any);
       this.cleanupTimer = undefined;
     }
     this.items.clear();

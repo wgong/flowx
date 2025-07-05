@@ -2,9 +2,9 @@
  * Metrics and monitoring for coordination performance
  */
 
-import { ILogger } from "../core/logger.js";
-import { IEventBus } from "../core/event-bus.js";
-import { SystemEvents } from "../utils/types.js";
+import { ILogger } from "../core/logger.ts";
+import { IEventBus } from "../core/event-bus.ts";
+import { SystemEvents } from "../utils/types.ts";
 
 export interface CoordinationMetrics {
   timestamp: Date;
@@ -123,13 +123,11 @@ export class CoordinationMetricsCollector {
     private eventBus: IEventBus,
     private collectionIntervalMs = 30000, // 30 seconds
   ) {
-    // Initialize config first
     this.config = {
       maxSamples: 10000,
       retentionPeriod: 24 * 60 * 60 * 1000, // 24 hours
       cleanupInterval: 60 * 60 * 1000, // 1 hour
     };
-    
     this.setupEventHandlers();
     this.startCleanupTimer();
   }
@@ -605,10 +603,7 @@ export class CoordinationMetricsCollector {
     this.logger.info('Coordination metrics cleared');
   }
 
-  // Start cleanup interval
-  private cleanupInterval = setInterval(() => {
-    this.cleanupOldMetrics();
-  }, this.config.cleanupInterval) as unknown as number;
+  private cleanupInterval?: number;
 
   private cleanupOldMetrics(): void {
     // Clean up old metrics data

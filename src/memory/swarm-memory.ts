@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
-import { Logger } from "../core/logger.ts";
-import { generateId } from "../utils/helpers.ts";
+import { Logger } from "../core/logger";
+import { generateId } from "../utils/helpers";
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
@@ -346,7 +346,7 @@ export class SwarmMemoryManager extends EventEmitter {
     const allEntries: SwarmMemoryEntry[] = [];
 
     // Search in knowledge bases
-    for (const kb of this.knowledgeBases.values()) {
+    for (const kb of Array.from(this.knowledgeBases.values())) {
       if (domain && kb.metadata.domain !== domain) continue;
       
       if (expertise && !expertise.some(exp => kb.metadata.expertise.includes(exp))) {

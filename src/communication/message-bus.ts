@@ -39,16 +39,16 @@ export interface Message {
   content: any;
   metadata: MessageMetadata;
   timestamp: Date;
-  expiresAt?: Date;
+  expiresAt?: Date | undefined;
   priority: MessagePriority;
   reliability: ReliabilityLevel;
 }
 
 export interface MessageMetadata {
-  correlationId?: string;
+  correlationId?: string | undefined;
   causationId?: string;
-  replyTo?: string;
-  ttl?: number;
+  replyTo?: string | undefined;
+  ttl?: number | undefined;
   compressed: boolean;
   encrypted: boolean;
   size: number;
@@ -185,7 +185,7 @@ export interface TopicSubscription {
   id: string;
   topic: string;
   subscriber: AgentId;
-  filter?: MessageFilter;
+  filter?: MessageFilter | undefined;
   ackRequired: boolean;
   qos: QualityOfService;
   createdAt: Date;
@@ -351,12 +351,12 @@ export class MessageBus extends EventEmitter {
     sender: AgentId,
     receivers: AgentId | AgentId[],
     options: {
-      priority?: MessagePriority;
-      reliability?: ReliabilityLevel;
-      ttl?: number;
-      correlationId?: string;
-      replyTo?: string;
-      channel?: string;
+      priority?: MessagePriority | undefined;
+      reliability?: ReliabilityLevel | undefined;
+      ttl?: number | undefined;
+      correlationId?: string | undefined;
+      replyTo?: string | undefined;
+      channel?: string | undefined;
     } = {}
   ): Promise<string> {
     const messageId = generateId('msg');
@@ -418,10 +418,10 @@ export class MessageBus extends EventEmitter {
     content: any,
     sender: AgentId,
     options: {
-      channel?: string;
-      filter?: MessageFilter;
-      priority?: MessagePriority;
-      ttl?: number;
+      channel?: string | undefined;
+      filter?: MessageFilter | undefined;
+      priority?: MessagePriority | undefined;
+      ttl?: number | undefined;
     } = {}
   ): Promise<string> {
     const channel = options.channel ? 
@@ -518,8 +518,6 @@ export class MessageBus extends EventEmitter {
       messageId,
       agentId: agentId.id
     });
-
-    this.emit('message:acknowledged', { messageId, agentId });
 
     // Check if all receivers have acknowledged
     this.checkAllAcknowledgments(message);

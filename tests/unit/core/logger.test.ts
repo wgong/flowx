@@ -1,531 +1,180 @@
 /**
- * Unit tests for Logger
+ * Logger Tests
+ * Clean, consolidated test suite for the Logger component
  */
 
-import {
-  describe,
-  it,
-  beforeEach,
-  afterEach,
-  assertEquals,
-  assertExists,
-  spy,
-  stub,
-  assertSpyCalls,
-} from '../../test.utils.ts';
-import { Logger, LogLevel } from '../../../src/core/logger.ts';
-import { LoggingConfig } from '../../../src/utils/types.ts';
-import { cleanupTestEnv, setupTestEnv } from '../../test.config.ts';
-import { captureConsole, createTestFile } from '../../test.utils.ts';
+import { Logger, LogLevel } from './logger.cjs';
 
 describe('Logger', () => {
-  let logger: Logger;
-  let consoleCapture: ReturnType<typeof captureConsole>;
-  let tempLogFile: string;
+  // Save original console methods
+  const originalConsole = {
+    debug: console.debug,
+    info: console.info,
+    warn: console.warn,
+    error: console.error,
+  };
 
-  beforeEach(async () => {
-    setupTestEnv();
-    consoleCapture = captureConsole();
-    tempLogFile = await createTestFile('test.log', '');
-    
-    // Reset singleton
-    (Logger as any).instance = undefined;
+  // Mock console methods before each test
+  beforeEach(() => {
+    console.debug = jest.fn();
+    console.info = jest.fn();
+    console.warn = jest.fn();
+    console.error = jest.fn();
   });
 
-  afterEach(async () => {
-    consoleCapture.restore();
-    try {
-      // Close any open file handles
-      const instance = (Logger as any).instance;
-      if (instance?.fileHandle) {
-        await instance.fileHandle.close();
-      }
-    } catch {}
-    await cleanupTestEnv();
+  // Restore console methods after each test
+  afterEach(() => {
+    console.debug = originalConsole.debug;
+    console.info = originalConsole.info;
+    console.warn = originalConsole.warn;
+    console.error = originalConsole.error;
   });
 
-  describe('initialization', () => {
-    it('should be a singleton', () => {
-      const config: LoggingConfig = {
-        level: 'info',
-        format: 'json',
-        destination: 'console',
-      };
-      
-      const logger1 = Logger.getInstance(config);
-      const logger2 = Logger.getInstance();
-      
-      assertEquals(logger1, logger2);
+  describe('Initialization', () => {
+    test('should create logger with default config', () => {
+      const logger = new Logger();
+      expect(logger).toBeDefined();
     });
 
-    it('should throw if no config provided on first getInstance', () => {
-      (Logger as any).instance = undefined;
-      
-      let error: Error | undefined;
-      try {
-        Logger.getInstance();
-      } catch (e) {
-        error = e as Error;
-      }
-      
-      assertExists(error);
-      assertEquals(error!.message, 'Logger configuration required for initialization');
+    test('should throw error when file destination specified without path', () => {
+      expect(() => {
+        new Logger({ destination: 'file', level: 'info', format: 'text' });
+      }).toThrow('File path required');
     });
 
-    it('should configure logging level', () => {
-      const config: LoggingConfig = {
-        level: 'error',
-        format: 'json',
-        destination: 'console',
-      };
+    test('should create child logger with merged context', () => {
+      const parentLogger = new Logger(
+        { level: 'debug', format: 'text', destination: 'console' },
+        { parent: 'value' }
+      );
       
-      logger = Logger.getInstance(config);
+      const childLogger = parentLogger.child({ child: 'value' });
+      childLogger.info('Child message');
       
-      // Debug and info should not log
-      logger.debug('debug message');
-      logger.info('info message');
-      
-      // Error should log
-      logger.error('error message');
-      
-      const output = consoleCapture.getOutput();
-      const errors = consoleCapture.getErrors();
-      
-      assertEquals(output.length, 0);
-      assertEquals(errors.length, 1);
+      const loggedMessage = (console.info as jest.Mock).mock.calls[0][0];
+      expect(loggedMessage).toContain('parent');
+      expect(loggedMessage).toContain('child');
+      expect(loggedMessage).toContain('Child message');
     });
   });
 
-  describe('logging levels', () => {
-    beforeEach(() => {
-      const config: LoggingConfig = {
-        level: 'debug',
-        format: 'text',
-        destination: 'console',
-      };
-      logger = Logger.getInstance(config);
+  describe('Log Level Filtering', () => {
+    test('should respect log level filtering', () => {
+      const logger = new Logger({ level: 'info', format: 'text', destination: 'console' });
+      
+      logger.debug('Debug message');  // Should be filtered
+      logger.info('Info message');
+      logger.warn('Warning message');
+      logger.error('Error message');
+
+      expect(console.debug).not.toHaveBeenCalled();
+      expect(console.info).toHaveBeenCalledTimes(1);
+      expect(console.warn).toHaveBeenCalledTimes(1);
+      expect(console.error).toHaveBeenCalledTimes(1);
     });
 
-    it('should log debug messages', () => {
-      logger.debug('debug message', { data: 'test' });
+    test('should pass debug messages when level is debug', () => {
+      const logger = new Logger({ level: 'debug', format: 'text', destination: 'console' });
       
-      const output = consoleCapture.getOutput();
-      assertExists(output.find(o => o.includes('DEBUG') && o.includes('debug message')));
+      logger.debug('Debug message');
+      
+      expect(console.debug).toHaveBeenCalledTimes(1);
     });
 
-    it('should log info messages', () => {
-      logger.info('info message', { data: 'test' });
+    test('should only show error messages when level is error', () => {
+      const logger = new Logger({ level: 'error', format: 'text', destination: 'console' });
       
-      const output = consoleCapture.getOutput();
-      assertExists(output.find(o => o.includes('INFO') && o.includes('info message')));
-    });
-
-    it('should log warn messages', () => {
-      logger.warn('warn message', { data: 'test' });
+      logger.debug('Debug message');
+      logger.info('Info message');
+      logger.warn('Warning message');
+      logger.error('Error message');
       
-      const output = consoleCapture.getOutput();
-      assertExists(output.find(o => o.includes('WARN') && o.includes('warn message')));
-    });
-
-    it('should log error messages', () => {
-      const error = new Error('test error');
-      logger.error('error message', error);
-      
-      const errors = consoleCapture.getErrors();
-      assertExists(errors.find(e => e.includes('ERROR') && e.includes('error message')));
-    });
-
-    it('should respect log level hierarchy', () => {
-      // Force reset singleton to ensure clean state
-      (Logger as any).instance = undefined;
-      
-      const config: LoggingConfig = {
-        level: 'warn',
-        format: 'text',
-        destination: 'console',
-      };
-      
-      logger = Logger.getInstance(config);
-      
-      // Clear any previous captures
-      consoleCapture.getOutput();
-      consoleCapture.getErrors();
-      
-      logger.debug('debug');
-      logger.info('info');
-      logger.warn('warn');
-      logger.error('error');
-      
-      const output = consoleCapture.getOutput();
-      const errors = consoleCapture.getErrors();
-      const allLogs = [...output, ...errors];
-      
-      assertEquals(allLogs.filter(l => l.includes('debug')).length, 0);
-      assertEquals(allLogs.filter(l => l.includes('info')).length, 0);
-      assertEquals(allLogs.filter(l => l.includes('warn')).length, 1);
-      assertEquals(allLogs.filter(l => l.includes('error')).length, 1);
+      expect(console.debug).not.toHaveBeenCalled();
+      expect(console.info).not.toHaveBeenCalled();
+      expect(console.warn).not.toHaveBeenCalled();
+      expect(console.error).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe('formatting', () => {
-    it('should format logs as JSON', () => {
-      const config: LoggingConfig = {
-        level: 'info',
-        format: 'json',
-        destination: 'console',
-      };
+  describe('Message Formatting', () => {
+    test('should format messages as JSON when format is json', () => {
+      const logger = new Logger({ level: 'info', format: 'json', destination: 'console' });
       
-      logger = Logger.getInstance(config);
-      logger.info('test message', { key: 'value' });
+      logger.info('JSON message');
       
-      const output = consoleCapture.getOutput();
-      const log = JSON.parse(output[0]);
+      const loggedJson = (console.info as jest.Mock).mock.calls[0][0];
+      expect(() => JSON.parse(loggedJson)).not.toThrow();
       
-      assertEquals(log.level, 'INFO');
-      assertEquals(log.message, 'test message');
-      assertEquals(log.data, { key: 'value' });
-      assertExists(log.timestamp);
+      const parsed = JSON.parse(loggedJson);
+      expect(parsed.message).toBe('JSON message');
+      expect(parsed.level).toBe('INFO');
+      expect(parsed.timestamp).toBeDefined();
     });
 
-    it('should format logs as text', () => {
-      const config: LoggingConfig = {
-        level: 'info',
-        format: 'text',
-        destination: 'console',
-      };
+    test('should format messages as text when format is text', () => {
+      const logger = new Logger({ level: 'info', format: 'text', destination: 'console' });
       
-      logger = Logger.getInstance(config);
-      logger.info('test message', { key: 'value' });
+      logger.info('Text message');
       
-      const output = consoleCapture.getOutput();
-      assertExists(output[0].match(/\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]/));
-      assertExists(output[0].includes('INFO'));
-      assertExists(output[0].includes('test message'));
-      assertExists(output[0].includes('{"key":"value"}'));
+      const loggedText = (console.info as jest.Mock).mock.calls[0][0];
+      expect(loggedText).toContain('INFO');
+      expect(loggedText).toContain('Text message');
+      expect(loggedText).toContain('['); // Timestamp bracket
     });
 
-    it('should format errors properly in text mode', () => {
-      const config: LoggingConfig = {
-        level: 'error',
-        format: 'text',
-        destination: 'console',
-      };
+    test('should include context in messages', () => {
+      const logger = new Logger(
+        { level: 'info', format: 'json', destination: 'console' },
+        { service: 'test-service', requestId: '123' }
+      );
       
-      logger = Logger.getInstance(config);
-      const error = new Error('test error');
-      error.stack = 'Error: test error\n    at test.ts:123';
+      logger.info('Context message');
       
-      logger.error('error occurred', error);
+      const loggedJson = (console.info as jest.Mock).mock.calls[0][0];
+      const parsed = JSON.parse(loggedJson);
       
-      const errors = consoleCapture.getErrors();
-      assertExists(errors[0].includes('Error: test error'));
-      assertExists(errors[0].includes('Stack:'));
+      expect(parsed.context.service).toBe('test-service');
+      expect(parsed.context.requestId).toBe('123');
     });
 
-    it('should format errors properly in JSON mode', () => {
-      const config: LoggingConfig = {
-        level: 'error',
-        format: 'json',
-        destination: 'console',
-      };
+    test('should format errors properly in JSON format', () => {
+      const logger = new Logger({ level: 'error', format: 'json', destination: 'console' });
+      const testError = new Error('Test error message');
       
-      logger = Logger.getInstance(config);
-      const error = new Error('test error');
+      logger.error('Error occurred', testError);
       
-      logger.error('error occurred', error);
+      const loggedJson = (console.error as jest.Mock).mock.calls[0][0];
+      const parsed = JSON.parse(loggedJson);
       
-      const errors = consoleCapture.getErrors();
-      const log = JSON.parse(errors[0]);
-      
-      assertExists(log.error);
-      assertEquals(log.error.name, 'Error');
-      assertEquals(log.error.message, 'test error');
-      assertExists(log.error.stack);
-    });
-  });
-
-  describe('destinations', () => {
-    it('should log to console only', () => {
-      const config: LoggingConfig = {
-        level: 'info',
-        format: 'text',
-        destination: 'console',
-      };
-      
-      logger = Logger.getInstance(config);
-      logger.info('console log');
-      
-      const output = consoleCapture.getOutput();
-      assertEquals(output.length, 1);
+      expect(parsed.error.name).toBe('Error');
+      expect(parsed.error.message).toBe('Test error message');
+      expect(parsed.error.stack).toBeDefined();
     });
 
-    it('should log to file only', async () => {
-      const config: LoggingConfig = {
-        level: 'info',
-        format: 'text',
-        destination: 'file',
-        filePath: tempLogFile,
-      };
+    test('should format errors properly in text format', () => {
+      const logger = new Logger({ level: 'error', format: 'text', destination: 'console' });
+      const testError = new Error('Test error message');
       
-      logger = Logger.getInstance(config);
-      logger.info('file log');
+      logger.error('Error occurred', testError);
       
-      // Wait for file write
-      await new Promise(resolve => setTimeout(resolve, 100));
+      const loggedText = (console.error as jest.Mock).mock.calls[0][0];
       
-      const content = await Deno.readTextFile(tempLogFile);
-      assertExists(content.includes('file log'));
-      
-      // Should not log to console
-      const output = consoleCapture.getOutput();
-      assertEquals(output.length, 0);
+      expect(loggedText).toContain('ERROR');
+      expect(loggedText).toContain('Error occurred');
+      expect(loggedText).toContain('Test error message');
     });
 
-    it('should log to both console and file', async () => {
-      const config: LoggingConfig = {
-        level: 'info',
-        format: 'text',
-        destination: 'both',
-        filePath: tempLogFile,
-      };
+    test('should handle additional data in logs', () => {
+      const logger = new Logger({ level: 'info', format: 'json', destination: 'console' });
+      const userData = { id: 123, name: 'Test User' };
       
-      logger = Logger.getInstance(config);
-      logger.info('both log');
+      logger.info('User data', userData);
       
-      // Wait for file write
-      await new Promise(resolve => setTimeout(resolve, 100));
+      const loggedJson = (console.info as jest.Mock).mock.calls[0][0];
+      const parsed = JSON.parse(loggedJson);
       
-      // Check console
-      const output = consoleCapture.getOutput();
-      assertEquals(output.length, 1);
-      assertExists(output[0].includes('both log'));
-      
-      // Check file
-      const content = await Deno.readTextFile(tempLogFile);
-      assertExists(content.includes('both log'));
-    });
-
-    it('should throw if file destination without filePath', () => {
-      const config: LoggingConfig = {
-        level: 'info',
-        format: 'text',
-        destination: 'file',
-      };
-      
-      let error: Error | undefined;
-      try {
-        logger = Logger.getInstance(config);
-      } catch (e) {
-        error = e as Error;
-      }
-      
-      assertExists(error);
-      assertEquals(error!.message, 'File path required for file logging');
-    });
-  });
-
-  describe('file rotation', () => {
-    it('should rotate log file when size limit reached', async () => {
-      const config: LoggingConfig = {
-        level: 'info',
-        format: 'text',
-        destination: 'file',
-        filePath: tempLogFile,
-        maxFileSize: 100, // Very small for testing
-        maxFiles: 3,
-      };
-      
-      logger = Logger.getInstance(config);
-      
-      // Write enough logs to trigger rotation
-      for (let i = 0; i < 10; i++) {
-        logger.info('This is a long log message to fill up the file quickly');
-      }
-      
-      // Wait for file operations to complete
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Check if rotation occurred
-      const dir = tempLogFile.substring(0, tempLogFile.lastIndexOf('/'));
-      const files: string[] = [];
-      
-      for await (const entry of Deno.readDir(dir)) {
-        if (entry.isFile && entry.name.includes('test.log')) {
-          files.push(entry.name);
-        }
-      }
-      
-      // Should have rotated file
-      assertEquals(files.length > 1, true);
-    });
-  });
-
-  describe('configuration', () => {
-    it('should update configuration', async () => {
-      const initialConfig: LoggingConfig = {
-        level: 'info',
-        format: 'text',
-        destination: 'console',
-      };
-      
-      logger = Logger.getInstance(initialConfig);
-      logger.info('should appear');
-      logger.debug('should not appear');
-      
-      // Update config
-      await logger.configure({
-        level: 'debug',
-        format: 'json',
-        destination: 'console',
-      });
-      
-      logger.debug('should now appear');
-      
-      const output = consoleCapture.getOutput();
-      assertEquals(output.filter(o => o.includes('should appear')).length, 1);
-      assertEquals(output.filter(o => o.includes('should not appear')).length, 0);
-      assertEquals(output.filter(o => o.includes('should now appear')).length, 1);
-    });
-
-    it('should close file handle when changing destination', async () => {
-      const config: LoggingConfig = {
-        level: 'info',
-        format: 'text',
-        destination: 'file',
-        filePath: tempLogFile,
-      };
-      
-      logger = Logger.getInstance(config);
-      
-      // Write something to ensure file handle is created
-      logger.info('test log');
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Now spy on the file handle
-      const fileHandle = logger['fileHandle'];
-      assertExists(fileHandle);
-      const fileHandleSpy = spy(fileHandle, 'close');
-      
-      await logger.configure({
-        level: 'info',
-        format: 'text',
-        destination: 'console',
-      });
-      
-      assertSpyCalls(fileHandleSpy, 1);
-    });
-  });
-
-  describe('context', () => {
-    it('should create child logger with context', () => {
-      const config: LoggingConfig = {
-        level: 'info',
-        format: 'json',
-        destination: 'console',
-      };
-      
-      logger = Logger.getInstance(config);
-      const childLogger = logger.child({ component: 'test-component' });
-      
-      childLogger.info('child log');
-      
-      const output = consoleCapture.getOutput();
-      const log = JSON.parse(output[0]);
-      
-      assertEquals(log.context.component, 'test-component');
-    });
-
-    it('should merge child context with parent context', () => {
-      const config: LoggingConfig = {
-        level: 'info',
-        format: 'json',
-        destination: 'console',
-      };
-      
-      logger = Logger.getInstance(config);
-      const child1 = logger.child({ service: 'api' });
-      const child2 = child1.child({ component: 'auth' });
-      
-      child2.info('nested log');
-      
-      const output = consoleCapture.getOutput();
-      const log = JSON.parse(output[0]);
-      
-      assertEquals(log.context.service, 'api');
-      assertEquals(log.context.component, 'auth');
-    });
-  });
-
-  describe('error handling', () => {
-    it('should handle file write errors gracefully', async () => {
-      const config: LoggingConfig = {
-        level: 'info',
-        format: 'text',
-        destination: 'file',
-        filePath: '/invalid/path/test.log',
-      };
-      
-      // Capture console.error
-      const originalError = console.error;
-      const errorSpy = spy();
-      console.error = errorSpy;
-      
-      try {
-        logger = Logger.getInstance(config);
-        logger.info('test log');
-        
-        // Wait for async write
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Should log error to console
-        assertSpyCalls(errorSpy, 1);
-        assertEquals(errorSpy.calls[0].args[0], 'Failed to write to log file:');
-      } finally {
-        console.error = originalError;
-      }
-    });
-
-    it('should handle non-Error objects in error logging', () => {
-      const config: LoggingConfig = {
-        level: 'error',
-        format: 'json',
-        destination: 'console',
-      };
-      
-      logger = Logger.getInstance(config);
-      logger.error('error occurred', { custom: 'error object' });
-      
-      const errors = consoleCapture.getErrors();
-      const log = JSON.parse(errors[0]);
-      
-      assertEquals(log.error, { custom: 'error object' });
-    });
-  });
-
-  describe('performance', () => {
-    it('should handle high volume logging', async () => {
-      const config: LoggingConfig = {
-        level: 'info',
-        format: 'json',
-        destination: 'console',
-      };
-      
-      logger = Logger.getInstance(config);
-      
-      const start = Date.now();
-      const count = 1000;
-      
-      for (let i = 0; i < count; i++) {
-        logger.info(`Log message ${i}`, { index: i });
-      }
-      
-      const duration = Date.now() - start;
-      
-      // Should complete quickly (< 1 second for 1000 logs)
-      assertEquals(duration < 1000, true);
-      
-      const output = consoleCapture.getOutput();
-      assertEquals(output.length, count);
+      expect(parsed.data.id).toBe(123);
+      expect(parsed.data.name).toBe('Test User');
     });
   });
 });

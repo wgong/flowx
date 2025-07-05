@@ -115,7 +115,7 @@ export interface AgentState {
   metrics: AgentMetrics;
   
   // Current state
-  currentTask?: TaskId;
+  currentTask?: TaskId | undefined;
   workload: number;           // 0-1 current workload
   health: number;             // 0-1 health score
   
@@ -324,7 +324,7 @@ export interface TaskDefinition {
   updatedAt: Date;
   
   // Assignment
-  assignedTo?: AgentId;
+  assignedTo?: AgentId | undefined;
   assignedAt?: Date;
   
   // Execution
@@ -361,7 +361,7 @@ export interface TaskError {
   type: string;
   message: string;
   code?: string;
-  stack?: string;
+  stack?: string | undefined;
   context: Record<string, any>;
   recoverable: boolean;
   retryable: boolean;

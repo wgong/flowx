@@ -9,7 +9,6 @@ export * from './memory.ts';
 
 // Prompt copying system exports
 export * from './prompt-copier.ts';
-export * from './prompt-copier-enhanced.ts';
 export * from './prompt-utils.ts';
 export * from './prompt-manager.ts';
 export * from './prompt-cli.ts';
@@ -37,7 +36,6 @@ export function getSwarmComponents() {
     
     // Prompt system
     promptCopier: () => import('./prompt-copier.ts'),
-    promptCopierEnhanced: () => import('./prompt-copier-enhanced.ts'),
     promptUtils: () => import('./prompt-utils.ts'),
     promptManager: () => import('./prompt-manager.ts'),
     promptCli: () => import('./prompt-cli.ts'),

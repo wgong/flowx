@@ -1,20 +1,21 @@
 /**
  * Memory Management Command
- * Comprehensive memory bank operations
+ * Comprehensive memory bank operations with actual backend integration
  */
 
 import type { CLICommand, CLIContext } from '../../interfaces/index.ts';
 import { formatTable, successBold, infoBold, warningBold, errorBold, printSuccess, printError, printWarning, printInfo } from '../../core/output-formatter.ts';
+import { getMemoryManager, getPersistenceManager } from '../../core/global-initialization.ts';
 
 export const memoryCommand: CLICommand = {
   name: 'memory',
-  description: 'Manage memory bank operations',
+  description: 'Manage memory bank operations with real persistence',
   category: 'Memory',
   usage: 'claude-flow memory <subcommand> [OPTIONS]',
   examples: [
-    'claude-flow memory store "Important information"',
-    'claude-flow memory query "search term"',
-    'claude-flow memory list --category projects',
+    'claude-flow memory store --key "project" --value "Important project requirements"',
+    'claude-flow memory query --search "project"',
+    'claude-flow memory list --type user',
     'claude-flow memory stats'
   ],
   subcommands: [
@@ -22,23 +23,31 @@ export const memoryCommand: CLICommand = {
       name: 'store',
       description: 'Store information in memory',
       handler: storeMemory,
-      arguments: [
-        {
-          name: 'content',
-          description: 'Content to store',
-          required: true
-        }
-      ],
       options: [
         {
-          name: 'category',
-          short: 'c',
-          description: 'Memory category',
-          type: 'string'
+          name: 'key',
+          short: 'k',
+          description: 'Memory key',
+          type: 'string',
+          required: true
+        },
+        {
+          name: 'value',
+          short: 'v',
+          description: 'Memory value',
+          type: 'string',
+          required: true
+        },
+        {
+          name: 'type',
+          short: 't',
+          description: 'Memory type',
+          type: 'string',
+          choices: ['user', 'system', 'context', 'task'],
+          default: 'user'
         },
         {
           name: 'tags',
-          short: 't',
           description: 'Comma-separated tags',
           type: 'string'
         }
@@ -48,20 +57,26 @@ export const memoryCommand: CLICommand = {
       name: 'query',
       description: 'Query memory bank',
       handler: queryMemory,
-      arguments: [
-        {
-          name: 'search-term',
-          description: 'Search term or query',
-          required: true
-        }
-      ],
       options: [
+        {
+          name: 'search',
+          short: 's',
+          description: 'Search term or query',
+          type: 'string',
+          required: true
+        },
         {
           name: 'limit',
           short: 'l',
           description: 'Maximum results',
           type: 'number',
           default: 10
+        },
+        {
+          name: 'type',
+          description: 'Filter by memory type',
+          type: 'string',
+          choices: ['user', 'system', 'context', 'task']
         }
       ]
     },
@@ -71,10 +86,11 @@ export const memoryCommand: CLICommand = {
       handler: listMemories,
       options: [
         {
-          name: 'category',
-          short: 'c',
-          description: 'Filter by category',
-          type: 'string'
+          name: 'type',
+          short: 't',
+          description: 'Filter by type',
+          type: 'string',
+          choices: ['user', 'system', 'context', 'task']
         },
         {
           name: 'limit',
@@ -82,13 +98,54 @@ export const memoryCommand: CLICommand = {
           description: 'Maximum entries to show',
           type: 'number',
           default: 20
+        },
+        {
+          name: 'format',
+          description: 'Output format',
+          type: 'string',
+          choices: ['table', 'json'],
+          default: 'table'
         }
       ]
     },
     {
       name: 'stats',
       description: 'Show memory statistics',
-      handler: showMemoryStats
+      handler: showMemoryStats,
+      options: [
+        {
+          name: 'detailed',
+          short: 'd',
+          description: 'Show detailed statistics',
+          type: 'boolean'
+        }
+      ]
+    },
+    {
+      name: 'clear',
+      description: 'Clear memories',
+      handler: clearMemories,
+      options: [
+        {
+          name: 'type',
+          short: 't',
+          description: 'Clear only specific type',
+          type: 'string',
+          choices: ['user', 'system', 'context', 'task']
+        },
+        {
+          name: 'key',
+          short: 'k',
+          description: 'Clear specific memory by key',
+          type: 'string'
+        },
+        {
+          name: 'confirm',
+          short: 'y',
+          description: 'Skip confirmation prompt',
+          type: 'boolean'
+        }
+      ]
     }
   ],
   handler: async (context: CLIContext) => {
@@ -96,29 +153,42 @@ export const memoryCommand: CLICommand = {
   }
 };
 
-interface MemoryEntry {
-  id: string;
-  content: string;
-  category: string;
-  tags: string[];
-  created: Date;
-  updated: Date;
-  accessCount: number;
-}
-
 async function storeMemory(context: CLIContext): Promise<void> {
-  const { args, options } = context;
-  const content = args[0];
+  const { options } = context;
   
   try {
-    printInfo('Storing memory...');
-    const stored = await storeMemoryEntry({
-      content,
-      category: options.category || 'general',
-      tags: options.tags ? options.tags.split(',').map((t: string) => t.trim()) : []
-    });
+    const memoryManager = await getMemoryManager();
     
-    printSuccess(`Memory stored successfully: ${stored.id}`);
+    const tags = options.tags ? options.tags.split(',').map((t: string) => t.trim()) : [];
+    
+    const memoryEntry = {
+      id: `memory-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      agentId: 'cli-user',
+      sessionId: 'cli-session',
+      type: (options.type || 'artifact') as 'observation' | 'insight' | 'decision' | 'artifact' | 'error',
+      content: options.value,
+      context: {
+        key: options.key,
+        source: 'cli',
+        timestamp: Date.now()
+      },
+      timestamp: new Date(),
+      tags,
+      version: 1,
+      metadata: {
+        key: options.key,
+        source: 'cli'
+      }
+    };
+
+    await memoryManager.store(memoryEntry);
+
+    printSuccess(`✅ Memory stored with ID: ${memoryEntry.id}`);
+    printInfo(`Key: ${options.key}`);
+    printInfo(`Type: ${memoryEntry.type}`);
+    if (tags.length > 0) {
+      printInfo(`Tags: ${tags.join(', ')}`);
+    }
     
   } catch (error) {
     printError(`Failed to store memory: ${error instanceof Error ? error.message : String(error)}`);
@@ -127,18 +197,35 @@ async function storeMemory(context: CLIContext): Promise<void> {
 }
 
 async function queryMemory(context: CLIContext): Promise<void> {
-  const { args, options } = context;
-  const searchTerm = args[0];
+  const { options } = context;
   
   try {
-    const results = await searchMemories(searchTerm, { limit: options.limit });
+    const memoryManager = await getMemoryManager();
+    
+    const results = await memoryManager.query({
+      search: options.search,
+      type: options.type,
+      limit: options.limit
+    });
     
     if (results.length === 0) {
       printInfo('No memories found matching your query');
       return;
     }
 
-    displayMemoriesTable(results);
+    console.log(successBold(`\n🧠 Query Results (${results.length} found):\n`));
+    
+    results.forEach((memory, index) => {
+      const contextKey = memory.context && typeof memory.context === 'object' && 'key' in memory.context 
+        ? (memory.context as any).key 
+        : memory.id;
+      console.log(`${index + 1}. ${infoBold(contextKey)}`);
+      console.log(`   Content: ${memory.content}`);
+      console.log(`   Type: ${memory.type}`);
+      console.log(`   Tags: ${memory.tags.join(', ') || 'None'}`);
+      console.log(`   Created: ${memory.timestamp.toLocaleString()}`);
+      console.log('');
+    });
     
   } catch (error) {
     printError(`Failed to query memory: ${error instanceof Error ? error.message : String(error)}`);
@@ -150,17 +237,25 @@ async function listMemories(context: CLIContext): Promise<void> {
   const { options } = context;
   
   try {
-    const memories = await getMemories({
-      category: options.category,
-      limit: options.limit
-    });
+    const memoryManager = await getMemoryManager();
     
-    if (memories.length === 0) {
+    const results = await memoryManager.query({
+      type: options.type,
+      limit: options.limit || 20
+    });
+
+    if (results.length === 0) {
       printInfo('No memories found');
       return;
     }
 
-    displayMemoriesTable(memories);
+    if (options.format === 'json') {
+      console.log(JSON.stringify(results, null, 2));
+      return;
+    }
+
+    displayMemoriesTable(results, 'Memory Entries');
+    printSuccess(`Found ${results.length} memories`);
     
   } catch (error) {
     printError(`Failed to list memories: ${error instanceof Error ? error.message : String(error)}`);
@@ -169,111 +264,98 @@ async function listMemories(context: CLIContext): Promise<void> {
 }
 
 async function showMemoryStats(context: CLIContext): Promise<void> {
+  const { options } = context;
+  
   try {
-    const stats = await getMemoryStatistics();
+    const memoryManager = await getMemoryManager();
     
-    console.log(successBold('\n📊 Memory Bank Statistics\n'));
-    console.log(`Total Entries: ${stats.totalEntries}`);
-    console.log(`Categories: ${stats.categoriesCount}`);
-    console.log(`Total Tags: ${stats.tagsCount}`);
-    console.log(`Storage Size: ${formatBytes(stats.storageSize)}`);
+    const healthStatus = await memoryManager.getHealthStatus();
+    
+    console.log(successBold('\n🧠 Memory System Statistics:\n'));
+    
+    console.log(`Status: ${healthStatus.healthy ? '✅ Healthy' : '❌ Unhealthy'}`);
+    
+    if (healthStatus.metrics) {
+      console.log(`Total Entries: ${healthStatus.metrics.totalEntries || 0}`);
+      console.log(`Cache Size: ${healthStatus.metrics.cacheSize || 0}`);
+      console.log(`Cache Hit Rate: ${(healthStatus.metrics.cacheHitRate || 0).toFixed(2)}%`);
+      console.log(`Active Banks: ${healthStatus.metrics.activeBanks || 0}`);
+    }
+    
+    if (healthStatus.error) {
+      console.log(`Error: ${healthStatus.error}`);
+    }
     
   } catch (error) {
-    printError(`Failed to show memory stats: ${error instanceof Error ? error.message : String(error)}`);
+    printError(`Failed to get memory stats: ${error instanceof Error ? error.message : String(error)}`);
+    throw error;
+  }
+}
+
+async function clearMemories(context: CLIContext): Promise<void> {
+  const { options } = context;
+  
+  try {
+    const memoryManager = await getMemoryManager();
+    
+    if (options.key) {
+      const results = await memoryManager.query({
+        search: options.key,
+        limit: 1
+      });
+      
+      if (results.length === 0) {
+        printWarning(`No memory found with key: ${options.key}`);
+        return;
+      }
+      
+      await memoryManager.delete(results[0].id);
+      printSuccess(`✅ Deleted memory: ${options.key}`);
+      
+    } else {
+      const results = await memoryManager.query({
+        type: options.type,
+        limit: 1000
+      });
+      
+      if (results.length === 0) {
+        printInfo('No memories found to clear');
+        return;
+      }
+      
+      if (!options.confirm) {
+        printWarning(`This will delete ${results.length} memories. Use --confirm to proceed.`);
+        return;
+      }
+      
+      for (const memory of results) {
+        await memoryManager.delete(memory.id);
+      }
+      
+      printSuccess(`✅ Cleared ${results.length} memories`);
+    }
+    
+  } catch (error) {
+    printError(`Failed to clear memories: ${error instanceof Error ? error.message : String(error)}`);
     throw error;
   }
 }
 
 // Helper functions
 
-async function storeMemoryEntry(entry: Partial<MemoryEntry>): Promise<MemoryEntry> {
-  const stored: MemoryEntry = {
-    id: `mem-${Date.now()}`,
-    content: entry.content || '',
-    category: entry.category || 'general',
-    tags: entry.tags || [],
-    created: new Date(),
-    updated: new Date(),
-    accessCount: 0
-  };
+function displayMemoriesTable(memories: any[], title: string): void {
+  console.log(successBold(`\n🧠 ${title}:\n`));
   
-  return stored;
-}
-
-async function searchMemories(searchTerm: string, options: any): Promise<MemoryEntry[]> {
-  const mockMemories = await getMockMemories();
-  return mockMemories.filter(m => 
-    m.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
-  ).slice(0, options.limit);
-}
-
-async function getMemories(options: any): Promise<MemoryEntry[]> {
-  const memories = await getMockMemories();
-  let filtered = memories;
-
-  if (options.category) {
-    filtered = filtered.filter(m => m.category === options.category);
-  }
-
-  return filtered.slice(0, options.limit);
-}
-
-async function getMemoryStatistics(): Promise<any> {
-  const memories = await getMockMemories();
+  const tableData = memories.map(memory => ({
+    ID: memory.id.substring(0, 12) + '...',
+    Key: memory.context?.key || 'N/A',
+    Type: memory.type,
+    Content: memory.content.substring(0, 50) + (memory.content.length > 50 ? '...' : ''),
+    Tags: memory.tags.join(', ') || 'None',
+    Created: memory.timestamp.toLocaleDateString()
+  }));
   
-  return {
-    totalEntries: memories.length,
-    categoriesCount: new Set(memories.map(m => m.category)).size,
-    tagsCount: new Set(memories.flatMap(m => m.tags)).size,
-    storageSize: memories.reduce((sum, m) => sum + m.content.length, 0)
-  };
-}
-
-async function getMockMemories(): Promise<MemoryEntry[]> {
-  return [
-    {
-      id: 'mem-001',
-      content: 'Important project requirements for the Q4 release',
-      category: 'projects',
-      tags: ['q4', 'requirements', 'release'],
-      created: new Date(Date.now() - 86400000),
-      updated: new Date(Date.now() - 3600000),
-      accessCount: 15
-    },
-    {
-      id: 'mem-002',
-      content: 'Meeting notes from architecture review',
-      category: 'meetings',
-      tags: ['architecture', 'review', 'notes'],
-      created: new Date(Date.now() - 172800000),
-      updated: new Date(Date.now() - 7200000),
-      accessCount: 8
-    }
-  ];
-}
-
-function displayMemoriesTable(memories: MemoryEntry[]): void {
-  console.log(successBold('\n🧠 Memory Bank Entries\n'));
-  
-  const table = formatTable(memories, [
-    { header: 'ID', key: 'id' },
-    { header: 'Content', key: 'content', formatter: (v) => v.length > 50 ? v.substring(0, 47) + '...' : v },
-    { header: 'Category', key: 'category' },
-    { header: 'Tags', key: 'tags', formatter: (v) => v.slice(0, 2).join(', ') + (v.length > 2 ? '...' : '') },
-    { header: 'Created', key: 'created', formatter: (v) => v.toLocaleDateString() }
-  ]);
-  
-  console.log(table);
-  console.log();
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  console.table(tableData);
 }
 
 export default memoryCommand; 

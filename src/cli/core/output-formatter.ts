@@ -169,6 +169,28 @@ export function printInfo(message: string): void {
   console.log(`${info('ℹ️')} ${message}`);
 }
 
+// Table printing function
+export function printTable(title: string, data: Record<string, any>): void {
+  console.log(`\n${primaryBold(title)}`);
+  console.log('─'.repeat(title.length + 10));
+  
+  const entries = Object.entries(data);
+  if (entries.length === 0) {
+    console.log(muted('No data available'));
+    return;
+  }
+  
+  const maxKeyLength = Math.max(...entries.map(([key]) => key.length));
+  
+  for (const [key, value] of entries) {
+    const paddedKey = key.padEnd(maxKeyLength);
+    const formattedValue = typeof value === 'string' ? value : JSON.stringify(value);
+    console.log(`${primary(paddedKey)} │ ${formattedValue}`);
+  }
+  
+  console.log('');
+}
+
 // Progress and status indicators
 export function progressBar(current: number, total: number, width: number = 20): string {
   const percentage = Math.min(current / total, 1);
@@ -202,8 +224,11 @@ export function formatTable(data: any[], columns: TableColumn[]): string {
   const widths = columns.map(col => {
     const headerWidth = col.header.length;
     const dataWidth = Math.max(...data.map(row => {
-      const value = col.formatter ? col.formatter(row[col.key]) : String(row[col.key] || '');
-      return value.length;
+      const rawValue = row[col.key];
+      const value = col.formatter ? col.formatter(rawValue) : String(rawValue || '');
+      // Ensure value is a string and handle null/undefined
+      const stringValue = typeof value === 'string' ? value : String(value || '');
+      return stringValue.length;
     }));
     return col.width || Math.max(headerWidth, dataWidth);
   });
@@ -223,8 +248,11 @@ export function formatTable(data: any[], columns: TableColumn[]): string {
   // Data rows
   for (const row of data) {
     const dataRow = columns.map((col, i) => {
-      const value = col.formatter ? col.formatter(row[col.key]) : String(row[col.key] || '');
-      return value.padEnd(widths[i]);
+      const rawValue = row[col.key];
+      const value = col.formatter ? col.formatter(rawValue) : String(rawValue || '');
+      // Ensure value is a string and handle null/undefined
+      const stringValue = typeof value === 'string' ? value : String(value || '');
+      return stringValue.padEnd(widths[i]);
     }).join(' │ ');
     
     result += `│ ${dataRow} │\n`;
@@ -280,7 +308,8 @@ export function box(content: string, title?: string): string {
   }
   
   for (const line of lines) {
-    result += `│ ${line.padEnd(width)} │\n`;
+    const stringLine = typeof line === 'string' ? line : String(line || '');
+    result += `│ ${stringLine.padEnd(width)} │\n`;
   }
   
   result += `└${'─'.repeat(width + 2)}┘`;
@@ -337,6 +366,7 @@ export const formatter = {
   printError,
   printWarning,
   printInfo,
+  printTable,
   progressBar,
   spinner,
   formatTable,

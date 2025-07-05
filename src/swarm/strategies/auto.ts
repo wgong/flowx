@@ -6,12 +6,24 @@
 import { BaseStrategy, DecompositionResult, TaskBatch, AgentAllocation, TaskPattern } from "./base.ts";
 import { SwarmObjective, TaskDefinition, AgentState, TaskType, TaskPriority, TaskId, AgentType } from "../types.ts";
 import { generateId } from "../../utils/helpers.ts";
+import { Logger } from "../../core/logger.ts";
 
 interface MLHeuristics {
   taskTypeWeights: Record<string, number>;
   agentPerformanceHistory: Map<string, number>;
   complexityFactors: Record<string, number>;
   parallelismOpportunities: string[];
+}
+
+interface OptimalTaskStructure {
+  requiresAnalysis: boolean;
+  requiresImplementation: boolean;
+  requiresTesting: boolean;
+  analysisDuration: number;
+  implementationDuration: number;
+  testingDuration: number;
+  parallelizable: boolean;
+  components: string[];
 }
 
 interface PredictiveSchedule {
@@ -30,6 +42,7 @@ interface ScheduleSlot {
 }
 
 export class AutoStrategy extends BaseStrategy {
+  private logger: Logger;
   private mlHeuristics: MLHeuristics;
   private decompositionCache: Map<string, DecompositionResult>;
   private patternCache: Map<string, TaskPattern[]>;
@@ -37,10 +50,37 @@ export class AutoStrategy extends BaseStrategy {
 
   constructor(config: any) {
     super(config);
+    this.logger = new Logger(
+      { level: 'info', format: 'json', destination: 'console' }
+    );
     this.mlHeuristics = this.initializeMLHeuristics();
     this.decompositionCache = new Map();
     this.patternCache = new Map();
     this.performanceHistory = new Map();
+  }
+
+  /**
+   * Initialize the AutoStrategy with any required setup
+   */
+  async initialize(): Promise<void> {
+    this.logger.info('Initializing AutoStrategy...');
+    
+    // Initialize ML heuristics
+    this.mlHeuristics = this.initializeMLHeuristics();
+    
+    // Clear caches
+    this.decompositionCache.clear();
+    this.patternCache.clear();
+    this.performanceHistory.clear();
+    
+    // Initialize metrics - only use properties that exist in StrategyMetrics
+    this.metrics = {
+      ...this.metrics,
+      cacheHitRate: 0,
+      predictionAccuracy: 0
+    };
+    
+    this.logger.info('AutoStrategy initialized successfully');
   }
 
   /**
@@ -495,8 +535,7 @@ export class AutoStrategy extends BaseStrategy {
         to: 'created',
         reason: 'Task created by AutoStrategy',
         triggeredBy: 'system'
-      }],
-      dependsOn: params.dependencies?.map(dep => dep.toString()) || []
+      }]
     };
   }
 

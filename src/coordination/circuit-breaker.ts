@@ -12,11 +12,13 @@ export interface CircuitBreakerConfig {
   halfOpenLimit: number; // Max requests in half-open state
 }
 
-export enum CircuitState {
-  CLOSED = 'closed',
-  OPEN = 'open',
-  HALF_OPEN = 'half-open',
-}
+export const CircuitState = {
+  CLOSED: 'closed',
+  OPEN: 'open',
+  HALF_OPEN: 'half-open',
+} as const;
+
+export type CircuitState = typeof CircuitState[keyof typeof CircuitState];
 
 export interface CircuitBreakerMetrics {
   state: CircuitState;

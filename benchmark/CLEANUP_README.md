@@ -1,6 +1,6 @@
 # Benchmark System Cleanup
 
-This directory contains the refactored benchmark system for claude-flow. The refactored system addresses issues with the original implementation, including code duplication, inconsistent APIs, and poor organization.
+weThis directory contains the refactored benchmark system for claude-flow. The refactored system addresses issues with the original implementation, including code duplication, inconsistent APIs, and poor organization.
 
 ## Key Files
 

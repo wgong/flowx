@@ -2,12 +2,12 @@
  * Markdown backend implementation for human-readable memory storage
  */
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { IMemoryBackend } from "./base.ts";
-import { MemoryEntry, MemoryQuery } from "../../utils/types.ts";
-import { ILogger } from "../../core/logger.ts";
-import { MemoryBackendError } from "../../utils/errors.ts";
+import * as fs from 'fs';
+import * as path from 'path';
+import { IMemoryBackend } from "./base.js";
+import { MemoryEntry, MemoryQuery } from "../../utils/types.js";
+import { ILogger } from "../../core/logger.js";
+import { MemoryBackendError } from "../../utils/errors.js";
 
 /**
  * Markdown-based memory backend
@@ -28,9 +28,9 @@ export class MarkdownBackend implements IMemoryBackend {
 
     try {
       // Ensure directories exist
-      await fs.mkdir(this.baseDir, { recursive: true });
-      await fs.mkdir(path.join(this.baseDir, 'agents'), { recursive: true });
-      await fs.mkdir(path.join(this.baseDir, 'sessions'), { recursive: true });
+      await fs.promises.mkdir(this.baseDir, { recursive: true });
+      await fs.promises.mkdir(path.join(this.baseDir, 'agents'), { recursive: true });
+      await fs.promises.mkdir(path.join(this.baseDir, 'sessions'), { recursive: true });
 
       // Load index
       await this.loadIndex();
@@ -88,7 +88,7 @@ export class MarkdownBackend implements IMemoryBackend {
 
       // Delete file
       const filePath = this.getEntryFilePath(entry);
-      await fs.unlink(filePath);
+      await fs.promises.unlink(filePath);
 
       // Update index
       await this.saveIndex();
@@ -161,16 +161,16 @@ export class MarkdownBackend implements IMemoryBackend {
   }> {
     try {
       // Check if directory is accessible
-      await fs.stat(this.baseDir);
+      await fs.promises.stat(this.baseDir);
 
       const entryCount = this.entries.size;
       let totalSizeBytes = 0;
 
       // Calculate total size
-      for (const entry of this.entries.values()) {
+      for (const entry of Array.from(this.entries.values())) {
         const filePath = this.getEntryFilePath(entry);
         try {
-          const stat = await fs.stat(filePath);
+          const stat = await fs.promises.stat(filePath);
           totalSizeBytes += stat.size;
         } catch {
           // File might not exist yet
@@ -194,7 +194,7 @@ export class MarkdownBackend implements IMemoryBackend {
 
   private async loadIndex(): Promise<void> {
     try {
-      const content = await fs.readFile(this.indexPath, 'utf-8');
+      const content = await fs.promises.readFile(this.indexPath, 'utf-8');
       const index = JSON.parse(content) as Record<string, MemoryEntry>;
 
       // Convert and validate entries
@@ -216,12 +216,12 @@ export class MarkdownBackend implements IMemoryBackend {
   private async saveIndex(): Promise<void> {
     const index: Record<string, MemoryEntry> = {};
     
-    for (const [id, entry] of this.entries) {
+    for (const [id, entry] of Array.from(this.entries.entries())) {
       index[id] = entry;
     }
 
     const content = JSON.stringify(index, null, 2);
-    await fs.writeFile(this.indexPath, content, 'utf-8');
+    await fs.promises.writeFile(this.indexPath, content, 'utf-8');
   }
 
   private async writeEntryToFile(entry: MemoryEntry): Promise<void> {
@@ -229,13 +229,13 @@ export class MarkdownBackend implements IMemoryBackend {
     const dirPath = path.dirname(filePath);
 
     // Ensure directory exists
-    await fs.mkdir(dirPath, { recursive: true });
+    await fs.promises.mkdir(dirPath, { recursive: true });
 
     // Generate markdown content
     const content = this.entryToMarkdown(entry);
 
     // Write file
-    await fs.writeFile(filePath, content, 'utf-8');
+    await fs.promises.writeFile(filePath, content, 'utf-8');
   }
 
   private getEntryFilePath(entry: MemoryEntry): string {
@@ -280,5 +280,55 @@ export class MarkdownBackend implements IMemoryBackend {
     }
 
     return lines.join('\n');
+  }
+
+  private extractTags(content: string): string[] {
+    const tagRegex = /#(\w+)/g;
+    const tags = [];
+    let match;
+    
+    while ((match = tagRegex.exec(content)) !== null) {
+      tags.push(match[1]);
+    }
+    
+    return tags;
+  }
+
+  private matchesTag(entry: MemoryEntry, tag: string): boolean {
+    return entry.tags?.includes(tag) || false;
+  }
+
+  private parseMetadata(content: string): Record<string, any> {
+    const metadataRegex = /^---\n([\s\S]*?)\n---/;
+    const match = content.match(metadataRegex);
+    
+    if (!match) return {};
+    
+    const yamlContent = match[1];
+    const metadata: Record<string, any> = {};
+    
+    // Simple YAML parsing for key-value pairs
+    const lines = yamlContent.split('\n');
+    for (const line of lines) {
+      const colonIndex = line.indexOf(':');
+      if (colonIndex > 0) {
+        const key = line.substring(0, colonIndex).trim();
+        const value = line.substring(colonIndex + 1).trim();
+        
+        // Parse different value types
+        if (value === 'true' || value === 'false') {
+          metadata[key] = value === 'true';
+        } else if (!isNaN(Number(value))) {
+          metadata[key] = Number(value);
+        } else if (value.startsWith('[') && value.endsWith(']')) {
+          // Simple array parsing
+          metadata[key] = value.slice(1, -1).split(',').map(s => s.trim());
+        } else {
+          metadata[key] = value;
+        }
+      }
+    }
+    
+    return metadata;
   }
 }

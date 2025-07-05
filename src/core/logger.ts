@@ -2,12 +2,13 @@
  * Logging infrastructure for Claude-Flow
  */
 
-import { promises as fs } from 'node:fs';
-import * as path from 'node:path';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Buffer } from 'node:buffer';
-import process from 'node:process';
+import * as process from 'node:process';
 import { LoggingConfig } from "../utils/types.js";
 import { formatBytes } from "../utils/helpers.js";
+import { EventEmitter } from 'node:events';
 
 export interface ILogger {
   debug(message: string, meta?: unknown): void;
@@ -227,7 +228,7 @@ export class Logger implements ILogger {
 
       // Open file handle if not already open
       if (!this.fileHandle) {
-        this.fileHandle = await fs.open(this.config.filePath, 'a');
+        this.fileHandle = await fs.promises.open(this.config.filePath, 'a');
       }
 
       // Write the message
@@ -245,7 +246,7 @@ export class Logger implements ILogger {
     }
 
     try {
-      const stat = await fs.stat(this.config.filePath);
+      const stat = await fs.promises.stat(this.config.filePath);
       return stat.size >= this.config.maxFileSize;
     } catch {
       return false;
@@ -266,7 +267,7 @@ export class Logger implements ILogger {
     // Rename current file
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const rotatedPath = `${this.config.filePath}.${timestamp}`;
-    await fs.rename(this.config.filePath, rotatedPath);
+    await fs.promises.rename(this.config.filePath, rotatedPath);
 
     // Clean up old files
     await this.cleanupOldFiles();
@@ -284,7 +285,7 @@ export class Logger implements ILogger {
     const baseFileName = path.basename(this.config.filePath);
 
     try {
-      const entries = await fs.readdir(dir, { withFileTypes: true });
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true });
       const files: string[] = [];
       
       for (const entry of entries) {
@@ -299,7 +300,7 @@ export class Logger implements ILogger {
       // Remove old files
       const filesToRemove = files.slice(this.config.maxFiles - 1);
       for (const file of filesToRemove) {
-        await fs.unlink(path.join(dir, file));
+        await fs.promises.unlink(path.join(dir, file));
       }
     } catch (error) {
       console.error('Failed to cleanup old log files:', error);

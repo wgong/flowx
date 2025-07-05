@@ -11,23 +11,23 @@ export interface AuditEntry {
   eventType: string;
   category: 'authentication' | 'authorization' | 'data-access' | 'system-change' | 'security' | 'compliance' | 'business';
   severity: 'low' | 'medium' | 'high' | 'critical';
-  userId?: string;
-  sessionId?: string;
+  userId?: string | undefined;
+  sessionId?: string | undefined;
   resource: {
     type: string;
     id: string;
-    name?: string;
-    path?: string;
+    name?: string | undefined;
+    path?: string | undefined;
   };
   action: string;
   outcome: 'success' | 'failure' | 'partial' | 'denied';
   details: Record<string, any>;
   context: {
-    ipAddress?: string;
-    userAgent?: string;
-    location?: string;
+    ipAddress?: string | undefined;
+    userAgent?: string | undefined;
+    location?: string | undefined;
     source: string;
-    requestId?: string;
+    requestId?: string | undefined;
   };
   compliance: {
     frameworks: string[];
@@ -37,7 +37,7 @@ export interface AuditEntry {
   };
   integrity: {
     hash: string;
-    signature?: string;
+    signature?: string | undefined;
     verified: boolean;
   };
   metadata: Record<string, any>;

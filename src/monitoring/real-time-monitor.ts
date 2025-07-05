@@ -279,7 +279,7 @@ export class RealTimeMonitor extends EventEmitter {
       this.collectSystemMetrics();
       this.processMetricsBuffer();
       this.cleanupOldMetrics();
-    }, this.config.updateInterval) as NodeJS.Timeout;
+    }, this.config.updateInterval) as any;
 
     this.logger.info('Started metrics collection', { 
       interval: this.config.updateInterval 
@@ -407,7 +407,7 @@ export class RealTimeMonitor extends EventEmitter {
   private startAlertProcessing(): void {
     this.alertProcessor = setInterval(() => {
       this.processAlerts();
-    }, this.config.updateInterval) as NodeJS.Timeout;
+    }, this.config.updateInterval) as any;
 
     this.logger.info('Started alert processing');
   }
@@ -546,7 +546,7 @@ export class RealTimeMonitor extends EventEmitter {
   private startHealthChecks(): void {
     this.healthCheckInterval = setInterval(() => {
       this.performHealthChecks();
-    }, 30000) as NodeJS.Timeout; // Check every 30 seconds
+    }, 30000) as any; // Check every 30 seconds
 
     this.logger.info('Started health checks');
   }

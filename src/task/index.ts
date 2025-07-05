@@ -6,9 +6,9 @@
 
 export {
   TaskEngine
-} from "./engine.ts";
+} from "./engine";
 
-export type {
+export {
   WorkflowTask,
   TaskDependency,
   ResourceRequirement,
@@ -20,41 +20,38 @@ export type {
   TaskFilter,
   TaskSort,
   TaskCheckpoint
-} from "./engine.ts";
+} from "./engine";
 
 export {
+  TaskCommandContext,
   createTaskCreateCommand,
   createTaskListCommand,
   createTaskStatusCommand,
   createTaskCancelCommand,
   createTaskWorkflowCommand
-} from "./commands.ts";
-
-export type {
-  TaskCommandContext
-} from "./commands.ts";
+} from "./commands";
 
 export {
   TaskCoordinator
-} from "./coordination.ts";
+} from "./coordination";
 
-export type {
+export {
   TodoItem,
   MemoryEntry,
   CoordinationContext
-} from "./coordination.ts";
+} from "./coordination";
 
 // Import the types we need for the functions below
-import { TaskEngine } from "./engine.ts";
-import { TaskCoordinator, TodoItem, CoordinationContext } from "./coordination.ts";
-import { TaskCommandContext } from "./commands.ts";
+import { TaskEngine } from "./engine";
+import { TaskCoordinator, TodoItem, CoordinationContext } from "./coordination";
+import { TaskCommandContext } from "./commands";
 import { 
   createTaskCreateCommand,
   createTaskListCommand,
   createTaskStatusCommand,
   createTaskCancelCommand,
   createTaskWorkflowCommand
-} from "./commands.ts";
+} from "./commands";
 
 /**
  * Initialize the complete task management system

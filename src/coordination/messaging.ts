@@ -1,29 +1,27 @@
 /**
- * Inter-agent messaging system
+ * Messaging System
+ * Now uses MessageBroker for consolidated messaging
  */
 
 import { Message, CoordinationConfig, SystemEvents } from "../utils/types.ts";
 import { IEventBus } from "../core/event-bus.ts";
 import { ILogger } from "../core/logger.ts";
-import { CoordinationError } from "../utils/errors.ts";
-import { generateId, timeout as timeoutHelper } from "../utils/helpers.ts";
-
-interface MessageQueue {
-  messages: Message[];
-  handlers: Map<string, (message: Message) => void>;
-}
+import { generateId } from "../utils/helpers.ts";
+import { MessageBroker, createMessageBroker, BrokerMessage, MessageHandler } from "../communication/message-broker.ts";
 
 interface PendingResponse {
   resolve: (response: unknown) => void;
   reject: (error: Error) => void;
-  timeout: number;
+  timeout: NodeJS.Timeout;
 }
 
 /**
- * Message router for inter-agent communication
+ * Message router that manages message flow between agents
+ * Now uses MessageBroker as the underlying transport
  */
 export class MessageRouter {
-  private queues = new Map<string, MessageQueue>(); // agentId -> queue
+  private messageBroker: MessageBroker;
+  private messageHandlers = new Map<string, Map<string, (message: Message) => void>>();
   private pendingResponses = new Map<string, PendingResponse>();
   private messageCount = 0;
 
@@ -31,10 +29,34 @@ export class MessageRouter {
     private config: CoordinationConfig,
     private eventBus: IEventBus,
     private logger: ILogger,
-  ) {}
+  ) {
+    // Create message broker instance
+    this.messageBroker = createMessageBroker(
+      {
+        strategy: 'event-driven',
+        enablePersistence: true,
+        enableReliability: true,
+        enableOrdering: false,
+        enableFiltering: true,
+        maxMessageSize: 1024 * 1024, // 1MB
+        maxQueueSize: 10000,
+        messageRetention: 86400000, // 24 hours
+        acknowledgmentTimeout: 30000,
+        retryAttempts: 3,
+        backoffMultiplier: 2,
+        metricsEnabled: true,
+        debugMode: false
+      },
+      logger,
+      eventBus
+    );
+  }
 
   async initialize(): Promise<void> {
     this.logger.info('Initializing message router');
+    
+    // Initialize message broker
+    await this.messageBroker.initialize();
     
     // Set up periodic cleanup
     setInterval(() => this.cleanup(), 60000); // Every minute
@@ -49,20 +71,29 @@ export class MessageRouter {
       clearTimeout(pending.timeout);
     }
     
-    this.queues.clear();
+    // Shutdown message broker
+    await this.messageBroker.shutdown();
+    
+    this.messageHandlers.clear();
     this.pendingResponses.clear();
   }
 
   async send(from: string, to: string, payload: unknown): Promise<void> {
-    const message: Message = {
-      id: generateId('msg'),
-      type: 'agent-message',
+    const messageId = await this.messageBroker.sendMessage(
+      from,
+      to,
+      'agent-message',
       payload,
-      timestamp: new Date(),
-      priority: 0,
-    };
-
-    await this.sendMessage(from, to, message);
+      { priority: 'normal' }
+    );
+    
+    this.messageCount++;
+    
+    this.eventBus.emit(SystemEvents.MESSAGE_SENT, { 
+      from, 
+      to, 
+      message: { id: messageId, type: 'agent-message', payload }
+    });
   }
 
   async sendWithResponse<T = unknown>(
@@ -71,61 +102,70 @@ export class MessageRouter {
     payload: unknown,
     timeoutMs?: number,
   ): Promise<T> {
-    const message: Message = {
-      id: generateId('msg'),
-      type: 'agent-request',
-      payload,
-      timestamp: new Date(),
-      priority: 1,
-    };
-
-    // Create response promise
-    const responsePromise = new Promise<T>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingResponses.delete(message.id);
-        reject(new Error(`Message response timeout: ${message.id}`));
-      }, timeoutMs || this.config.messageTimeout);
-
-      this.pendingResponses.set(message.id, {
-        resolve: resolve as (response: unknown) => void,
-        reject,
-        timeout: timeout as unknown as number,
-      });
-    });
-
-    // Send message
-    await this.sendMessage(from, to, message);
-
-    // Wait for response
-    return await responsePromise;
+    const timeout = timeoutMs || this.config.messageTimeout;
+    
+    try {
+      const response = await this.messageBroker.sendRequest(
+        from,
+        to,
+        'agent-request',
+        payload,
+        timeout
+      );
+      
+      this.messageCount++;
+      return response as T;
+    } catch (error) {
+      this.logger.error('Request failed', { from, to, error });
+      throw error;
+    }
   }
 
   async broadcast(from: string, payload: unknown): Promise<void> {
-    const message: Message = {
-      id: generateId('broadcast'),
-      type: 'broadcast',
-      payload,
-      timestamp: new Date(),
-      priority: 0,
-    };
-
-    // Send to all agents
-    const agents = Array.from(this.queues.keys()).filter(id => id !== from);
-    
-    await Promise.all(
-      agents.map(to => this.sendMessage(from, to, message)),
-    );
+    await this.messageBroker.broadcast(from, 'broadcast', payload);
+    this.messageCount++;
   }
 
   subscribe(agentId: string, handler: (message: Message) => void): void {
-    const queue = this.ensureQueue(agentId);
-    queue.handlers.set(generateId('handler'), handler);
+    if (!this.messageHandlers.has(agentId)) {
+      this.messageHandlers.set(agentId, new Map());
+    }
+    
+    const handlerId = generateId('handler');
+    this.messageHandlers.get(agentId)!.set(handlerId, handler);
+    
+    // Subscribe to message broker
+    this.messageBroker.subscribe(agentId, '*', async (brokerMessage: BrokerMessage) => {
+      // Convert BrokerMessage back to Message format for compatibility
+      const message: Message = {
+        id: brokerMessage.id,
+        type: brokerMessage.type,
+        payload: brokerMessage.content,
+        timestamp: brokerMessage.timestamp,
+        priority: this.convertPriorityToNumber(brokerMessage.priority)
+      };
+      
+      // Call all handlers for this agent
+      const agentHandlers = this.messageHandlers.get(agentId);
+      if (agentHandlers) {
+        for (const [_, handlerFn] of agentHandlers) {
+          try {
+            handlerFn(message);
+          } catch (error) {
+            this.logger.error('Message handler error', { agentId, messageId: message.id, error });
+          }
+        }
+      }
+    });
   }
 
   unsubscribe(agentId: string, handlerId: string): void {
-    const queue = this.queues.get(agentId);
-    if (queue) {
-      queue.handlers.delete(handlerId);
+    const agentHandlers = this.messageHandlers.get(agentId);
+    if (agentHandlers) {
+      agentHandlers.delete(handlerId);
+      if (agentHandlers.size === 0) {
+        this.messageHandlers.delete(agentId);
+      }
     }
   }
 
@@ -149,142 +189,42 @@ export class MessageRouter {
     error?: string; 
     metrics?: Record<string, number>;
   }> {
-    const totalQueues = this.queues.size;
-    let totalMessages = 0;
-    let totalHandlers = 0;
-
-    for (const queue of this.queues.values()) {
-      totalMessages += queue.messages.length;
-      totalHandlers += queue.handlers.size;
-    }
-
+    const brokerMetrics = this.messageBroker.getMetrics();
+    
     return {
       healthy: true,
       metrics: {
-        activeQueues: totalQueues,
-        pendingMessages: totalMessages,
-        registeredHandlers: totalHandlers,
+        activeQueues: brokerMetrics.queues || 0,
+        pendingMessages: brokerMetrics.storedMessages || 0,
+        registeredHandlers: this.messageHandlers.size,
         pendingResponses: this.pendingResponses.size,
         totalMessagesSent: this.messageCount,
+        channels: brokerMetrics.channels || 0,
+        subscriptions: brokerMetrics.subscriptions || 0,
+        successRate: brokerMetrics.busMetrics?.successRate || 100
       },
     };
   }
 
-  private async sendMessage(
-    from: string,
-    to: string,
-    message: Message,
-  ): Promise<void> {
-    this.logger.debug('Sending message', { 
-      from,
-      to,
-      messageId: message.id,
-      type: message.type,
-    });
+  // === PRIVATE METHODS ===
 
-    // Ensure destination queue exists
-    const queue = this.ensureQueue(to);
-
-    // Add to queue
-    queue.messages.push(message);
-    this.messageCount++;
-
-    // Emit event
-    this.eventBus.emit(SystemEvents.MESSAGE_SENT, { from, to, message });
-
-    // Process message immediately if handlers exist
-    if (queue.handlers.size > 0) {
-      await this.processMessage(to, message);
+  private convertPriorityToNumber(priority: string): number {
+    switch (priority) {
+      case 'urgent': return 3;
+      case 'high': return 2;
+      case 'normal': return 1;
+      case 'low': return 0;
+      default: return 1;
     }
-  }
-
-  private async processMessage(agentId: string, message: Message): Promise<void> {
-    const queue = this.queues.get(agentId);
-    if (!queue) {
-      return;
-    }
-
-    // Remove message from queue
-    const index = queue.messages.indexOf(message);
-    if (index !== -1) {
-      queue.messages.splice(index, 1);
-    }
-
-    // Call all handlers
-    const handlers = Array.from(queue.handlers.values());
-    await Promise.all(
-      handlers.map(handler => {
-        try {
-          handler(message);
-        } catch (error) {
-          this.logger.error('Message handler error', { 
-            agentId,
-            messageId: message.id,
-            error,
-          });
-        }
-      }),
-    );
-
-    // Emit received event
-    this.eventBus.emit(SystemEvents.MESSAGE_RECEIVED, { 
-      from: '', // Would need to track this
-      to: agentId,
-      message,
-    });
-  }
-
-  private ensureQueue(agentId: string): MessageQueue {
-    if (!this.queues.has(agentId)) {
-      this.queues.set(agentId, {
-        messages: [],
-        handlers: new Map(),
-      });
-    }
-    return this.queues.get(agentId)!;
-  }
-
-  async performMaintenance(): Promise<void> {
-    this.logger.debug('Performing message router maintenance');
-    this.cleanup();
   }
 
   private cleanup(): void {
-    const now = Date.now();
+    // Cleanup is now handled by MessageBroker
+    this.logger.debug('Message router cleanup completed');
+  }
 
-    // Clean up old messages
-    for (const [agentId, queue] of this.queues) {
-      const filtered = queue.messages.filter(msg => {
-        const age = now - msg.timestamp.getTime();
-        const maxAge = msg.expiry 
-          ? msg.expiry.getTime() - msg.timestamp.getTime()
-          : this.config.messageTimeout;
-
-        if (age > maxAge) {
-          this.logger.warn('Dropping expired message', { 
-            agentId,
-            messageId: msg.id,
-            age,
-          });
-          return false;
-        }
-        return true;
-      });
-
-      queue.messages = filtered;
-
-      // Remove empty queues
-      if (queue.messages.length === 0 && queue.handlers.size === 0) {
-        this.queues.delete(agentId);
-      }
-    }
-
-    // Clean up timed out responses
-    for (const [id, pending] of this.pendingResponses) {
-      // This is handled by the timeout, but double-check
-      clearTimeout(pending.timeout);
-      pending.reject(new Error('Response timeout during cleanup'));
-    }
-    this.pendingResponses.clear();
+  async performMaintenance(): Promise<void> {
+    // Maintenance is now handled by MessageBroker
+    this.logger.debug('Message router maintenance completed');
   }
 }

@@ -1,79 +1,133 @@
 /**
- * Event bus implementation for Claude-Flow
+ * Event bus implementation with typed events
  */
 
-import { SystemEvents, EventMap } from "../utils/types.ts";
-import { TypedEventEmitter } from "../utils/helpers.ts";
+import { EventEmitter } from 'node:events';
+import { generateId } from "../utils/helpers.js";
 
 export interface IEventBus {
-  emit(event: string, data?: unknown): void;
-  on(event: string, handler: (data: unknown) => void): void;
-  off(event: string, handler: (data: unknown) => void): void;
-  once(event: string, handler: (data: unknown) => void): void;
+  emit(event: string, data?: any): boolean;
+  on(event: string, listener: (...args: any[]) => void): this;
+  off(event: string, listener: (...args: any[]) => void): this;
+  once(event: string, listener: (...args: any[]) => void): this;
+  removeAllListeners(event?: string): this;
+  getMaxListeners(): number;
+  setMaxListeners(n: number): this;
+  listeners(event: string): Function[];
+  listenerCount(event: string): number;
+}
+
+export interface EventMetrics {
+  totalEvents: number;
+  eventsByType: Record<string, number>;
+  averageProcessingTime: number;
+  errorRate: number;
+  lastEventTime: Date;
 }
 
 /**
- * Internal typed event bus
+ * Typed event bus with metrics and error handling
  */
-class TypedEventBus extends TypedEventEmitter<EventMap> {
-  private eventCounts = new Map<keyof EventMap, number>();
-  private lastEventTimes = new Map<keyof EventMap, number>();
-  private debug: boolean;
-  private cleanupInterval: NodeJS.Timeout | null = null;
+export class TypedEventBus extends EventEmitter implements IEventBus {
+  private metrics: EventMetrics;
+  private eventHistory: Array<{ event: string; timestamp: Date; data?: any }> = [];
+  private maxHistorySize = 1000;
 
-  constructor(debug = false) {
+  constructor() {
     super();
-    this.debug = debug;
-    // Set up cleanup interval
-    this.cleanupInterval = setInterval(() => {
-      this.cleanupOldEvents();
-    }, 60000) as unknown as NodeJS.Timeout; // Every minute
+    this.metrics = {
+      totalEvents: 0,
+      eventsByType: {},
+      averageProcessingTime: 0,
+      errorRate: 0,
+      lastEventTime: new Date()
+    };
+    
+    this.setMaxListeners(100); // Increase default limit
   }
 
-  /**
-   * Emits an event with logging
-   */
-  override emit<K extends keyof EventMap>(event: K, data: EventMap[K]): void {
-    if (this.debug) {
-      console.debug(`[EventBus] Emitting event: ${String(event)}`, data);
+  emit(event: string, data?: any): boolean {
+    const startTime = Date.now();
+    
+    try {
+      // Update metrics
+      this.metrics.totalEvents++;
+      this.metrics.eventsByType[event] = (this.metrics.eventsByType[event] || 0) + 1;
+      this.metrics.lastEventTime = new Date();
+      
+      // Add to history
+      this.addToHistory(event, data);
+      
+      // Emit the event
+      const result = super.emit(event, data);
+      
+      // Calculate processing time
+      const processingTime = Date.now() - startTime;
+      this.updateAverageProcessingTime(processingTime);
+      
+      return result;
+      
+    } catch (error) {
+      this.metrics.errorRate++;
+      console.error('Event emission error:', error);
+      return false;
     }
-    
-    // Track event metrics
-    const count = this.eventCounts.get(event) || 0;
-    this.eventCounts.set(event, count + 1);
-    this.lastEventTimes.set(event, Date.now());
-    
-    super.emit(event, data);
   }
 
   /**
-   * Get event statistics
+   * Get event metrics
    */
-  getEventStats(): { event: string; count: number; lastEmitted: Date | null }[] {
-    const stats: { event: string; count: number; lastEmitted: Date | null }[] = [];
+  getMetrics(): EventMetrics {
+    return { ...this.metrics };
+  }
+
+  /**
+   * Get recent event history
+   */
+  getEventHistory(limit: number = 50): Array<{ event: string; timestamp: Date; data?: any }> {
+    return this.eventHistory.slice(-limit);
+  }
+
+  /**
+   * Clear event history
+   */
+  clearHistory(): void {
+    this.eventHistory = [];
+  }
+
+  /**
+   * Reset metrics
+   */
+  resetMetrics(): void {
+    this.metrics = {
+      totalEvents: 0,
+      eventsByType: {},
+      averageProcessingTime: 0,
+      errorRate: 0,
+      lastEventTime: new Date()
+    };
+  }
+
+  private addToHistory(event: string, data?: any): void {
+    this.eventHistory.push({
+      event,
+      timestamp: new Date(),
+      data
+    });
     
-    for (const [event, count] of this.eventCounts.entries()) {
-      const lastTime = this.lastEventTimes.get(event);
-      stats.push({
-        event: String(event),
-        count,
-        lastEmitted: lastTime ? new Date(lastTime) : null,
-      });
+    // Maintain history size limit
+    if (this.eventHistory.length > this.maxHistorySize) {
+      this.eventHistory.shift();
     }
+  }
+
+  private updateAverageProcessingTime(newTime: number): void {
+    const currentAvg = this.metrics.averageProcessingTime;
+    const totalEvents = this.metrics.totalEvents;
     
-    return stats.sort((a, b) => b.count - a.count);
-  }
-
-  /**
-   * Reset event statistics
-   */
-  resetStats(): void {
-    this.eventCounts.clear();
-    this.lastEventTimes.clear();
-  }
-
-  private cleanupOldEvents(): void {
-    // Implementation of cleanupOldEvents method
+    // Calculate running average
+    this.metrics.averageProcessingTime = 
+      ((currentAvg * (totalEvents - 1)) + newTime) / totalEvents;
   }
 }
 
@@ -84,112 +138,90 @@ export class EventBus implements IEventBus {
   private static instance: EventBus;
   private typedBus: TypedEventBus;
 
-  private constructor(debug = false) {
-    this.typedBus = new TypedEventBus(debug);
+  private constructor() {
+    this.typedBus = new TypedEventBus();
   }
 
   /**
    * Gets the singleton instance of the event bus
    */
-  static getInstance(debug = false): EventBus {
+  static getInstance(): EventBus {
     if (!EventBus.instance) {
-      EventBus.instance = new EventBus(debug);
+      EventBus.instance = new EventBus();
     }
     return EventBus.instance;
   }
 
-  /**
-   * Emits an event
-   */
-  emit(event: string, data?: unknown): void {
-    // Type-safe emission for known events
-    if (event in SystemEvents) {
-      this.typedBus.emit(event as keyof EventMap, data as any);
-    } else {
-      // For custom events, emit as-is
-      this.typedBus.emit(event as any, data as any);
-    }
+  emit(event: string, data?: any): boolean {
+    return this.typedBus.emit(event, data);
+  }
+
+  on(event: string, listener: (...args: any[]) => void): this {
+    this.typedBus.on(event, listener);
+    return this;
+  }
+
+  off(event: string, listener: (...args: any[]) => void): this {
+    this.typedBus.off(event, listener);
+    return this;
+  }
+
+  once(event: string, listener: (...args: any[]) => void): this {
+    this.typedBus.once(event, listener);
+    return this;
+  }
+
+  removeAllListeners(event?: string): this {
+    this.typedBus.removeAllListeners(event);
+    return this;
+  }
+
+  getMaxListeners(): number {
+    return this.typedBus.getMaxListeners();
+  }
+
+  setMaxListeners(n: number): this {
+    this.typedBus.setMaxListeners(n);
+    return this;
+  }
+
+  listeners(event: string): Function[] {
+    return this.typedBus.listeners(event);
+  }
+
+  listenerCount(event: string): number {
+    return this.typedBus.listenerCount(event);
   }
 
   /**
-   * Registers an event handler
+   * Get event metrics
    */
-  on(event: string, handler: (data: unknown) => void): void {
-    this.typedBus.on(event as any, handler);
+  getMetrics(): EventMetrics {
+    return this.typedBus.getMetrics();
   }
 
   /**
-   * Removes an event handler
+   * Get recent event history
    */
-  off(event: string, handler: (data: unknown) => void): void {
-    this.typedBus.off(event as any, handler);
+  getEventHistory(limit?: number): Array<{ event: string; timestamp: Date; data?: any }> {
+    return this.typedBus.getEventHistory(limit);
   }
 
   /**
-   * Registers a one-time event handler
+   * Clear event history
    */
-  once(event: string, handler: (data: unknown) => void): void {
-    this.typedBus.once(event as any, handler);
+  clearHistory(): void {
+    this.typedBus.clearHistory();
   }
 
   /**
-   * Waits for an event to occur
+   * Reset metrics
    */
-  async waitFor(event: string, timeoutMs?: number): Promise<unknown> {
-    return new Promise((resolve, reject) => {
-      const handler = (data: unknown) => {
-        if (timer) clearTimeout(timer as any);
-        resolve(data);
-      };
-
-      let timer: NodeJS.Timeout | undefined;
-      if (timeoutMs) {
-        timer = setTimeout(() => {
-          this.off(event, handler);
-          reject(new Error(`Timeout waiting for event: ${event}`));
-        }, timeoutMs) as NodeJS.Timeout;
-      }
-
-      this.once(event, handler);
-    });
-  }
-
-  /**
-   * Creates a filtered event listener
-   */
-  onFiltered(
-    event: string,
-    filter: (data: unknown) => boolean,
-    handler: (data: unknown) => void,
-  ): void {
-    this.on(event, (data) => {
-      if (filter(data)) {
-        handler(data);
-      }
-    });
-  }
-
-  /**
-   * Get event statistics
-   */
-  getEventStats(): { event: string; count: number; lastEmitted: Date | null }[] {
-    return this.typedBus.getEventStats();
-  }
-
-  /**
-   * Reset event statistics
-   */
-  resetStats(): void {
-    this.typedBus.resetStats();
-  }
-
-  /**
-   * Remove all listeners for an event
-   */
-  removeAllListeners(event?: string): void {
-    this.typedBus.removeAllListeners(event as any);
+  resetMetrics(): void {
+    this.typedBus.resetMetrics();
   }
 }
 
-// Export singleton instance
+// Create and export a default instance
 export const eventBus = EventBus.getInstance();
+export default eventBus;

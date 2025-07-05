@@ -95,8 +95,8 @@ export interface Project {
   timeline: {
     plannedStart: Date;
     plannedEnd: Date;
-    actualStart?: Date;
-    actualEnd?: Date;
+    actualStart?: Date | undefined;
+    actualEnd?: Date | undefined;
   };
   tags: string[];
   metadata: Record<string, any>;

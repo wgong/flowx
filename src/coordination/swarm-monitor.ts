@@ -9,18 +9,18 @@ interface AgentMetrics {
   id: string;
   name: string;
   status: 'idle' | 'running' | 'completed' | 'failed' | 'stalled';
-  currentTask?: string;
-  startTime?: number;
-  endTime?: number;
-  duration?: number;
-  cpuUsage?: number;
-  memoryUsage?: number;
+  currentTask?: string | undefined;
+  startTime?: number | undefined;
+  endTime?: number | undefined;
+  duration?: number | undefined;
+  cpuUsage?: number | undefined;
+  memoryUsage?: number | undefined;
   taskCount: number;
   successCount: number;
   failureCount: number;
   averageTaskDuration: number;
   lastActivity: number;
-  outputSize?: number;
+  outputSize?: number | undefined;
   errorRate: number;
 }
 

@@ -3,8 +3,8 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { ILogger } from "../core/logger.ts";
-import { IEventBus } from "../core/event-bus.ts";
+import { ILogger } from "../core/logger.js";
+import { IEventBus } from "../core/event-bus.js";
 import { 
   SwarmMemory, 
   MemoryPartition, 
@@ -14,8 +14,8 @@ import {
   ConsistencyLevel,
   MemoryPermissions,
   AgentId
-} from "../swarm/types.ts";
-import { generateId } from "../utils/helpers.ts";
+} from "../swarm/types.js";
+import { generateId } from "../utils/helpers";
 
 export interface DistributedMemoryConfig {
   namespace: string;
@@ -46,8 +46,8 @@ export interface MemoryNode {
 
 export interface SyncOperation {
   id: string;
-  type: 'create' | 'update' | 'delete' | 'batch';
-  partition: string;
+  type: 'create' | 'update' | 'delete' | 'batch' | 'partition-create' | 'entry-update' | 'entry-delete';
+  partition?: string;
   entry?: MemoryEntry;
   entries?: MemoryEntry[];
   timestamp: Date;
@@ -55,6 +55,8 @@ export interface SyncOperation {
   origin: string;
   targets: string[];
   status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  data?: any;
+  nodeId?: string;
 }
 
 export interface MemoryQuery {
@@ -707,7 +709,7 @@ export class DistributedMemorySystem extends EventEmitter {
 
   private selectPartition(type: string): string {
     // Simple partition selection based on type
-    for (const [id, partition] of this.partitions) {
+    for (const [id, partition] of Array.from(this.partitions.entries())) {
       if (partition.type === type) {
         return id;
       }
@@ -727,8 +729,8 @@ export class DistributedMemorySystem extends EventEmitter {
   }
 
   private getEntryPartition(entryId: string): string {
-    for (const [partitionId, partition] of this.partitions) {
-      if (partition.entries.some(e => e.id === entryId)) {
+    for (const [partitionId, partition] of Array.from(this.partitions.entries())) {
+      if (partition.entries.some((e: MemoryEntry) => e.id === entryId)) {
         return partitionId;
       }
     }
@@ -858,72 +860,396 @@ export class DistributedMemorySystem extends EventEmitter {
 
   private async replicateEntry(entry: MemoryEntry): Promise<void> {
     // Implementation for replication to other nodes
+    if (!this.config.distributed) return;
+
+    const targetNodes = this.selectReplicationNodes(entry.id);
+    const replicationPromises = targetNodes.map(nodeId => 
+      this.sendReplicationRequest(nodeId, entry)
+    );
+
+    try {
+      await Promise.allSettled(replicationPromises);
+      this.replicationMap.set(entry.id, targetNodes);
+      this.logger.debug('Entry replicated', { entryId: entry.id, nodes: targetNodes });
+    } catch (error) {
+      this.logger.error('Replication failed', { entryId: entry.id, error });
+    }
   }
 
   private async syncPartitionCreation(partition: MemoryPartition): Promise<void> {
     // Implementation for syncing partition creation
-  }
+    if (!this.config.distributed) return;
 
-  private async syncPartitionDeletion(partitionId: string): Promise<void> {
-    // Implementation for syncing partition deletion
-  }
+    const syncOperation: SyncOperation = {
+      id: generateId('sync'),
+      type: 'partition-create',
+      nodeId: this.localNodeId,
+      timestamp: new Date(),
+      data: partition,
+      status: 'pending'
+    };
 
-  private async syncEntryUpdate(entry: MemoryEntry): Promise<void> {
-    // Implementation for syncing entry updates
-  }
-
-  private async syncEntryDeletion(entryId: string): Promise<void> {
-    // Implementation for syncing entry deletion
+    this.syncQueue.push(syncOperation);
+    this.logger.debug('Queued partition creation sync', { partitionId: partition.id });
   }
 
   private async retrieveFromRemote(key: string, options: any): Promise<MemoryEntry | null> {
     // Implementation for retrieving from remote nodes
+    if (!this.config.distributed) return null;
+
+    const remoteNodes = Array.from(this.nodes.values()).filter(node => 
+      node.id !== this.localNodeId && node.status === 'online'
+    );
+
+    for (const node of remoteNodes) {
+      try {
+        const entry = await this.requestFromNode(node.id, key, options);
+        if (entry) {
+          // Cache locally for future access
+          this.updateCache(entry.id, entry);
+          return entry;
+        }
+      } catch (error) {
+        this.logger.warn('Remote retrieval failed', { nodeId: node.id, error });
+      }
+    }
+
     return null;
   }
 
   private async ensureConsistency(entry: MemoryEntry): Promise<MemoryEntry> {
     // Implementation for ensuring strong consistency
-    return entry;
+    if (!this.config.distributed || this.config.consistency !== 'strong') {
+      return entry;
+    }
+
+    const replicatedNodes = this.replicationMap.get(entry.id) || [];
+    const consistencyPromises = replicatedNodes.map(nodeId => 
+      this.getVersionFromNode(nodeId, entry.id)
+    );
+
+    try {
+      const versions = await Promise.allSettled(consistencyPromises);
+      const validVersions = versions
+        .filter(result => result.status === 'fulfilled')
+        .map(result => (result as PromiseFulfilledResult<{ version: number; entry: MemoryEntry }>).value);
+
+      // Find the latest version
+      const latestVersion = validVersions.reduce((latest, current) => 
+        current.version > latest.version ? current : latest, 
+        { version: entry.version, entry }
+      );
+
+      if (latestVersion.version > entry.version) {
+        // Update local entry with latest version
+        this.entries.set(entry.id, latestVersion.entry);
+        return latestVersion.entry;
+      }
+
+      return entry;
+    } catch (error) {
+      this.logger.error('Consistency check failed', { entryId: entry.id, error });
+      return entry;
+    }
   }
 
-  private async sendHeartbeat(): Promise<void> {
-    // Implementation for sending heartbeat to other nodes
+  private async syncEntryUpdate(entry: MemoryEntry): Promise<void> {
+    // Implementation for syncing entry updates
+    if (!this.config.distributed) return;
+
+    const syncOperation: SyncOperation = {
+      id: generateId('sync'),
+      type: 'entry-update',
+      nodeId: this.localNodeId,
+      timestamp: new Date(),
+      data: entry,
+      status: 'pending'
+    };
+
+    this.syncQueue.push(syncOperation);
+    this.logger.debug('Queued entry update sync', { entryId: entry.id });
   }
 
-  private async detectAndResolveConflicts(): Promise<void> {
-    // Implementation for conflict detection and resolution
+  private async syncEntryDeletion(entryId: string): Promise<void> {
+    // Implementation for syncing entry deletions
+    if (!this.config.distributed) return;
+
+    const syncOperation: SyncOperation = {
+      id: generateId('sync'),
+      type: 'entry-delete',
+      nodeId: this.localNodeId,
+      timestamp: new Date(),
+      data: { entryId },
+      status: 'pending'
+    };
+
+    this.syncQueue.push(syncOperation);
+    this.logger.debug('Queued entry deletion sync', { entryId });
   }
 
   private async executeSyncOperation(operation: SyncOperation): Promise<void> {
     // Implementation for executing sync operations
+    try {
+      operation.status = 'executing';
+
+      switch (operation.type) {
+        case 'partition-create':
+          await this.broadcastPartitionCreation(operation.data as MemoryPartition);
+          break;
+        case 'entry-update':
+          await this.broadcastEntryUpdate(operation.data as MemoryEntry);
+          break;
+        case 'entry-delete':
+          await this.broadcastEntryDeletion(operation.data as { entryId: string });
+          break;
+        default:
+          throw new Error(`Unknown sync operation type: ${operation.type}`);
+      }
+
+      operation.status = 'completed';
+      this.statistics.syncOperations.completed++;
+      this.logger.debug('Sync operation completed', { operationId: operation.id });
+
+    } catch (error) {
+      operation.status = 'failed';
+      this.statistics.syncOperations.failed++;
+      this.logger.error('Sync operation failed', { operationId: operation.id, error });
+      throw error;
+    }
   }
 
   private async completePendingSyncOperations(): Promise<void> {
     // Implementation for completing pending operations
+    const pendingOperations = this.syncQueue.filter(op => op.status === 'pending');
+    
+    for (const operation of pendingOperations) {
+      try {
+        await this.executeSyncOperation(operation);
+      } catch (error) {
+        this.logger.error('Failed to complete sync operation', { operationId: operation.id, error });
+      }
+    }
+
+    // Remove completed and failed operations
+    this.syncQueue = this.syncQueue.filter(op => op.status === 'pending');
   }
 
   private async loadPersistedData(): Promise<void> {
     // Implementation for loading persisted data
+    try {
+      // This would typically load from a persistent storage backend
+      this.logger.info('Loading persisted data');
+      // Placeholder: In a real implementation, this would load from disk/database
+    } catch (error) {
+      this.logger.error('Failed to load persisted data', { error });
+    }
   }
 
   private async persistData(): Promise<void> {
     // Implementation for persisting data
+    try {
+      // This would typically save to a persistent storage backend
+      this.logger.info('Persisting data');
+      // Placeholder: In a real implementation, this would save to disk/database
+    } catch (error) {
+      this.logger.error('Failed to persist data', { error });
+    }
   }
 
   private handleSyncRequest(data: any): void {
     // Handle sync requests from other nodes
+    try {
+      const { operation, sourceNodeId } = data;
+      
+      switch (operation.type) {
+        case 'partition-create':
+          this.handleRemotePartitionCreation(operation.data, sourceNodeId);
+          break;
+        case 'entry-update':
+          this.handleRemoteEntryUpdate(operation.data, sourceNodeId);
+          break;
+        case 'entry-delete':
+          this.handleRemoteEntryDeletion(operation.data, sourceNodeId);
+          break;
+        default:
+          this.logger.warn('Unknown sync request type', { type: operation.type });
+      }
+    } catch (error) {
+      this.logger.error('Failed to handle sync request', { error });
+    }
   }
 
   private handleNodeJoined(data: any): void {
     // Handle new node joining
+    const nodeId = data.nodeId;
+    this.handleNodeJoin(nodeId);
   }
 
   private handleNodeLeft(data: any): void {
     // Handle node leaving
+    const nodeId = data.nodeId;
+    this.handleNodeLeave(nodeId);
   }
 
   private handleConflict(data: any): void {
     // Handle conflict resolution
+    // This method should be implemented to handle conflicts between nodes
+  }
+
+  // === HELPER METHODS ===
+
+  private selectReplicationNodes(entryId: string): string[] {
+    const availableNodes = Array.from(this.nodes.values())
+      .filter(node => node.id !== this.localNodeId && node.status === 'online')
+      .map(node => node.id);
+
+    const replicationCount = Math.min(this.config.replicationFactor - 1, availableNodes.length);
+    
+    // Simple round-robin selection
+    return availableNodes.slice(0, replicationCount);
+  }
+
+  private async sendReplicationRequest(nodeId: string, entry: MemoryEntry): Promise<void> {
+    // Simulate sending replication request
+    this.logger.debug('Sending replication request', { nodeId, entryId: entry.id });
+    // In a real implementation, this would send over network
+  }
+
+  private async requestFromNode(nodeId: string, key: string, options: any): Promise<MemoryEntry | null> {
+    // Simulate requesting data from remote node
+    this.logger.debug('Requesting from remote node', { nodeId, key });
+    // In a real implementation, this would make network request
+    return null;
+  }
+
+  private async getVersionFromNode(nodeId: string, entryId: string): Promise<{ version: number; entry: MemoryEntry }> {
+    // Simulate getting version from remote node
+    this.logger.debug('Getting version from remote node', { nodeId, entryId });
+    // In a real implementation, this would make network request
+    throw new Error('Remote node not available');
+  }
+
+  private async broadcastPartitionCreation(partition: MemoryPartition): Promise<void> {
+    // Broadcast partition creation to all nodes
+    const nodes = Array.from(this.nodes.values()).filter(node => 
+      node.id !== this.localNodeId && node.status === 'online'
+    );
+
+    for (const node of nodes) {
+      try {
+        await this.sendToNode(node.id, { type: 'partition-create', data: partition });
+      } catch (error) {
+        this.logger.warn('Failed to broadcast partition creation', { nodeId: node.id, error });
+      }
+    }
+  }
+
+  private async broadcastEntryUpdate(entry: MemoryEntry): Promise<void> {
+    // Broadcast entry update to replicated nodes
+    const replicatedNodes = this.replicationMap.get(entry.id) || [];
+
+    for (const nodeId of replicatedNodes) {
+      try {
+        await this.sendToNode(nodeId, { type: 'entry-update', data: entry });
+      } catch (error) {
+        this.logger.warn('Failed to broadcast entry update', { nodeId, error });
+      }
+    }
+  }
+
+  private async broadcastEntryDeletion(data: { entryId: string }): Promise<void> {
+    // Broadcast entry deletion to replicated nodes
+    const replicatedNodes = this.replicationMap.get(data.entryId) || [];
+
+    for (const nodeId of replicatedNodes) {
+      try {
+        await this.sendToNode(nodeId, { type: 'entry-delete', data });
+      } catch (error) {
+        this.logger.warn('Failed to broadcast entry deletion', { nodeId, error });
+      }
+    }
+  }
+
+  private async sendToNode(nodeId: string, message: any): Promise<void> {
+    // Send message to specific node
+    this.logger.debug('Sending message to node', { nodeId, type: message.type });
+    // In a real implementation, this would send over network
+  }
+
+  private handleRemotePartitionCreation(partition: MemoryPartition, sourceNodeId: string): void {
+    // Handle partition creation from remote node
+    if (!this.partitions.has(partition.id)) {
+      this.partitions.set(partition.id, partition);
+      this.logger.debug('Received remote partition creation', { partitionId: partition.id, sourceNodeId });
+    }
+  }
+
+  private handleRemoteEntryUpdate(entry: MemoryEntry, sourceNodeId: string): void {
+    // Handle entry update from remote node
+    const existingEntry = this.entries.get(entry.id);
+    
+    if (!existingEntry || entry.version > existingEntry.version) {
+      this.entries.set(entry.id, entry);
+      this.updateCache(entry.id, entry);
+      this.logger.debug('Received remote entry update', { entryId: entry.id, sourceNodeId });
+    }
+  }
+
+  private handleRemoteEntryDeletion(data: { entryId: string }, sourceNodeId: string): void {
+    // Handle entry deletion from remote node
+    const entry = this.entries.get(data.entryId);
+    
+    if (entry) {
+      this.entries.delete(data.entryId);
+      this.removeFromCache(entry.key);
+      
+      // Remove from partition
+      const partitionId = this.getEntryPartition(data.entryId);
+      const partition = this.partitions.get(partitionId);
+      if (partition) {
+        partition.entries = partition.entries.filter(e => e.id !== data.entryId);
+      }
+      
+      this.logger.debug('Received remote entry deletion', { entryId: data.entryId, sourceNodeId });
+    }
+  }
+
+  private handleNodeJoin(nodeId: string): void {
+    // Handle new node joining the network
+    this.logger.info('Node joined network', { nodeId });
+    
+    // Send current state to new node
+    this.sendStateSnapshot(nodeId);
+  }
+
+  private handleNodeLeave(nodeId: string): void {
+    // Handle node leaving the network
+    this.logger.info('Node left network', { nodeId });
+    
+    // Remove from nodes list
+    this.nodes.delete(nodeId);
+    
+    // Update replication map
+    for (const [entryId, nodes] of Array.from(this.replicationMap.entries())) {
+      const updatedNodes = nodes.filter(id => id !== nodeId);
+      if (updatedNodes.length > 0) {
+        this.replicationMap.set(entryId, updatedNodes);
+      } else {
+        this.replicationMap.delete(entryId);
+      }
+    }
+  }
+
+  private sendStateSnapshot(nodeId: string): void {
+    // Send current state snapshot to new node
+    const snapshot = {
+      partitions: Array.from(this.partitions.values()),
+      entries: Array.from(this.entries.values()),
+      vectorClock: Array.from(this.vectorClock.entries())
+    };
+
+    this.sendToNode(nodeId, { type: 'state-snapshot', data: snapshot });
+    this.logger.debug('Sent state snapshot to new node', { nodeId });
   }
 
   // === PUBLIC API ===

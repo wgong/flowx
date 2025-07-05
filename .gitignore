@@ -1,48 +1,321 @@
-# Dependencies
+# ====================
+# DEPENDENCIES
+# ====================
 node_modules/
 .deno/
+.pnp
+.pnp.js
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
 
-# Build outputs
+# ====================
+# BUILD OUTPUTS
+# ====================
 dist/
+build/
+out/
+lib/
+*.tsbuildinfo
 *.exe
+*.app
+*.dmg
+*.pkg
 
-# IDE
+# ====================
+# TYPESCRIPT
+# ====================
+*.js.map
+*.d.ts.map
+tsconfig.tsbuildinfo
+
+# ====================
+# DEVELOPMENT & IDE
+# ====================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+*.sublime-project
 
-# OS
+# ====================
+# OPERATING SYSTEM
+# ====================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
 
-# Logs
+# ====================
+# LOGS & DEBUGGING
+# ====================
 *.log
 logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.npm
+.eslintcache
 
-# Environment
+# ====================
+# ENVIRONMENT & SECRETS
+# ====================
 .env
+.env.*
+!.env.example
 .env.local
-.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# Test coverage
+# API Keys and secrets
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+.secrets/
+
+# ====================
+# TESTING & COVERAGE
+# ====================
 coverage/
 .nyc_output/
+.coverage/
+junit.xml
+test-results/
+*.lcov
 
-# Claude-Flow specific
-claude-flow.db
+# ====================
+# RUNTIME & PROCESS
+# ====================
+*.pid
+*.seed
+*.pid.lock
+pids/
+
+# ====================
+# CLAUDE FLOW SPECIFIC
+# ====================
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+claude-flow.db*
+.claude-flow/
+
+# Configuration files (keep examples)
 claude-flow.config.json
-# memory/
-# sessions/
+config-*.json
+!config-example.json
 
-# Temporary files
+# Memory and session data
+memory/
+sessions/
+agents/*/
+swarm-runs/
+.memory/
+.sessions/
+
+# Output directories
+output/
+results/
+generated/
+temp-output/
+
+# Process and daemon files
+*.pid
+daemon-*.log
+
+# Backup files
+*.backup
+*.bak
+backup-*/
+
+# ====================
+# TEMPORARY & CACHE
+# ====================
 *.tmp
 *.temp
 .cache/
+.parcel-cache/
+.next/
+.nuxt/
+.vuepress/dist
 
-package
+# ====================
+# PACKAGE MANAGERS
+# ====================
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.pnpm-store/
+
+# ====================
+# MISC DEVELOPMENT
+# ====================
+.eslintcache
+.stylelintcache
+*.tgz
+*.tar.gz
+
+# Test files and artifacts
 test-init
 test-full-init
+test-integration.js
+test-output/
 
-swarm-runs
+# Documentation build
+docs/build/
+.docusaurus/
+
+# ====================
+# CLAUDE FLOW RUNTIME
+# ====================
+# Agent working directories
+agents/agent-*/
+agents/*/agent.js
+
+# Monitoring and metrics
+metrics/
+monitoring/
+
+# Exports and reports
+exports/
+reports/
+*.report.json
+*.metrics.json
+
+# WebSocket and real-time data
+.ws-cache/
+realtime-data/
+
+# ====================
+# SECURITY
+# ====================
+# Never commit these sensitive files
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+*.pem
+auth/
+certificates/
+private/
+
+# ====================
+# PYTHON (for benchmark scripts)
+# ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# celery beat schedule file
+celerybeat-schedule
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json

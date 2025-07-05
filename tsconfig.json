@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "node",
+    "module": "Node16",
+    "moduleResolution": "node16",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "allowJs": true,
@@ -30,7 +30,10 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "allowImportingTsExtensions": true,
+    "downlevelIteration": true,
     "noEmit": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
     "lib": ["ES2022", "DOM"],
     "types": ["node", "jest"],
     "typeRoots": ["./node_modules/@types", "./src/types"]

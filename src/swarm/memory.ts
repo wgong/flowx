@@ -95,9 +95,9 @@ export class SwarmMemoryManager extends EventEmitter {
   private isInitialized = false;
   
   // Background processes
-  private syncTimer?: NodeJS.Timeout;
-  private backupTimer?: NodeJS.Timeout;
-  private cleanupTimer?: NodeJS.Timeout;
+  private syncTimer?: number | null;
+  private backupTimer?: number | null;
+  private cleanupTimer?: number | null;
 
   constructor(config: Partial<MemoryConfig & { logging?: any }> = {}) {
     super();
@@ -254,7 +254,7 @@ export class SwarmMemoryManager extends EventEmitter {
       accessLevel: options.accessLevel || 'team',
       createdAt: now,
       updatedAt: now,
-      expiresAt: options.ttl ? new Date(now.getTime() + options.ttl) : undefined,
+      ...(options.ttl && { expiresAt: new Date(now.getTime() + options.ttl) }),
       version: 1,
       references: [],
       dependencies: []
@@ -454,7 +454,7 @@ export class SwarmMemoryManager extends EventEmitter {
     if (query.partition) {
       const partition = this.partitions.get(query.partition);
       if (partition) {
-        const entryIds = new Set(partition.entries.map(e => e.id));
+        const entryIds = new Set(partition.entries.map((e: MemoryEntry) => e.id));
         results = results.filter(e => entryIds.has(e.id));
       } else {
         return [];
@@ -569,7 +569,7 @@ export class SwarmMemoryManager extends EventEmitter {
       accessLevel: options.accessLevel || entry.accessLevel,
       createdAt: new Date(),
       updatedAt: new Date(),
-      expiresAt: options.expiresAt,
+      ...(options.expiresAt && { expiresAt: options.expiresAt }),
       references: [...entry.references, entry.id]
     };
 
@@ -616,7 +616,7 @@ export class SwarmMemoryManager extends EventEmitter {
       try {
         const sharedId = await this.shareMemory(key, targetAgent, {
           ...options,
-          sharer: options.broadcaster
+          ...(options.broadcaster && { sharer: options.broadcaster })
         });
         sharedIds.push(sharedId);
       } catch (error) {
@@ -690,7 +690,7 @@ export class SwarmMemoryManager extends EventEmitter {
       type: options.type || 'knowledge',
       entries: [],
       maxSize: options.maxSize || this.config.maxMemorySize,
-      ttl: options.ttl,
+      ...(options.ttl && { ttl: options.ttl }),
       readOnly: options.readOnly || false,
       shared: options.shared || true,
       indexed: options.indexed !== false,
@@ -733,7 +733,7 @@ export class SwarmMemoryManager extends EventEmitter {
     }
 
     this.partitions.delete(name);
-    this.memory.partitions = this.memory.partitions.filter(p => p.id !== partition.id);
+    this.memory.partitions = this.memory.partitions.filter((p: MemoryPartition) => p.id !== partition.id);
 
     this.emit('memory:partition-deleted', {
       partitionId: partition.id,
@@ -960,8 +960,8 @@ export class SwarmMemoryManager extends EventEmitter {
     this.entries.delete(entryId);
 
     // Remove from partitions
-    for (const partition of this.partitions.values()) {
-      partition.entries = partition.entries.filter(e => e.id !== entryId);
+    for (const partition of Array.from(this.partitions.values())) {
+      partition.entries = partition.entries.filter((e: MemoryEntry) => e.id !== entryId);
     }
 
     // Remove from index
@@ -1204,7 +1204,7 @@ export class SwarmMemoryManager extends EventEmitter {
     if (this.config.syncInterval > 0) {
       this.syncTimer = setInterval(() => {
         this.performSync();
-      }, this.config.syncInterval);
+      }, this.config.syncInterval) as unknown as number;
     }
     
     // Backup process
@@ -1213,29 +1213,29 @@ export class SwarmMemoryManager extends EventEmitter {
         this.createBackup().catch(error => {
           this.logger.error('Background backup failed', { error });
         });
-      }, this.config.backupInterval);
+      }, this.config.backupInterval) as unknown as number;
     }
     
     // Cleanup process
     this.cleanupTimer = setInterval(() => {
       this.cleanupExpiredEntries();
-    }, 60000); // Every minute
+    }, 60000) as unknown as number; // Every minute
   }
 
   private stopBackgroundProcesses(): void {
-    if (this.syncTimer) {
+    if (this.syncTimer !== undefined && this.syncTimer !== null) {
       clearInterval(this.syncTimer);
-      this.syncTimer = undefined;
+      this.syncTimer = null;
     }
     
-    if (this.backupTimer) {
+    if (this.backupTimer !== undefined && this.backupTimer !== null) {
       clearInterval(this.backupTimer);
-      this.backupTimer = undefined;
+      this.backupTimer = null;
     }
     
-    if (this.cleanupTimer) {
+    if (this.cleanupTimer !== undefined && this.cleanupTimer !== null) {
       clearInterval(this.cleanupTimer);
-      this.cleanupTimer = undefined;
+      this.cleanupTimer = null;
     }
   }
 
@@ -1288,7 +1288,7 @@ class MemoryIndex {
 
   async removeEntry(entryId: string): Promise<void> {
     // Remove from all index terms
-    for (const termSet of this.index.values()) {
+    for (const termSet of Array.from(this.index.values())) {
       termSet.delete(entryId);
     }
   }
@@ -1327,7 +1327,9 @@ class MemoryCache {
     // Evict if at capacity
     if (this.cache.size >= this.maxSize) {
       const oldestKey = this.cache.keys().next().value;
-      this.cache.delete(oldestKey);
+      if (oldestKey !== undefined) {
+        this.cache.delete(oldestKey);
+      }
     }
     
     this.cache.set(key, {

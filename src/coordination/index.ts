@@ -1,63 +1,27 @@
 /**
- * Coordination system exports
+ * Coordination System Exports
  */
 
-// Core coordination components
-export { CoordinationManager, type ICoordinationManager } from "./manager.ts";
 export { TaskScheduler } from "./scheduler.ts";
-export { ResourceManager } from "./resources.ts";
+export { CoordinationManager } from "./manager.ts";
+export { MessageCoordinator } from "./message-coordinator.ts";
 export { MessageRouter } from "./messaging.ts";
+export { WorkStealingCoordinator } from "./work-stealing.ts";
+export { SwarmCoordinator } from "./swarm-coordinator.ts";
+export { SwarmMonitor } from "./swarm-monitor.ts";
+export { DependencyGraph } from "./dependency-graph.ts";
+export { TaskOrchestrator } from "./task-orchestrator.ts";
+export { TaskExecutionEngine } from "./task-execution-engine.ts";
+export { CircuitBreakerManager } from "./circuit-breaker.ts";
+export { ConflictResolver } from "./conflict-resolution.ts";
+export { ResourceManager } from "./resources.ts";
+export { LoadBalancer } from "./load-balancer.ts";
+export { CoordinationMetricsCollector } from "./metrics.ts";
+export { BackgroundExecutor } from "./background-executor.ts";
 
-// Advanced scheduling
-export { 
-  AdvancedTaskScheduler,
-  type SchedulingStrategy,
-  type SchedulingContext,
-  CapabilitySchedulingStrategy,
-  RoundRobinSchedulingStrategy,
-  LeastLoadedSchedulingStrategy,
-  AffinitySchedulingStrategy,
-} from "./advanced-scheduler.ts";
+// Backward compatibility aliases
+export { TaskOrchestrator as IntelligentTaskScheduler } from "./task-orchestrator.ts";
+export { TaskExecutionEngine as AdvancedTaskExecutor } from "./task-execution-engine.ts";
 
-// Work stealing
-export {
-  WorkStealingCoordinator,
-  type WorkStealingConfig,
-  type AgentWorkload,
-} from "./work-stealing.ts";
-
-// Dependency management
-export {
-  DependencyGraph,
-  type DependencyNode,
-  type DependencyPath,
-} from "./dependency-graph.ts";
-
-// Circuit breakers
-export {
-  CircuitBreaker,
-  CircuitBreakerManager,
-  CircuitState,
-  type CircuitBreakerConfig,
-  type CircuitBreakerMetrics,
-} from "./circuit-breaker.ts";
-
-// Conflict resolution
-export {
-  ConflictResolver,
-  PriorityResolutionStrategy,
-  TimestampResolutionStrategy,
-  VotingResolutionStrategy,
-  OptimisticLockManager,
-  type ResourceConflict,
-  type TaskConflict,
-  type ConflictResolution,
-  type ConflictResolutionStrategy,
-} from "./conflict-resolution.ts";
-
-// Metrics and monitoring
-export {
-  CoordinationMetricsCollector,
-  type CoordinationMetrics,
-  type MetricsSample,
-} from "./metrics.ts";
+// Types
+export type { CoordinationConfig, Task, Resource, AgentProfile } from "../utils/types.ts";

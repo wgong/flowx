@@ -138,8 +138,8 @@ export class MCPIntegrationFactory {
     enablePerformanceMonitoring?: boolean;
   }): Promise<{
     server: MCPServer;
-    lifecycleManager?: MCPLifecycleManager;
-    performanceMonitor?: MCPPerformanceMonitor;
+    lifecycleManager?: MCPLifecycleManager | undefined;
+    performanceMonitor?: MCPPerformanceMonitor | undefined;
   }> {
     const { 
       mcpConfig, 

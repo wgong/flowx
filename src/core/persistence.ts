@@ -51,15 +51,15 @@ export interface PersistedTask {
   priority: number;
   dependencies: string;
   metadata: string;
-  assignedAgent?: string;
+  assignedAgent?: string | undefined;
   progress: number;
-  error?: string;
+  error?: string | undefined;
   createdAt: number;
-  completedAt?: number;
+  completedAt?: number | undefined;
 }
 
 export class PersistenceManager {
-  private db: any; // sql.js Database
+  public db: any; // sql.js Database - made public for direct access
   private dbPath: string;
   private SQL: any;
 
@@ -136,7 +136,7 @@ export class PersistenceManager {
     this.saveToFile();
   }
 
-  private async saveToFile(): Promise<void> {
+  public async saveToFile(): Promise<void> {
     const data = this.db.export();
     await writeFile(this.dbPath, Buffer.from(data));
   }
@@ -185,6 +185,29 @@ export class PersistenceManager {
 
   async getActiveAgents(): Promise<PersistedAgent[]> {
     const stmt = this.db.prepare("SELECT * FROM agents WHERE status IN ('active', 'idle') ORDER BY created_at DESC");
+    const results: PersistedAgent[] = [];
+    
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      results.push({
+        id: row.id as string,
+        type: row.type as string,
+        name: row.name as string,
+        status: row.status as string,
+        capabilities: row.capabilities as string,
+        systemPrompt: row.system_prompt as string,
+        maxConcurrentTasks: row.max_concurrent_tasks as number,
+        priority: row.priority as number,
+        createdAt: row.created_at as number,
+      });
+    }
+    stmt.free();
+    
+    return results;
+  }
+
+  async getAllAgents(): Promise<PersistedAgent[]> {
+    const stmt = this.db.prepare("SELECT * FROM agents WHERE status != 'removed' ORDER BY created_at DESC");
     const results: PersistedAgent[] = [];
     
     while (stmt.step()) {

@@ -2,7 +2,7 @@
  * Test data generators and fixtures for Claude-Flow tests
  */
 
-import { TestDataGenerator } from '../utils/test-utils.ts';
+import { TestDataGenerator } from '../utils/node-data-generator';
 
 /**
  * Generate memory entries for testing

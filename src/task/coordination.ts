@@ -4,8 +4,8 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { TaskEngine, WorkflowTask, TaskExecution } from "./engine.ts";
-import { generateId } from "../utils/helpers.ts";
+import { TaskEngine, WorkflowTask, TaskExecution } from "./engine";
+import { generateId } from "../utils/helpers";
 
 export interface TodoItem {
   id: string;
@@ -387,7 +387,7 @@ export class TaskCoordinator extends EventEmitter {
     // Execute operations in parallel by type
     const promises: Promise<void>[] = [];
 
-    for (const [type, ops] of groupedOps) {
+    for (const [type, ops] of Array.from(groupedOps)) {
       promises.push(this.executeBatchOperationType(type, ops, batchId, results));
     }
 

@@ -129,15 +129,25 @@ export class CLIApplication extends EventEmitter {
   private commandParser: CommandParser;
   private outputFormatter: OutputFormatter;
   private config: Record<string, any> = {};
+  private name: string;
+  private description: string;
+  private container?: CLIContainer;
+  private logger?: CLILogger;
+  private validator?: CLIValidator;
 
   constructor(
-    private name: string,
-    private description: string,
-    private container?: CLIContainer,
-    private logger?: CLILogger,
-    private validator?: CLIValidator
+    name: string,
+    description: string,
+    container?: CLIContainer,
+    logger?: CLILogger,
+    validator?: CLIValidator
   ) {
     super();
+    this.name = name;
+    this.description = description;
+    if (container !== undefined) this.container = container;
+    if (logger !== undefined) this.logger = logger;
+    if (validator !== undefined) this.validator = validator;
     this.commandParser = new CommandParser();
     this.outputFormatter = new OutputFormatter();
     this.setupGlobalOptions();
@@ -350,10 +360,9 @@ export class CLIApplication extends EventEmitter {
 
   private parseArgs(args: string[]): {
     command: string;
-    subcommand?: string;
     parsedArgs: string[];
     options: Record<string, any>;
-  } {
+  } & ({ subcommand: string } | {}) {
     if (args.length === 0) {
       throw this.createError('No command provided', 'NO_COMMAND', 1);
     }
@@ -405,7 +414,12 @@ export class CLIApplication extends EventEmitter {
       }
     }
 
-    return { command, subcommand, parsedArgs, options };
+    return { 
+      command, 
+      parsedArgs, 
+      options,
+      ...(subcommand && { subcommand })
+    };
   }
 
   private findCommand(command: string, subcommand?: string): CLICommand | undefined {

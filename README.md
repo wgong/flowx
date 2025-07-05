@@ -1,11 +1,11 @@
-# 🌊 Claude-Flow v1.0.72: Advanced AI Agent Orchestration Platform
+# 🌊 FlowX: Advanced AI Agent Orchestration Platform
 
 <div align="center">
 
-[![🌟 Star on GitHub](https://img.shields.io/github/stars/ruvnet/claude-code-flow?style=for-the-badge&logo=github&color=gold)](https://github.com/ruvnet/claude-code-flow)
-[![📦 NPX Ready](https://img.shields.io/npm/v/claude-flow?style=for-the-badge&logo=npm&color=blue&label=v1.0.72)](https://www.npmjs.com/package/claude-flow)
-[![⚡ Claude Code](https://img.shields.io/badge/Claude%20Code-Ready-green?style=for-the-badge&logo=anthropic)](https://github.com/ruvnet/claude-code-flow)
-[![🦕 Multi-Runtime](https://img.shields.io/badge/Runtime-Node%20%7C%20Deno-blue?style=for-the-badge&logo=javascript)](https://github.com/ruvnet/claude-code-flow)
+[![🌟 Star on GitHub](https://img.shields.io/github/stars/sethdford/flowx?style=for-the-badge&logo=github&color=gold)](https://github.com/sethdford/flowx)
+[![📦 NPX Ready](https://img.shields.io/npm/v/flowx?style=for-the-badge&logo=npm&color=blue&label=v1.0.0)](https://www.npmjs.com/package/flowx)
+[![⚡ Claude Code](https://img.shields.io/badge/Claude%20Code-Ready-green?style=for-the-badge&logo=anthropic)](https://github.com/sethdford/flowx)
+[![🦕 Multi-Runtime](https://img.shields.io/badge/Runtime-Node%20%7C%20Deno-blue?style=for-the-badge&logo=javascript)](https://github.com/sethdford/flowx)
 [![⚡ TypeScript](https://img.shields.io/badge/TypeScript-Full%20Support-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![🛡️ MIT License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge&logo=opensourceinitiative)](https://opensource.org/licenses/MIT)
 
@@ -13,12 +13,12 @@
 
 ## 🎯 **Transform Your Development Workflow**
 
-**Claude-Flow** is the ultimate orchestration platform that revolutionizes how you work with Claude Code. Coordinate **multiple AI agents** simultaneously, manage complex workflows, and build sophisticated applications with AI-powered development.
+**FlowX** is the ultimate orchestration platform that revolutionizes how you work with Claude Code. Coordinate **multiple AI agents** simultaneously, manage complex workflows, and build sophisticated applications with AI-powered development.
 
-> 🔥 **One command to rule them all**: `npx claude-flow@latest init --sparc` - Deploy a full AI agent coordination system in seconds!
+> 🔥 **One command to rule them all**: `npx flowx@latest init --sparc` - Deploy a full AI agent coordination system in seconds!
 
 
-## 🚀 **What's New in v1.0.72**
+## 🚀 **What's New in v1.0.0**
 
 ### 🎯 **Claude Code Settings Optimization**
 - **✅ Auto-Settings Creation**: `init` command now creates `.claude/settings.json` with automation-optimized settings
@@ -38,7 +38,7 @@
 - **✅ Zero Configuration**: Optimal settings applied automatically on init
 - **✅ Long Operations**: Support for extended running tasks without timeouts
 - **✅ Better Reliability**: Auto-accept for Claude Code warnings in swarm mode
-- **✅ Version Consistency**: All components updated to v1.0.72
+- **✅ Version Consistency**: All components updated to v1.0.0
 
 ---
 
@@ -47,24 +47,24 @@
 ### 🚀 **Instant Setup**
 ```bash
 # Install and initialize with SPARC development environment
-npx claude-flow@latest init --sparc
+npx flowx@latest init --sparc
 
 # Use the local wrapper (created by init)
-./claude-flow start --ui --port 3000
+./flowx start --ui --port 3000
 
 # Run SPARC commands
-./claude-flow sparc "build a REST API"
+./flowx sparc "build a REST API"
 ```
 
 ### 🎛️ **SPARC Development Modes** (17 Specialized Agents)
 ```bash
 # List all available SPARC modes
-./claude-flow sparc modes
+./flowx sparc modes
 
 # Run specific development workflows
-./claude-flow sparc run coder "implement user authentication"
-./claude-flow sparc run architect "design microservice architecture"
-./claude-flow sparc tdd "create test suite for API"
+./flowx sparc run coder "implement user authentication"
+./flowx sparc run architect "design microservice architecture"
+./flowx sparc tdd "create test suite for API"
 ```
 
 ## 🏗️ **Core Features**
@@ -94,41 +94,41 @@ npx claude-flow@latest init --sparc
 ### **Method 1: Quick Start with NPX (Recommended)**
 ```bash
 # Initialize with full SPARC environment
-npx claude-flow@latest init --sparc
+npx flowx@latest init --sparc
 
 # This creates:
-# ✓ Local ./claude-flow wrapper script
+# ✓ Local ./flowx wrapper script
 # ✓ .claude/ directory with configuration
 # ✓ CLAUDE.md (project instructions for Claude Code)
 # ✓ .roomodes (17 pre-configured SPARC modes)
 # ✓ Swarm command documentation
 
 # Start using immediately
-./claude-flow start --ui --port 3000
+./flowx start --ui --port 3000
 ```
 
 ### **Method 2: Global Installation**
 ```bash
 # Install globally
-npm install -g claude-flow
+npm install -g flowx
 
 # Initialize anywhere
-claude-flow init --sparc
+flowx init --sparc
 
 # Use directly
-claude-flow start --ui
+flowx start --ui
 ```
 
 ### **Method 3: Local Project Installation**
 ```bash
 # Add to project
-npm install claude-flow --save-dev
+npm install flowx --save-dev
 
 # Initialize
-npx claude-flow init --sparc
+npx flowx init --sparc
 
 # Use with local wrapper
-./claude-flow start --ui
+./flowx start --ui
 ```
 
 ---
@@ -138,18 +138,18 @@ npx claude-flow init --sparc
 ### 🚀 **Basic Operations**
 ```bash
 # Check system status
-./claude-flow status
+./flowx status
 
 # Start orchestration with Web UI
-./claude-flow start --ui --port 3000
+./flowx start --ui --port 3000
 
 # Check MCP server status
-./claude-flow mcp status
+./flowx mcp status
 
 # Manage agents
-./claude-flow agent spawn researcher --name "DataBot"
-./claude-flow agent info agent-123
-./claude-flow agent terminate agent-123
+./flowx agent spawn researcher --name "DataBot"
+./flowx agent info agent-123
+./flowx agent terminate agent-123
 ```
 
 ### 🔥 **Advanced Workflows**
@@ -157,7 +157,7 @@ npx claude-flow init --sparc
 #### **Multi-Agent Development**
 ```bash
 # Deploy swarm for full-stack development
-./claude-flow swarm "Build e-commerce platform" \
+./flowx swarm "Build e-commerce platform" \
   --strategy development \
   --max-agents 5 \
   --parallel \
@@ -165,33 +165,33 @@ npx claude-flow init --sparc
 
 # BatchTool parallel development
 batchtool run --parallel \
-  "./claude-flow sparc run architect 'design user auth'" \
-  "./claude-flow sparc run code 'implement login API'" \
-  "./claude-flow sparc run tdd 'create auth tests'" \
-  "./claude-flow sparc run security-review 'audit auth flow'"
+  "./flowx sparc run architect 'design user auth'" \
+  "./flowx sparc run code 'implement login API'" \
+  "./flowx sparc run tdd 'create auth tests'" \
+  "./flowx sparc run security-review 'audit auth flow'"
 ```
 
 #### **SPARC Development Modes**
 ```bash
 # Complete development workflow
-./claude-flow sparc run ask "research best practices for microservices"
-./claude-flow sparc run architect "design scalable architecture"
-./claude-flow sparc run code "implement user service"
-./claude-flow sparc run tdd "create comprehensive test suite"
-./claude-flow sparc run integration "integrate all services"
-./claude-flow sparc run devops "setup CI/CD pipeline"
+./flowx sparc run ask "research best practices for microservices"
+./flowx sparc run architect "design scalable architecture"
+./flowx sparc run code "implement user service"
+./flowx sparc run tdd "create comprehensive test suite"
+./flowx sparc run integration "integrate all services"
+./flowx sparc run devops "setup CI/CD pipeline"
 ```
 
 #### **Memory & Coordination**
 ```bash
 # Store and query project knowledge
-./claude-flow memory store requirements "User auth with JWT"
-./claude-flow memory store architecture "Microservice design patterns"
-./claude-flow memory query auth
+./flowx memory store requirements "User auth with JWT"
+./flowx memory store architecture "Microservice design patterns"
+./flowx memory query auth
 
 # Task coordination
-./claude-flow task create research "Market analysis for AI tools"
-./claude-flow task workflow examples/development-pipeline.json
+./flowx task create research "Market analysis for AI tools"
+./flowx task workflow examples/development-pipeline.json
 ```
 
 ---
@@ -201,39 +201,39 @@ batchtool run --parallel \
 ### **Core Commands**
 | Command | Description | Example |
 |---------|-------------|---------|
-| `init` | Initialize project with Claude integration | `./claude-flow init --sparc` |
-| `start` | Start orchestration system | `./claude-flow start --ui` |
-| `status` | Show system health and metrics | `./claude-flow status` |
-| `agent` | Manage AI agents and hierarchies | `./claude-flow agent spawn researcher` |
-| `swarm` | Advanced multi-agent coordination | `./claude-flow swarm "Build API" --parallel` |
+| `init` | Initialize project with Claude integration | `./flowx init --sparc` |
+| `start` | Start orchestration system | `./flowx start --ui` |
+| `status` | Show system health and metrics | `./flowx status` |
+| `agent` | Manage AI agents and hierarchies | `./flowx agent spawn researcher` |
+| `swarm` | Advanced multi-agent coordination | `./flowx swarm "Build API" --parallel` |
 
 ### **SPARC Development Modes**
 | Mode | Purpose | Example |
 |------|---------|---------|
-| `architect` | System design and architecture | `./claude-flow sparc run architect "design API"` |
-| `code` | Code development and implementation | `./claude-flow sparc run code "user authentication"` |
-| `tdd` | Test-driven development | `./claude-flow sparc run tdd "payment system"` |
-| `security-review` | Security auditing and analysis | `./claude-flow sparc run security-review "auth flow"` |
-| `integration` | System integration and testing | `./claude-flow sparc run integration "microservices"` |
-| `devops` | Deployment and CI/CD | `./claude-flow sparc run devops "k8s deployment"` |
+| `architect` | System design and architecture | `./flowx sparc run architect "design API"` |
+| `code` | Code development and implementation | `./flowx sparc run code "user authentication"` |
+| `tdd` | Test-driven development | `./flowx sparc run tdd "payment system"` |
+| `security-review` | Security auditing and analysis | `./flowx sparc run security-review "auth flow"` |
+| `integration` | System integration and testing | `./flowx sparc run integration "microservices"` |
+| `devops` | Deployment and CI/CD | `./flowx sparc run devops "k8s deployment"` |
 
 ### **Memory & Coordination**
 | Command | Description | Example |
 |---------|-------------|---------|
-| `memory store` | Store information in knowledge bank | `./claude-flow memory store key "value"` |
-| `memory query` | Search stored information | `./claude-flow memory query "authentication"` |
-| `task create` | Create and manage tasks | `./claude-flow task create research "AI trends"` |
-| `monitor` | Real-time system monitoring | `./claude-flow monitor --dashboard` |
+| `memory store` | Store information in knowledge bank | `./flowx memory store key "value"` |
+| `memory query` | Search stored information | `./flowx memory query "authentication"` |
+| `task create` | Create and manage tasks | `./flowx task create research "AI trends"` |
+| `monitor` | Real-time system monitoring | `./flowx monitor --dashboard` |
 
 ### **Enterprise Commands**
 | Command | Description | Example |
 |---------|-------------|---------|
-| `project` | Project lifecycle management | `./claude-flow project create "API Project" --type web-app` |
-| `deploy` | Deployment automation & strategies | `./claude-flow deploy create "v1.2.0" --strategy blue-green` |
-| `cloud` | Multi-cloud infrastructure management | `./claude-flow cloud resources create "web-server" compute` |
-| `security` | Security scanning & compliance | `./claude-flow security scan "Vulnerability Check" ./src` |
-| `analytics` | Performance analytics & insights | `./claude-flow analytics insights --timerange 7d` |
-| `audit` | Enterprise audit logging | `./claude-flow audit report compliance --framework SOC2` |
+| `project` | Project lifecycle management | `./flowx project create "API Project" --type web-app` |
+| `deploy` | Deployment automation & strategies | `./flowx deploy create "v1.2.0" --strategy blue-green` |
+| `cloud` | Multi-cloud infrastructure management | `./flowx cloud resources create "web-server" compute` |
+| `security` | Security scanning & compliance | `./flowx security scan "Vulnerability Check" ./src` |
+| `analytics` | Performance analytics & insights | `./flowx analytics insights --timerange 7d` |
+| `audit` | Enterprise audit logging | `./flowx audit report compliance --framework SOC2` |
 
 ---
 
@@ -284,9 +284,9 @@ npm run lint
 npm run typecheck
 ```
 
-### **Quality Metrics (v1.0.72)**
+### **Quality Metrics (v1.0.0)**
 - **✅ Project-Focused**: CLAUDE.md explicitly guides building user applications
-- **✅ Clear Instructions**: No confusion about modifying claude-flow itself
+- **✅ Clear Instructions**: No confusion about modifying flowx itself
 - **✅ Real Examples**: All documentation shows building actual applications
 - **✅ NPM Publishing**: Fully compatible with npx and global installation
 - **✅ Cross-Platform**: Windows, Mac, and Linux support
@@ -322,8 +322,8 @@ We welcome contributions! Here's how to get started:
 ### **Development Setup**
 ```bash
 # Clone the repository
-git clone https://github.com/ruvnet/claude-code-flow.git
-cd claude-code-flow
+git clone https://github.com/sethdford/flowx.git
+cd flowx
 
 # Install dependencies
 npm install
@@ -346,6 +346,32 @@ npm link
 
 ---
 
+## 🔄 **Project Evolution**
+
+FlowX represents a **complete architectural rewrite** of the original concept pioneered in [claude-code-flow](https://github.com/ruvnet/claude-code-flow). While the original repository demonstrated the power and potential of AI agent orchestration, it also revealed the challenges of rapid "vibe coding" development.
+
+### **From Concept to Production**
+
+**Original Vision (claude-code-flow)**: 
+- ✅ Pioneered multi-agent AI orchestration
+- ✅ Demonstrated SPARC methodology effectiveness  
+- ✅ Proved the viability of autonomous development workflows
+- ❌ Suffered from technical debt and architectural inconsistencies
+- ❌ Lacked systematic engineering practices
+
+**FlowX Evolution**:
+- 🎯 **Zero Technical Debt Policy**: Every component follows strict architectural standards
+- 🏗️ **Enterprise-Grade Architecture**: Production-ready from day one
+- 🔒 **Type Safety**: 100% TypeScript with comprehensive error handling
+- 🧪 **Test-Driven Development**: Comprehensive test coverage and validation
+- 📚 **Documentation-First**: Clear, maintainable, and extensible codebase
+
+> **"FlowX takes the brilliant concepts from claude-code-flow and rebuilds them with the engineering discipline they deserved from the start."**
+
+The original repository stands as both inspiration and cautionary tale - proof that revolutionary ideas need revolutionary execution to reach their full potential.
+
+---
+
 ## 📄 **License**
 
 MIT License - see [LICENSE](./LICENSE) for details.
@@ -354,6 +380,7 @@ MIT License - see [LICENSE](./LICENSE) for details.
 
 ## 🎉 **Acknowledgments**
 
+- **rUv & claude-code-flow**: For pioneering the AI agent orchestration concept and proving its viability
 - **Anthropic**: For the amazing Claude AI that powers this platform
 - **Node.js Team**: For the excellent JavaScript runtime
 - **Open Source Community**: For contributions and feedback
@@ -366,17 +393,17 @@ MIT License - see [LICENSE](./LICENSE) for details.
 ### **🚀 Ready to transform your development workflow?**
 
 ```bash
-npx claude-flow@latest init --sparc
+npx flowx@latest init --sparc
 ```
 
-**Join thousands of developers already using Claude-Flow!**
+**Join thousands of developers already using FlowX!**
 
-[![GitHub](https://img.shields.io/badge/GitHub-ruvnet/claude--code--flow-blue?style=for-the-badge&logo=github)](https://github.com/ruvnet/claude-code-flow)
-[![NPM](https://img.shields.io/badge/NPM-claude--flow-red?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/claude-flow)
-[![Discord](https://img.shields.io/badge/Discord-Join%20Community-purple?style=for-the-badge&logo=discord)](https://discord.gg/claude-flow)
+[![GitHub](https://img.shields.io/badge/GitHub-sethdford/flowx-blue?style=for-the-badge&logo=github)](https://github.com/sethdford/flowx)
+[![NPM](https://img.shields.io/badge/NPM-flowx-red?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/flowx)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Community-purple?style=for-the-badge&logo=discord)](https://discord.gg/flowx)
 
 ---
 
-**Built with ❤️ by [rUv](https://github.com/ruvnet) | Powered by Claude AI**
+**Built with ❤️ by [Seth D. Ford](https://github.com/sethdford) | Powered by Claude AI**
 
 </div>

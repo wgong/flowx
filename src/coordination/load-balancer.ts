@@ -100,8 +100,8 @@ export class LoadBalancer extends EventEmitter {
   private taskQueues = new Map<string, TaskDefinition[]>();
 
   // Monitoring and statistics
-  private loadSamplingInterval?: NodeJS.Timeout;
-  private rebalanceInterval?: NodeJS.Timeout;
+  private loadSamplingInterval?: NodeJS.Timeout | number;
+  private rebalanceInterval?: NodeJS.Timeout | number;
   private decisions: LoadBalancingDecision[] = [];
   private stealOperations = new Map<string, WorkStealingOperation>();
 
@@ -193,8 +193,8 @@ export class LoadBalancer extends EventEmitter {
     this.logger.info('Shutting down load balancer');
 
     // Stop monitoring
-    if (this.loadSamplingInterval) clearInterval(this.loadSamplingInterval);
-    if (this.rebalanceInterval) clearInterval(this.rebalanceInterval);
+    if (this.loadSamplingInterval) clearInterval(this.loadSamplingInterval as any);
+    if (this.rebalanceInterval) clearInterval(this.rebalanceInterval as any);
 
     // Shutdown work stealer
     await this.workStealer.shutdown();

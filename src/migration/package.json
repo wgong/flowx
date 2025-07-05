@@ -72,5 +72,6 @@
   "bugs": {
     "url": "https://github.com/ruvnet/claude-code-flow/issues"
   },
-  "homepage": "https://github.com/ruvnet/claude-code-flow#readme"
+  "homepage": "https://github.com/ruvnet/claude-code-flow#readme",
+  "type": "module"
 }

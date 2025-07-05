@@ -2,16 +2,16 @@
  * Memory manager interface and implementation
  */
 
-import { MemoryEntry, MemoryQuery, MemoryConfig } from "../utils/types.ts";
-import { IEventBus } from "../core/event-bus.ts";
-import { ILogger } from "../core/logger.ts";
-import { MemoryError } from "../utils/errors.ts";
-import { IMemoryBackend } from "./backends/base.ts";
-import { SQLiteBackend } from "./backends/sqlite.ts";
-import { SqlJsBackend } from "./backends/sqljs.ts";
-import { MarkdownBackend } from "./backends/markdown.ts";
-import { MemoryCache } from "./cache.ts";
-import { MemoryIndexer } from "./indexer.ts";
+import { MemoryEntry, MemoryQuery, MemoryConfig } from "../utils/types";
+import { IEventBus } from "../core/event-bus";
+import { ILogger } from "../core/logger";
+import { MemoryError } from "../utils/errors";
+import { IMemoryBackend } from "./backends/base";
+import { SQLiteBackend } from "./backends/sqlite";
+import { SqlJsBackend } from "./backends/sqljs";
+import { MarkdownBackend } from "./backends/markdown";
+import { MemoryCache } from "./cache";
+import { MemoryIndexer } from "./indexer";
 
 export interface IMemoryManager {
   initialize(): Promise<void>;
@@ -409,7 +409,7 @@ export class MemoryManager implements IMemoryManager {
       }
 
       // Update bank statistics
-      for (const bank of this.banks.values()) {
+      for (const bank of Array.from(this.banks.values())) {
         const entries = await this.query({ agentId: bank.agentId });
         bank.entryCount = entries.length;
         bank.lastAccessed = new Date();

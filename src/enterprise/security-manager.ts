@@ -10,14 +10,14 @@ export interface SecurityScan {
   name: string;
   type: 'vulnerability' | 'dependency' | 'code-quality' | 'secrets' | 'compliance' | 'infrastructure' | 'container';
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-  projectId?: string;
+  projectId?: string | undefined;
   target: {
     type: 'repository' | 'container' | 'infrastructure' | 'application' | 'dependencies';
     path: string;
-    branch?: string;
-    commit?: string;
-    image?: string;
-    tag?: string;
+    branch?: string | undefined;
+    commit?: string | undefined;
+    image?: string | undefined;
+    tag?: string | undefined;
   };
   configuration: {
     scanner: string;

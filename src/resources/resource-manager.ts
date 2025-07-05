@@ -77,14 +77,14 @@ export interface ResourceReservation {
   id: string;
   resourceId: string;
   agentId: AgentId;
-  taskId?: TaskId;
+  taskId?: TaskId | undefined;
   requirements: ResourceRequirements;
   status: ReservationStatus;
   priority: ResourcePriority;
   createdAt: Date;
-  expiresAt?: Date;
-  activatedAt?: Date;
-  releasedAt?: Date;
+  expiresAt?: Date | undefined;
+  activatedAt?: Date | undefined;
+  releasedAt?: Date | undefined;
   metadata: Record<string, any>;
 }
 
@@ -93,12 +93,12 @@ export interface ResourceAllocation {
   reservationId: string;
   resourceId: string;
   agentId: AgentId;
-  taskId?: TaskId;
+  taskId?: TaskId | undefined;
   allocated: ResourceLimits;
   actualUsage: ResourceUsage;
   efficiency: number;
   startTime: Date;
-  endTime?: Date;
+  endTime?: Date | undefined;
   status: AllocationStatus;
   qosViolations: QoSViolation[];
 }
@@ -431,9 +431,9 @@ export class ResourceManager extends EventEmitter {
     this.logger.info('Shutting down resource manager');
 
     // Stop intervals
-    if (this.monitoringInterval) clearInterval(this.monitoringInterval);
-    if (this.cleanupInterval) clearInterval(this.cleanupInterval);
-    if (this.scalingInterval) clearInterval(this.scalingInterval);
+    if (this.monitoringInterval) clearInterval(this.monitoringInterval as any);
+    if (this.cleanupInterval) clearInterval(this.cleanupInterval as any);
+    if (this.scalingInterval) clearInterval(this.scalingInterval as any);
 
     // Release all active allocations
     await this.releaseAllAllocations();
@@ -522,7 +522,7 @@ export class ResourceManager extends EventEmitter {
     agentId: AgentId,
     requirements: ResourceRequirements,
     options: {
-      taskId?: TaskId;
+      taskId?: TaskId | undefined;
       priority?: ResourcePriority;
       timeout?: number;
       preemptible?: boolean;
@@ -1085,7 +1085,7 @@ export class ResourceManager extends EventEmitter {
   private startMonitoring(): void {
     this.monitoringInterval = setInterval(() => {
       this.performMonitoring();
-    }, this.config.monitoringInterval);
+    }, this.config.monitoringInterval) as unknown as NodeJS.Timeout;
 
     this.logger.info('Started resource monitoring', {
       interval: this.config.monitoringInterval
@@ -1095,7 +1095,7 @@ export class ResourceManager extends EventEmitter {
   private startCleanup(): void {
     this.cleanupInterval = setInterval(() => {
       this.performCleanup();
-    }, this.config.cleanupInterval);
+    }, this.config.cleanupInterval) as unknown as NodeJS.Timeout;
 
     this.logger.info('Started resource cleanup', {
       interval: this.config.cleanupInterval
@@ -1105,7 +1105,7 @@ export class ResourceManager extends EventEmitter {
   private startAutoScaling(): void {
     this.scalingInterval = setInterval(() => {
       this.evaluateScaling();
-    }, 60000); // Every minute
+    }, 60000) as unknown as NodeJS.Timeout; // Every minute
 
     this.logger.info('Started auto-scaling');
   }

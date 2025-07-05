@@ -59,7 +59,7 @@ export interface LifecycleManagerConfig {
 export class MCPLifecycleManager extends EventEmitter {
   private state: LifecycleState = LifecycleState.STOPPED;
   private server?: IMCPServer;
-  private healthCheckTimer?: NodeJS.Timeout;
+  private healthCheckTimer?: NodeJS.Timeout | null;
   private startTime?: Date;
   private lastRestart?: Date;
   private restartAttempts = 0;
@@ -426,7 +426,7 @@ export class MCPLifecycleManager extends EventEmitter {
   private stopHealthChecks(): void {
     if (this.healthCheckTimer) {
       clearInterval(this.healthCheckTimer);
-      this.healthCheckTimer = undefined;
+      this.healthCheckTimer = null;
       this.logger.debug('Health checks stopped');
     }
   }

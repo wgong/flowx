@@ -1,21 +1,19 @@
 {
-  "name": "claude-flow",
-  "version": "1.1.2",
-  "description": "Advanced AI agent orchestration system for Claude Code",
+  "name": "flowx",
+  "version": "1.0.0",
+  "description": "Advanced AI agent orchestration system - FlowX",
   "main": "cli.js",
   "bin": {
-    "claude-flow": "./cli.js"
+    "flowx": "./cli.js"
   },
   "scripts": {
     "dev": "tsx src/cli/main.ts",
     "build": "node esbuild.config.cjs",
     "build:ts": "tsc",
-    "build:binary": "pkg dist/cli/main.js --targets node18-linux-x64,node18-macos-x64,node18-win-x64 --output bin/claude-flow",
-    "build:deno": "PATH=\"/home/codespace/.deno/bin:$PATH\" deno compile --allow-all --no-check --output=bin/claude-flow-deno src/cli/main.ts",
-    "build:simple": "npm run build:ts && pkg dist/cli/simple-cli.js --output bin/claude-flow-simple",
+    "build:binary": "pkg dist/cli/main.js --targets node18-linux-x64,node18-macos-x64,node18-win-x64 --output bin/flowx",
+    "build:simple": "npm run build:ts && pkg dist/cli/simple-cli.js --output bin/flowx-simple",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "test:deno": "deno task test",
     "lint": "eslint src --ext .ts,.js",
     "format": "prettier --write src",
     "postinstall": "node scripts/install.js",
@@ -26,24 +24,26 @@
     "benchmark:example": "node benchmark/examples/basic.js"
   },
   "keywords": [
-    "claude",
+    "flowx",
     "ai",
     "agent",
     "orchestration",
     "mcp",
     "workflow",
-    "automation"
+    "automation",
+    "claude",
+    "anthropic"
   ],
-  "author": "rUv",
+  "author": "Seth Ford",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ruvnet/claude-code-flow.git"
+    "url": "https://github.com/sethdford/flowx.git"
   },
   "bugs": {
-    "url": "https://github.com/ruvnet/claude-code-flow/issues"
+    "url": "https://github.com/sethdford/flowx/issues"
   },
-  "homepage": "https://github.com/ruvnet/claude-code-flow#readme",
+  "homepage": "https://github.com/sethdford/flowx#readme",
   "engines": {
     "node": ">=18.0.0"
   },
@@ -64,13 +64,13 @@
     "scripts/swarm-example.sh",
     "README.md",
     "LICENSE",
-    "deno.json",
     "SWARM_TTY_SOLUTION.md",
     "SWARM_VISIBILITY.md"
   ],
   "dependencies": {
     "@anthropic-ai/claude-code": "^1.0.35",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/react": "^19.1.8",
     "better-sqlite3": "^11.10.0",
     "blessed": "^0.1.81",
     "cli-table3": "^0.6.3",
@@ -79,10 +79,19 @@
     "express": "^4.18.2",
     "fs-extra": "^11.2.0",
     "helmet": "^7.1.0",
+    "ink": "^6.0.1",
+    "ink-big-text": "^2.0.0",
+    "ink-box": "^1.0.0",
+    "ink-gradient": "^3.0.0",
+    "ink-select-input": "^6.2.0",
+    "ink-spinner": "^5.0.0",
+    "ink-table": "^3.1.0",
+    "ink-text-input": "^6.0.0",
     "inquirer": "^9.2.12",
     "nanoid": "^5.0.4",
     "node-pty": "^1.0.0",
     "ora": "^7.0.1",
+    "react": "^19.1.0",
     "sql.js": "^1.13.0",
     "uuid": "^9.0.1",
     "ws": "^8.14.2"
@@ -104,6 +113,7 @@
     "esbuild": "^0.25.5",
     "eslint": "^8.56.0",
     "jest": "^29.7.0",
+    "js-yaml": "^4.1.0",
     "p-queue": "^8.1.0",
     "pkg": "^5.8.1",
     "prettier": "^3.1.1",

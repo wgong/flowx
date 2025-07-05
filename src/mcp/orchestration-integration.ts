@@ -63,7 +63,7 @@ export class MCPOrchestrationIntegration extends EventEmitter {
   private protocolManager?: MCPProtocolManager;
   
   private integrationStatus = new Map<string, IntegrationStatus>();
-  private healthCheckTimer?: NodeJS.Timeout;
+  private healthCheckTimer?: NodeJS.Timeout | null;
   private reconnectTimers = new Map<string, NodeJS.Timeout>();
   
   private readonly defaultConfig: MCPOrchestrationConfig = {
@@ -760,7 +760,7 @@ export class MCPOrchestrationIntegration extends EventEmitter {
   private stopHealthMonitoring(): void {
     if (this.healthCheckTimer) {
       clearInterval(this.healthCheckTimer);
-      this.healthCheckTimer = undefined;
+      this.healthCheckTimer = null;
     }
   }
 
