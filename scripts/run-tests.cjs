@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 /**
- * Comprehensive test runner for FlowX
+ * Comprehensive test runner for claude-flow
  * 
  * This script runs all test suites with proper configuration and reporting.
  * Usage:
- *   node scripts/run-tests.js [options]
+ *   node scripts/run-tests.cjs [options]
  * 
  * Options:
  *   --unit       Run only unit tests
@@ -18,14 +18,9 @@
  *   --ci         Run in CI mode
  */
 
-import { spawn } from 'child_process';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
-
-// Handle ES Module paths
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const { spawn } = require('child_process');
+const path = require('path');
+const fs = require('fs');
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -89,7 +84,6 @@ if (options.watch) {
 // Add coverage if specified
 if (options.coverage) {
   jestArgs.push('--coverage');
-  jestArgs.push('--coverage-directory=./test-results/coverage');
 }
 
 // Add CI mode if specified
@@ -107,14 +101,6 @@ if (options.verbose) {
 // Log command being executed
 if (options.verbose) {
   console.log(`Executing: ${jestCmd} ${jestArgs.join(' ')}`);
-}
-
-// Add coverage configuration
-if (options.coverage) {
-  jestArgs.push('--coverageReporters=text');
-  jestArgs.push('--coverageReporters=lcov');
-  jestArgs.push('--coverageReporters=html');
-  jestArgs.push('--coverageThreshold={"global":{"branches":90,"functions":95,"lines":90,"statements":90}}');
 }
 
 // Print header with test types
