@@ -11,8 +11,8 @@ import { Logger } from '../../src/core/logger.ts';
 import { EventBus } from '../../src/core/event-bus.ts';
 import { createValidator } from '../../src/core/validation.ts';
 import { ConfigManager } from '../../src/core/config.ts';
-import { SwarmCoordinator } from '../../src/coordination/swarm-coordinator.ts';
-import { UnifiedAgentManager, createUnifiedAgentManager } from '../../src/agents/unified-agent-manager.ts';
+// import { SwarmCoordinator } from '../../src/coordination/swarm-coordinator.ts'; // Removed as part of consolidation
+import { AgentManager, createUnifiedAgentManager } from '../../src/agents/agent-manager.ts';
 import { MemoryManager } from '../../src/memory/manager.ts';
 import { createBootstrap } from '../../src/core/bootstrap.ts';
 
