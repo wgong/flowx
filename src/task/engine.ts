@@ -4,8 +4,8 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { Task, TaskStatus, AgentProfile, Resource } from "../utils/types";
-import { generateId } from "../utils/helpers";
+import { Task, TaskStatus, AgentProfile, Resource } from "../utils/types.js";
+import { generateId } from "../utils/helpers.js";
 
 export interface TaskDependency {
   taskId: string;

@@ -4,54 +4,26 @@
  * Integrates with TodoWrite/TodoRead for coordination and Memory for persistence
  */
 
-export {
-  TaskEngine
-} from "./engine";
+export { TaskEngine } from "./engine.js";
+export type { WorkflowTask } from "./engine.js";
 
-export {
-  WorkflowTask,
-  TaskDependency,
-  ResourceRequirement,
-  TaskSchedule,
-  TaskExecution,
-  TaskMetrics,
-  TaskLog,
-  Workflow,
-  TaskFilter,
-  TaskSort,
-  TaskCheckpoint
-} from "./engine";
+export type { TaskCommandContext } from "./commands.js";
 
-export {
-  TaskCommandContext,
-  createTaskCreateCommand,
-  createTaskListCommand,
-  createTaskStatusCommand,
-  createTaskCancelCommand,
-  createTaskWorkflowCommand
-} from "./commands";
+export { TaskCoordinator } from "./coordination.js";
+export type { CoordinationContext, TodoItem } from "./coordination.js";
 
-export {
-  TaskCoordinator
-} from "./coordination";
-
-export {
-  TodoItem,
-  MemoryEntry,
-  CoordinationContext
-} from "./coordination";
 
 // Import the types we need for the functions below
-import { TaskEngine } from "./engine";
-import { TaskCoordinator, TodoItem, CoordinationContext } from "./coordination";
-import { TaskCommandContext } from "./commands";
+import { TaskEngine } from "./engine.js";
+import { TaskCoordinator, TodoItem, CoordinationContext } from "./coordination.js";
+import { TaskCommandContext } from "./commands.js";
 import { 
   createTaskCreateCommand,
   createTaskListCommand,
   createTaskStatusCommand,
   createTaskCancelCommand,
   createTaskWorkflowCommand
-} from "./commands";
+} from "./commands.js";
 
 /**
  * Initialize the complete task management system

@@ -5,7 +5,7 @@
 
 import type { CLICommand, CLIContext } from '../../interfaces/index.ts';
 import { formatTable, successBold, infoBold, warningBold, errorBold, printSuccess, printError, printWarning, printInfo } from '../../core/output-formatter.ts';
-import { SwarmCoordinator } from '../../../coordination/swarm-coordinator.ts';
+import { SwarmCoordinator } from '../../../swarm/coordinator.ts';
 import { generateId } from '../../../utils/helpers.ts';
 import SwarmDemoCommand from './swarm-demo-command.ts';
 

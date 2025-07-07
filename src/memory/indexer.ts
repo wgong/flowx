@@ -2,8 +2,8 @@
  * Memory indexer for fast search and retrieval
  */
 
-import { MemoryEntry, MemoryQuery } from "../utils/types";
-import { ILogger } from "../core/logger";
+import { MemoryEntry, MemoryQuery } from "../utils/types.js";
+import { ILogger } from "../core/logger.js";
 
 interface Index<T> {
   get(key: T): Set<string>;

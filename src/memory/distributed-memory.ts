@@ -15,7 +15,7 @@ import {
   MemoryPermissions,
   AgentId
 } from "../swarm/types.js";
-import { generateId } from "../utils/helpers";
+import { generateId } from "../utils/helpers.js";
 
 export interface DistributedMemoryConfig {
   namespace: string;
@@ -639,20 +639,20 @@ export class DistributedMemorySystem extends EventEmitter {
 
   private async performSync(): Promise<void> {
     try {
-      // Process pending sync operations
+      // Process sync queue
       await this.processSyncQueue();
-
+      
       // Send heartbeat to other nodes
       await this.sendHeartbeat();
-
-      // Check for conflicts and resolve them
+      
+      // Check for and resolve conflicts
       await this.detectAndResolveConflicts();
-
+      
       // Update statistics
       this.updateStatistics();
-
+      
     } catch (error) {
-      this.logger.error('Sync error', error);
+      this.logger.error('Sync operation failed', error);
     }
   }
 
@@ -678,6 +678,60 @@ export class DistributedMemorySystem extends EventEmitter {
     this.syncQueue = this.syncQueue.filter(op => 
       op.status === 'pending' || op.timestamp > cutoff
     );
+  }
+
+  private async sendHeartbeat(): Promise<void> {
+    const heartbeat = {
+      nodeId: this.localNodeId,
+      timestamp: new Date(),
+      partitions: Array.from(this.partitions.keys()),
+      load: this.calculateNodeLoad(),
+      vectorClock: Object.fromEntries(this.vectorClock)
+    };
+
+    // Send to all known nodes
+    for (const nodeId of this.nodes.keys()) {
+      if (nodeId !== this.localNodeId) {
+        try {
+          await this.sendToNode(nodeId, { type: 'heartbeat', data: heartbeat });
+        } catch (error) {
+          this.logger.warn('Failed to send heartbeat', { nodeId, error });
+        }
+      }
+    }
+  }
+
+  private async detectAndResolveConflicts(): Promise<void> {
+    // Check for vector clock conflicts
+    for (const [entryId, entry] of this.entries) {
+      if (this.hasConflict(entry)) {
+        await this.resolveConflict(entryId, entry);
+      }
+    }
+  }
+
+  private calculateNodeLoad(): number {
+    const totalEntries = this.entries.size;
+    const totalMemory = Array.from(this.entries.values())
+      .reduce((sum, entry) => sum + JSON.stringify(entry).length, 0);
+    
+    return totalMemory / (this.config.maxMemorySize || 1024 * 1024 * 100); // Default 100MB
+  }
+
+  private hasConflict(entry: MemoryEntry): boolean {
+    // Simple conflict detection based on vector clocks
+    return false; // Placeholder implementation
+  }
+
+  private async resolveConflict(entryId: string, entry: MemoryEntry): Promise<void> {
+    if (this.conflictResolver) {
+      // Use custom conflict resolver if provided
+      const resolved = this.conflictResolver(entry, entry); // Simplified
+      this.entries.set(entryId, resolved);
+    } else {
+      // Default: use last-write-wins
+      // Already handled by version comparison
+    }
   }
 
   // === UTILITY METHODS ===
@@ -877,20 +931,20 @@ export class DistributedMemorySystem extends EventEmitter {
   }
 
   private async syncPartitionCreation(partition: MemoryPartition): Promise<void> {
-    // Implementation for syncing partition creation
-    if (!this.config.distributed) return;
-
-    const syncOperation: SyncOperation = {
+    const operation: SyncOperation = {
       id: generateId('sync'),
       type: 'partition-create',
       nodeId: this.localNodeId,
       timestamp: new Date(),
       data: partition,
-      status: 'pending'
+      status: 'pending',
+      version: this.vectorClock.get(this.localNodeId) || 0,
+      origin: this.localNodeId,
+      targets: Array.from(this.nodes.keys()).filter(id => id !== this.localNodeId)
     };
 
-    this.syncQueue.push(syncOperation);
-    this.logger.debug('Queued partition creation sync', { partitionId: partition.id });
+    this.syncQueue.push(operation);
+    this.logger.debug('Queued partition creation sync', { partition: partition.id, operation: operation.id });
   }
 
   private async retrieveFromRemote(key: string, options: any): Promise<MemoryEntry | null> {
@@ -954,66 +1008,63 @@ export class DistributedMemorySystem extends EventEmitter {
   }
 
   private async syncEntryUpdate(entry: MemoryEntry): Promise<void> {
-    // Implementation for syncing entry updates
-    if (!this.config.distributed) return;
-
-    const syncOperation: SyncOperation = {
+    const operation: SyncOperation = {
       id: generateId('sync'),
       type: 'entry-update',
       nodeId: this.localNodeId,
       timestamp: new Date(),
       data: entry,
-      status: 'pending'
+      status: 'pending',
+      version: this.vectorClock.get(this.localNodeId) || 0,
+      origin: this.localNodeId,
+      targets: Array.from(this.nodes.keys()).filter(id => id !== this.localNodeId)
     };
 
-    this.syncQueue.push(syncOperation);
-    this.logger.debug('Queued entry update sync', { entryId: entry.id });
+    this.syncQueue.push(operation);
+    this.logger.debug('Queued entry update sync', { entry: entry.id, operation: operation.id });
   }
 
   private async syncEntryDeletion(entryId: string): Promise<void> {
-    // Implementation for syncing entry deletions
-    if (!this.config.distributed) return;
-
-    const syncOperation: SyncOperation = {
+    const operation: SyncOperation = {
       id: generateId('sync'),
       type: 'entry-delete',
       nodeId: this.localNodeId,
       timestamp: new Date(),
       data: { entryId },
-      status: 'pending'
+      status: 'pending',
+      version: this.vectorClock.get(this.localNodeId) || 0,
+      origin: this.localNodeId,
+      targets: Array.from(this.nodes.keys()).filter(id => id !== this.localNodeId)
     };
 
-    this.syncQueue.push(syncOperation);
-    this.logger.debug('Queued entry deletion sync', { entryId });
+    this.syncQueue.push(operation);
+    this.logger.debug('Queued entry deletion sync', { entryId, operation: operation.id });
   }
 
   private async executeSyncOperation(operation: SyncOperation): Promise<void> {
-    // Implementation for executing sync operations
+    operation.status = 'in_progress';
+    
     try {
-      operation.status = 'executing';
-
       switch (operation.type) {
         case 'partition-create':
-          await this.broadcastPartitionCreation(operation.data as MemoryPartition);
+          await this.broadcastPartitionCreation(operation.data);
           break;
         case 'entry-update':
-          await this.broadcastEntryUpdate(operation.data as MemoryEntry);
+          await this.broadcastEntryUpdate(operation.data);
           break;
         case 'entry-delete':
-          await this.broadcastEntryDeletion(operation.data as { entryId: string });
+          await this.broadcastEntryDeletion(operation.data);
           break;
         default:
-          throw new Error(`Unknown sync operation type: ${operation.type}`);
+          this.logger.warn('Unknown sync operation type', { type: operation.type });
       }
-
+      
       operation.status = 'completed';
-      this.statistics.syncOperations.completed++;
-      this.logger.debug('Sync operation completed', { operationId: operation.id });
-
+      this.logger.debug('Sync operation completed', { operation: operation.id });
+      
     } catch (error) {
       operation.status = 'failed';
-      this.statistics.syncOperations.failed++;
-      this.logger.error('Sync operation failed', { operationId: operation.id, error });
+      this.logger.error('Sync operation failed', { operation: operation.id, error });
       throw error;
     }
   }
@@ -1317,5 +1368,22 @@ export class DistributedMemorySystem extends EventEmitter {
     
     this.logger.info('Cleared all memory data');
     this.emit('memory:cleared');
+  }
+
+  private async syncPartitionDeletion(partitionId: string): Promise<void> {
+    const operation: SyncOperation = {
+      id: generateId('sync'),
+      type: 'delete',
+      partition: partitionId,
+      timestamp: new Date(),
+      version: this.vectorClock.get(this.localNodeId) || 0,
+      origin: this.localNodeId,
+      targets: Array.from(this.nodes.keys()).filter(id => id !== this.localNodeId),
+      status: 'pending',
+      data: { partitionId }
+    };
+
+    this.syncQueue.push(operation);
+    this.logger.debug('Queued partition deletion sync', { partitionId, operation: operation.id });
   }
 }

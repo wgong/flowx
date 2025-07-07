@@ -151,9 +151,9 @@ export class SparcTaskExecutor {
         if (task.name.includes('Architecture') || objective.includes('design')) {
           return this.executeArchitecturePhase(task, targetDir);
         }
-        return this.executeCoordinationPhase(task, targetDir);
-      
-      case 'developer':
+        if (task.name.includes('Coordination') || objective.includes('coordinate')) {
+          return this.executeCoordinationPhase(task, targetDir);
+        }
         if (this.enableTDD && task.name.includes('Implement')) {
           return this.executeTDDPhase(task, targetDir);
         }

@@ -7,7 +7,7 @@ import type { CLICommand, CLIContext } from '../../interfaces/index.ts';
 import { formatTable, successBold, infoBold, warningBold, errorBold, printSuccess, printError, printWarning, printInfo } from '../../core/output-formatter.ts';
 import { getMemoryManager, getPersistenceManager } from '../../core/global-initialization.ts';
 import { AgentProcessManager } from '../../../agents/agent-process-manager.ts';
-import { SwarmCoordinator } from '../../../coordination/swarm-coordinator.ts';
+import { SwarmCoordinator } from '../../../swarm/coordinator.ts';
 import { TaskEngine } from '../../../task/engine.ts';
 import { RealTimeMonitor } from '../../../monitoring/real-time-monitor.ts';
 import { EventBus } from '../../../core/event-bus.ts';
@@ -824,7 +824,7 @@ class ServiceManager {
           break;
         case 'swarm-coordinator':
           if (this.swarmCoordinator) {
-            await this.swarmCoordinator.shutdown();
+            await this.swarmCoordinator.stop();
             this.swarmCoordinator = undefined;
           }
           break;

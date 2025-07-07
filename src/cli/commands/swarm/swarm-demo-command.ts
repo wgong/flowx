@@ -6,7 +6,7 @@
  */
 
 import { CLICommand, CLIContext } from '../../interfaces/index.ts';
-import { SwarmCoordinator } from '../../../coordination/swarm-coordinator.ts';
+import { SwarmCoordinator } from '../../../swarm/coordinator.ts';
 import { Logger } from '../../../core/logger.ts';
 import { promises as fs } from 'fs';
 import { join } from 'path';
@@ -620,8 +620,10 @@ Requirements include:
         id: agent.id,
         type: agent.type,
         status: agent.status,
-        tasksCompleted: agent.performance?.tasksCompleted || 0,
-        performance: agent.performance?.averageResponseTime || 0
+        tasksCompleted: agent.metrics.tasksCompleted || 0,
+        averageResponseTime: agent.metrics.responseTime || 0,
+        successRate: (agent.metrics.successRate * 100).toFixed(1) + '%',
+        efficiency: (agent.metrics.successRate * 100).toFixed(1) + '%'
       })),
       tasks: coordinator.getTasks().map(task => ({
         id: task.id,

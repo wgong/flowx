@@ -101,7 +101,7 @@ export class SQLiteBackend implements IMemoryBackend {
     
     try {
       const stmt = this.db.prepare(sql);
-      const result = stmt.get([id]);
+      const result = stmt.get([id]) as Record<string, unknown> | undefined;
       
       if (!result || Object.keys(result).length === 0) {
         return undefined;
@@ -199,7 +199,7 @@ export class SQLiteBackend implements IMemoryBackend {
 
     try {
       const stmt = this.db.prepare(sql);
-      const rows = stmt.all(params);
+      const rows = stmt.all(params) as Record<string, unknown>[];
       
       return rows.map(row => this.rowToEntry(row));
     } catch (error) {
@@ -214,7 +214,7 @@ export class SQLiteBackend implements IMemoryBackend {
 
     try {
       const stmt = this.db.prepare('SELECT * FROM memory_entries ORDER BY timestamp DESC');
-      const rows = stmt.all();
+      const rows = stmt.all() as Record<string, unknown>[];
       
       return rows.map(row => this.rowToEntry(row));
     } catch (error) {
@@ -234,7 +234,7 @@ export class SQLiteBackend implements IMemoryBackend {
 
       // Test basic query
       const stmt = this.db.prepare('SELECT COUNT(*) as count FROM memory_entries');
-      const result = stmt.get();
+      const result = stmt.get() as Record<string, unknown>;
       const count = result.count as number;
 
       // Get database file size

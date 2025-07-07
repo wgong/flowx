@@ -46,20 +46,20 @@ export class TypedEventBus extends EventEmitter implements IEventBus {
     this.setMaxListeners(100); // Increase default limit
   }
 
-  emit(event: string, data?: any): boolean {
+  override emit(event: string | symbol, ...args: any[]): boolean {
     const startTime = Date.now();
     
     try {
       // Update metrics
       this.metrics.totalEvents++;
-      this.metrics.eventsByType[event] = (this.metrics.eventsByType[event] || 0) + 1;
+      this.metrics.eventsByType[event.toString()] = (this.metrics.eventsByType[event.toString()] || 0) + 1;
       this.metrics.lastEventTime = new Date();
       
       // Add to history
-      this.addToHistory(event, data);
+      this.addToHistory(event.toString(), args);
       
       // Emit the event
-      const result = super.emit(event, data);
+      const result = super.emit(event, ...args);
       
       // Calculate processing time
       const processingTime = Date.now() - startTime;

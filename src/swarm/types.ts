@@ -482,6 +482,7 @@ export type SwarmStatus =
   | 'initializing'   // Setting up agents and resources
   | 'executing'      // Running tasks
   | 'paused'         // Temporarily paused
+  | 'stopping'       // Shutting down
   | 'completed'      // Successfully completed
   | 'failed'         // Failed to complete
   | 'cancelled'      // Cancelled by user

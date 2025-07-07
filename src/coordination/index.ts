@@ -7,7 +7,7 @@ export { CoordinationManager } from "./manager.ts";
 export { MessageCoordinator } from "./message-coordinator.ts";
 export { MessageRouter } from "./messaging.ts";
 export { WorkStealingCoordinator } from "./work-stealing.ts";
-export { SwarmCoordinator } from "./swarm-coordinator.ts";
+export { SwarmCoordinator } from '../swarm/coordinator.ts';
 export { SwarmMonitor } from "./swarm-monitor.ts";
 export { DependencyGraph } from "./dependency-graph.ts";
 export { TaskOrchestrator } from "./task-orchestrator.ts";

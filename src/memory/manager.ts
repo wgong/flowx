@@ -2,16 +2,17 @@
  * Memory manager interface and implementation
  */
 
-import { MemoryEntry, MemoryQuery, MemoryConfig } from "../utils/types";
-import { IEventBus } from "../core/event-bus";
-import { ILogger } from "../core/logger";
-import { MemoryError } from "../utils/errors";
-import { IMemoryBackend } from "./backends/base";
-import { SQLiteBackend } from "./backends/sqlite";
-import { SqlJsBackend } from "./backends/sqljs";
-import { MarkdownBackend } from "./backends/markdown";
-import { MemoryCache } from "./cache";
-import { MemoryIndexer } from "./indexer";
+import { MemoryEntry, MemoryQuery, MemoryConfig } from "../utils/types.js";
+import { IEventBus } from "../core/event-bus.js";
+import { ILogger } from "../core/logger.js";
+import { MemoryError } from "../utils/errors.js";
+import { IMemoryBackend } from "./backends/base.js";
+import { SQLiteBackend } from "./backends/sqlite.js";
+import { SqlJsBackend } from "./backends/sqljs.js";
+import { MarkdownBackend } from "./backends/markdown.js";
+import { MemoryCache } from "./cache.js";
+import { MemoryIndexer } from "./indexer.js";
+// Import removed - InMemoryBackend not used and file doesn't exist
 
 export interface IMemoryManager {
   initialize(): Promise<void>;

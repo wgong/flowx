@@ -3,7 +3,7 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { IEventBus } from '../core/event-bus.ts';
+import { IEventBus } from '../core/event-bus.js';
 
 /**
  * Create a simple event bus
@@ -11,18 +11,40 @@ import { IEventBus } from '../core/event-bus.ts';
 export function createSimpleEventBus(): IEventBus {
   const emitter = new EventEmitter();
 
-  return {
-    emit: (event: string, data?: unknown) => {
-      emitter.emit(event, data);
+  const eventBus = {
+    emit: (event: string, data?: unknown): boolean => {
+      return emitter.emit(event, data);
     },
-    on: (event: string, handler: (data?: unknown) => void) => {
-      emitter.on(event, handler);
+    on: (event: string, listener: (...args: any[]) => void): IEventBus => {
+      emitter.on(event, listener);
+      return eventBus;
     },
-    off: (event: string, handler: (data?: unknown) => void) => {
-      emitter.off(event, handler);
+    off: (event: string, listener: (...args: any[]) => void): IEventBus => {
+      emitter.off(event, listener);
+      return eventBus;
     },
-    once: (event: string, handler: (data?: unknown) => void) => {
-      emitter.once(event, handler);
+    once: (event: string, listener: (...args: any[]) => void): IEventBus => {
+      emitter.once(event, listener);
+      return eventBus;
+    },
+    removeAllListeners: (event?: string): IEventBus => {
+      emitter.removeAllListeners(event);
+      return eventBus;
+    },
+    getMaxListeners: (): number => {
+      return emitter.getMaxListeners();
+    },
+    setMaxListeners: (n: number): IEventBus => {
+      emitter.setMaxListeners(n);
+      return eventBus;
+    },
+    listeners: (event: string): Function[] => {
+      return emitter.listeners(event);
+    },
+    listenerCount: (event: string): number => {
+      return emitter.listenerCount(event);
     }
   };
+  
+  return eventBus;
 } 

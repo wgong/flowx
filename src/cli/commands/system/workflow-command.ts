@@ -10,7 +10,7 @@ import { nanoid } from 'nanoid';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { TaskEngine, WorkflowTask, Workflow as TaskWorkflow } from '../../../task/engine.ts';
-import { SwarmCoordinator } from '../../../coordination/swarm-coordinator.ts';
+import { SwarmCoordinator } from '../../../swarm/coordinator.ts';
 
 interface WorkflowStep {
   id: string;

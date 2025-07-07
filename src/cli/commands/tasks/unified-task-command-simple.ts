@@ -352,15 +352,13 @@ async function showTaskStats(context: CLIContext): Promise<void> {
 // =============================================================================
 
 function displayTasksTable(tasks: any[]): void {
-  const headers = ['ID', 'Type', 'Description', 'Status', 'Priority'];
-  const rows = tasks.map(task => [
-    task.id.substring(0, 12) + '...',
-    task.type,
-    task.description.substring(0, 50) + (task.description.length > 50 ? '...' : ''),
-    task.status,
-    task.priority?.toString() || '-'
-  ]);
+  const columns = [
+    { header: 'ID', key: 'id', formatter: (val: string) => val.substring(0, 12) + '...' },
+    { header: 'Type', key: 'type' },
+    { header: 'Description', key: 'description', formatter: (val: string) => val.substring(0, 50) + (val.length > 50 ? '...' : '') },
+    { header: 'Status', key: 'status' },
+    { header: 'Priority', key: 'priority', formatter: (val: any) => val?.toString() || '-' }
+  ];
 
-  const tableData = [headers, ...rows];
-  console.log(formatTable(tableData));
+  console.log(formatTable(tasks, columns));
 } 
