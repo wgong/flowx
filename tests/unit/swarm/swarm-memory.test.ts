@@ -5,7 +5,6 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as os from 'os';
 
 // Mock SwarmMemory implementation for Node.js tests
 class SwarmMemory {
@@ -148,7 +147,7 @@ describe('Swarm Memory', () => {
   
   beforeEach(async () => {
     // Create temporary directory for tests
-    tempDir = path.join(os.tmpdir(), `swarm-memory-test-${Date.now()}`);
+    tempDir = path.join('./.tmp', `swarm-memory-test-${Date.now()}`);
     await fs.mkdir(tempDir, { recursive: true });
     memoryPath = path.join(tempDir, 'swarm-memory.json');
   });

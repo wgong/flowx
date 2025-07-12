@@ -1,5 +1,5 @@
 {
-  "name": "swarm-app",
+  "name": "chat-app-2",
   "version": "1.0.0",
   "description": "Application created by Claude Flow Swarm: build a real-time chat application with websockets and message history in ./examples/chat-app-2",
   "main": "app.js",

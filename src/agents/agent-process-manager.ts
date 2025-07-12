@@ -48,7 +48,7 @@ export interface AgentMessage {
   timestamp: Date;
   from?: string;
   to?: string;
-  data: any;
+  data: Record<string, unknown>;
   correlationId?: string;
 }
 
@@ -56,7 +56,7 @@ export interface TaskRequest {
   id: string;
   type: string;
   description: string;
-  requirements: any;
+  requirements: Record<string, unknown>;
   files?: Array<{
     path: string;
     content?: string;
@@ -70,7 +70,7 @@ export interface TaskRequest {
 export interface TaskResult {
   taskId: string;
   success: boolean;
-  result?: any;
+  result?: Record<string, unknown>;
   error?: string;
   files?: Array<{
     path: string;
@@ -93,8 +93,8 @@ export class AgentProcessManager extends EventEmitter {
     messageQueue: AgentMessage[];
     pendingTasks: Map<string, {
       request: TaskRequest;
-      resolve: Function;
-      reject: Function;
+      resolve: (value: TaskResult | PromiseLike<TaskResult>) => void;
+      reject: (reason?: Error) => void;
       timeout: NodeJS.Timeout;
     }>;
   }>();
@@ -117,10 +117,8 @@ export class AgentProcessManager extends EventEmitter {
    */
   async createAgent(config: AgentProcessConfig): Promise<string> {
     if (this.processes.has(config.id)) {
-      throw new Error(`Agent ${config.id} already exists`);
+      throw new Error(`Agent with ID ${config.id} already exists`);
     }
-
-    this.logger.info('Creating agent process', { agentId: config.id, type: config.type });
 
     const agentInfo: AgentProcessInfo = {
       id: config.id,
@@ -134,24 +132,15 @@ export class AgentProcessManager extends EventEmitter {
 
     const agentData = {
       info: agentInfo,
+      process: undefined as ChildProcess | undefined,
       messageQueue: [] as AgentMessage[],
       pendingTasks: new Map<string, {
         request: TaskRequest;
-        resolve: Function;
-        reject: Function;
+        resolve: (value: TaskResult | PromiseLike<TaskResult>) => void;
+        reject: (reason?: Error) => void;
         timeout: NodeJS.Timeout;
-      }>()
-    } as {
-      info: AgentProcessInfo;
-      process?: ChildProcess;
-      claudeClient?: ClaudeApiClient;
-      messageQueue: AgentMessage[];
-      pendingTasks: Map<string, {
-        request: TaskRequest;
-        resolve: Function;
-        reject: Function;
-        timeout: NodeJS.Timeout;
-      }>;
+      }>(),
+      claudeClient: undefined as ClaudeApiClient | undefined
     };
 
     this.processes.set(config.id, agentData);
@@ -161,8 +150,8 @@ export class AgentProcessManager extends EventEmitter {
       const workDir = config.workingDirectory || join(process.cwd(), 'agents', config.id);
       await mkdir(workDir, { recursive: true });
 
-      // Create agent script file
-      const agentScript = this.generateAgentScript(config);
+      // Create agent script file (removed config parameter)
+      const agentScript = this.generateAgentScript();
       const scriptPath = join(workDir, 'agent.js');
       await writeFile(scriptPath, agentScript);
 
@@ -212,10 +201,10 @@ export class AgentProcessManager extends EventEmitter {
 
     if (agentData.process) {
       // Cancel pending tasks
-      for (const [taskId, pending] of agentData.pendingTasks) {
+      for (const [, pending] of agentData.pendingTasks) {
         clearTimeout(pending.timeout);
         pending.reject(new Error('Agent stopping'));
-        agentData.pendingTasks.delete(taskId);
+        agentData.pendingTasks.delete(pending.request.id);
       }
 
       // Send shutdown signal
@@ -313,12 +302,23 @@ export class AgentProcessManager extends EventEmitter {
         timeout
       });
 
-      // Send task to agent
+      // Send task to agent - convert TaskRequest to Record<string, unknown>
+      const taskData: Record<string, unknown> = {
+        id: task.id,
+        type: task.type,
+        description: task.description,
+        requirements: task.requirements,
+        files: task.files,
+        dependencies: task.dependencies,
+        timeout: task.timeout,
+        priority: task.priority
+      };
+
       this.sendMessage(agentId, {
         id: `task-${task.id}`,
         type: 'task',
         timestamp: new Date(),
-        data: task,
+        data: taskData,
         correlationId: task.id
       }).catch(reject);
     });
@@ -501,7 +501,8 @@ export class AgentProcessManager extends EventEmitter {
         break;
       
       case 'heartbeat':
-        this.handleHeartbeat(agentId, message);
+        // Remove message parameter from handleHeartbeat call
+        this.handleHeartbeat(agentId);
         break;
       
       case 'error':
@@ -517,7 +518,27 @@ export class AgentProcessManager extends EventEmitter {
 
   private handleTaskResult(agentId: string, message: AgentMessage): void {
     const agentData = this.processes.get(agentId)!;
-    const result = message.data as TaskResult;
+    
+    // Safe conversion of message.data to TaskResult
+    const data = message.data;
+    if (!data || typeof data !== 'object') {
+      this.logger.error('Invalid task result data', { agentId, data });
+      return;
+    }
+
+    const result: TaskResult = {
+      taskId: String(data.taskId || ''),
+      success: Boolean(data.success),
+      result: data.result as Record<string, unknown>,
+      error: data.error ? String(data.error) : undefined,
+      files: data.files as Array<{
+        path: string;
+        content: string;
+        operation: string;
+      }>,
+      duration: Number(data.duration || 0),
+      tokensUsed: data.tokensUsed ? Number(data.tokensUsed) : undefined
+    };
     
     const pending = agentData.pendingTasks.get(result.taskId);
     if (pending) {
@@ -553,11 +574,16 @@ export class AgentProcessManager extends EventEmitter {
     const agentData = this.processes.get(agentId)!;
     const status = message.data;
     
-    if (status.memoryUsage) agentData.info.memoryUsage = status.memoryUsage;
-    if (status.cpuUsage) agentData.info.cpuUsage = status.cpuUsage;
+    // Fix memory and CPU usage type assignments
+    if (status.memoryUsage && typeof status.memoryUsage === 'number') {
+      agentData.info.memoryUsage = status.memoryUsage;
+    }
+    if (status.cpuUsage && typeof status.cpuUsage === 'number') {
+      agentData.info.cpuUsage = status.cpuUsage;
+    }
   }
 
-  private handleHeartbeat(agentId: string, message: AgentMessage): void {
+  private handleHeartbeat(agentId: string): void {
     // Heartbeat received, agent is alive
     this.logger.debug('Heartbeat received', { agentId });
   }
@@ -610,7 +636,7 @@ export class AgentProcessManager extends EventEmitter {
   private setupCleanupHandlers(): void {
     const cleanup = () => {
       this.shutdown().catch(error =>
-        this.logger.error('Error during cleanup', error)
+        this.logger.error('Error during cleanup', { error })
       );
     };
 
@@ -803,7 +829,7 @@ const agent = new Agent();
 `;
   }
 
-  private generateAgentScript(config: AgentProcessConfig): string {
+  private generateAgentScript(): string {
     // For now, return the template
     // In the future, this would be customized based on agent type and specialization
     return this.processTemplate;

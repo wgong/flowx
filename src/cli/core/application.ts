@@ -251,13 +251,40 @@ export class CLIApplication extends EventEmitter {
   }
 
   /**
+   * Apply default values from command option definitions
+   */
+  private applyDefaultValues(command: CLICommand, options: Record<string, any>, parentCommand?: CLICommand): Record<string, any> {
+    const result = { ...options };
+    
+    // Apply defaults from parent command first (if exists)
+    if (parentCommand && parentCommand.options) {
+      for (const optionDef of parentCommand.options) {
+        if (optionDef.default !== undefined && result[optionDef.name] === undefined) {
+          result[optionDef.name] = optionDef.default;
+        }
+      }
+    }
+    
+    // Apply defaults from the current command (subcommand takes precedence)
+    if (command.options) {
+      for (const optionDef of command.options) {
+        if (optionDef.default !== undefined && result[optionDef.name] === undefined) {
+          result[optionDef.name] = optionDef.default;
+        }
+      }
+    }
+    
+    return result;
+  }
+
+  /**
    * Execute a command
    */
   async execute(args: string[]): Promise<void> {
     try {
       // Parse command line arguments
       const parsed = this.commandParser.parse(args);
-      const { command: commandName, subcommand, args: commandArgs, options } = parsed;
+      const { command: commandName, subcommand, args: commandArgs, options: rawOptions } = parsed;
 
       // Handle no command (show help)
       if (!commandName) {
@@ -284,6 +311,22 @@ export class CLIApplication extends EventEmitter {
         return;
       }
 
+      // Handle subcommands
+      let targetCommand = command;
+      if (subcommand && command.subcommands) {
+        const subCmd = command.subcommands.find(sc => sc.name === subcommand);
+        if (subCmd) {
+          targetCommand = subCmd;
+        } else {
+          this.outputFormatter.printError(`Unknown subcommand: ${subcommand}`);
+          this.outputFormatter.printInfo(`Run "claude-flow help ${commandName}" to see available subcommands.`);
+          return;
+        }
+      }
+
+      // Apply default values from command option definitions
+      const options = this.applyDefaultValues(targetCommand, rawOptions, command);
+
       // Create execution context
       const context: CLIContext = {
         args: commandArgs,
@@ -305,21 +348,8 @@ export class CLIApplication extends EventEmitter {
       if (this.logger) context.logger = this.logger;
       if (this.validator) context.validator = this.validator;
 
-      // Handle subcommands
-      if (subcommand && command.subcommands) {
-        const subCmd = command.subcommands.find(sc => sc.name === subcommand);
-        if (subCmd) {
-          await subCmd.handler(context);
-          return;
-        } else {
-          this.outputFormatter.printError(`Unknown subcommand: ${subcommand}`);
-          this.outputFormatter.printInfo(`Run "claude-flow help ${commandName}" to see available subcommands.`);
-          return;
-        }
-      }
-
-      // Execute main command
-      await command.handler(context);
+      // Execute the target command
+      await targetCommand.handler(context);
 
     } catch (error) {
       this.handleError(error);

@@ -26,7 +26,7 @@ describe('Logger', () => {
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     
     // Create temporary directory for log files
-    testLogPath = path.join(os.tmpdir(), `logger-test-${Date.now()}.log`);
+    testLogPath = path.join('src/tests/.tmp', `logger-test-${Date.now()}.log`);
   });
   
   afterEach(async () => {

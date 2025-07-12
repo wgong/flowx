@@ -6,7 +6,7 @@
 
 import { EventEmitter } from 'node:events';
 import { spawn, ChildProcess } from 'node:child_process';
-import { writeFile, readFile, mkdir, access } from 'node:fs/promises';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ILogger } from '../core/logger.ts';
 
@@ -32,7 +32,7 @@ export interface ClaudeRequest {
   }>;
   tools?: string[];
   systemPrompt?: string;
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
   outputFormat?: 'text' | 'json' | 'markdown';
 }
 
@@ -70,8 +70,8 @@ export class ClaudeCliClient extends EventEmitter {
     id: string;
     request: ClaudeRequest;
     options: TaskExecutionOptions;
-    resolve: Function;
-    reject: Function;
+    resolve: (value: ClaudeResponse | PromiseLike<ClaudeResponse>) => void;
+    reject: (reason?: Error) => void;
   }> = [];
   private isProcessing = false;
 
@@ -249,7 +249,9 @@ Please implement this requirement completely.
   }
 
   private async processRequestQueue(): Promise<void> {
-    if (this.isProcessing || this.requestQueue.length === 0) return;
+    if (this.isProcessing || this.requestQueue.length === 0) {
+      return;
+    }
 
     this.isProcessing = true;
     const queued = this.requestQueue.shift()!;
@@ -258,7 +260,9 @@ Please implement this requirement completely.
       const result = await this.executeClaudeTask(queued.request, queued.options, queued.id);
       queued.resolve(result);
     } catch (error) {
-      queued.reject(error);
+      // Fix: Ensure error is typed as Error
+      const errorToReject = error instanceof Error ? error : new Error(String(error));
+      queued.reject(errorToReject);
     } finally {
       this.isProcessing = false;
     }
@@ -306,7 +310,8 @@ Please implement this requirement completely.
 
       // Check for created/modified files
       if (options.allowFileOperations !== false) {
-        response.files = await this.detectFileChanges(workDir);
+        // Fix: Remove workDir parameter from detectFileChanges call
+        response.files = await this.detectFileChanges();
       }
 
       this.logger.info('Claude CLI task completed', {
@@ -375,6 +380,11 @@ Please implement this requirement completely.
       args.push('--verbose');
     }
 
+    // Add working directory context if different from current
+    if (workDir && workDir !== process.cwd()) {
+      args.push('--add-dir', workDir);
+    }
+
     return args;
   }
 
@@ -439,7 +449,7 @@ Please implement this requirement completely.
     }
   }
 
-  private async detectFileChanges(workDir: string): Promise<Array<{ path: string; content: string; operation: string }>> {
+  private async detectFileChanges(): Promise<Array<{ path: string; content: string; operation: string }>> {
     // This is a simplified implementation
     // In a full implementation, we'd track file changes more comprehensively
     const files: Array<{ path: string; content: string; operation: string }> = [];

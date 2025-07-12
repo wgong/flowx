@@ -316,79 +316,7 @@ export class DependencyGraph {
     return sorted;
   }
 
-  /**
-   * Find critical path (longest path through the graph)
-   */
-  findCriticalPath(): DependencyPath | null {
-    const paths: DependencyPath[] = [];
-    
-    // Find all paths from tasks with no dependencies to tasks with no dependents
-    const sources = Array.from(this.nodes.entries())
-      .filter(([_, node]) => node.dependencies.size === 0)
-      .map(([id]) => id);
-      
-    const sinks = Array.from(this.nodes.entries())
-      .filter(([_, node]) => node.dependents.size === 0)
-      .map(([id]) => id);
 
-    for (const source of sources) {
-      for (const sink of sinks) {
-        const path = this.findPath(source, sink);
-        if (path) {
-          paths.push({ from: source, to: sink, path });
-        }
-      }
-    }
-
-    // Return longest path
-    if (paths.length === 0) {
-      return null;
-    }
-
-    return paths.reduce((longest, current) => 
-      current.path.length > longest.path.length ? current : longest
-    );
-  }
-
-  /**
-   * Find path between two tasks
-   */
-  private findPath(from: string, to: string): string[] | null {
-    if (from === to) {
-      return [from];
-    }
-
-    const visited = new Set<string>();
-    const queue: Array<{ taskId: string; path: string[] }> = [
-      { taskId: from, path: [from] }
-    ];
-
-    while (queue.length > 0) {
-      const { taskId, path } = queue.shift()!;
-      
-      if (visited.has(taskId)) {
-        continue;
-      }
-      visited.add(taskId);
-
-      const node = this.nodes.get(taskId);
-      if (!node) {
-        continue;
-      }
-
-      for (const depId of node.dependents) {
-        if (depId === to) {
-          return [...path, to];
-        }
-        
-        if (!visited.has(depId)) {
-          queue.push({ taskId: depId, path: [...path, depId] });
-        }
-      }
-    }
-
-    return null;
-  }
 
   /**
    * Get graph statistics
@@ -432,44 +360,4 @@ export class DependencyGraph {
     return stats;
   }
 
-  /**
-   * Export graph to DOT format for visualization
-   */
-  toDot(): string {
-    let dot = 'digraph TaskDependencies {\n';
-    dot += '  rankdir=LR;\n';
-    dot += '  node [shape=box];\n\n';
-
-    // Add nodes with status colors
-    for (const [taskId, node] of this.nodes) {
-      let color = 'white';
-      switch (node.status) {
-        case 'ready':
-          color = 'lightgreen';
-          break;
-        case 'running':
-          color = 'yellow';
-          break;
-        case 'completed':
-          color = 'green';
-          break;
-        case 'failed':
-          color = 'red';
-          break;
-      }
-      dot += `  "${taskId}" [style=filled, fillcolor=${color}];\n`;
-    }
-
-    dot += '\n';
-
-    // Add edges
-    for (const [taskId, node] of this.nodes) {
-      for (const depId of node.dependencies) {
-        dot += `  "${depId}" -> "${taskId}";\n`;
-      }
-    }
-
-    dot += '}\n';
-    return dot;
-  }
 }

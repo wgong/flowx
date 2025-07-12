@@ -7,9 +7,7 @@ import type { CLICommand, CLIContext } from '../../interfaces/index.ts';
 import { formatTable, successBold, infoBold, warningBold, errorBold, printSuccess, printError, printWarning, printInfo } from '../../core/output-formatter.ts';
 import { getPersistenceManager, getLogger } from '../../core/global-initialization.ts';
 import { AgentProcessManager, AgentProcessConfig } from '../../../agents/agent-process-manager.ts';
-import { spawn, ChildProcess } from 'child_process';
-import { join } from 'path';
-import { writeFileSync, existsSync, mkdirSync } from 'fs';
+import { ChildProcess } from 'child_process';
 
 interface Agent {
   id: string;
@@ -67,25 +65,37 @@ async function listAgents(context: CLIContext): Promise<void> {
     const mergedAgents = persistedAgents.map(persisted => {
       const running = runningAgents.find(r => r.id === persisted.id);
       
+      // Parse capabilities from JSON string to array
+      const capabilities: string[] = typeof persisted.capabilities === 'string' 
+        ? JSON.parse(persisted.capabilities || '[]') 
+        : persisted.capabilities || [];
+      
       if (running) {
+        // Map running status to Agent status type
+        const mappedStatus = mapRunningStatusToAgentStatus(running.status);
+        
         return {
           ...persisted,
-          status: running.status,
+          capabilities,
+          status: mappedStatus,
           pid: running.pid,
           uptime: running.startTime ? Date.now() - running.startTime.getTime() : 0,
           tasksCompleted: running.tasksCompleted,
           memoryUsage: running.memoryUsage,
           cpuUsage: running.cpuUsage,
-          lastActivity: running.lastActivity || new Date(persisted.createdAt)
+          lastActivity: running.lastActivity || new Date(persisted.createdAt),
+          createdAt: new Date(persisted.createdAt)
         };
       }
       
       return {
         ...persisted,
-        status: 'offline',
+        capabilities,
+        status: 'offline' as const,
         uptime: 0,
         tasksCompleted: 0,
-        lastActivity: new Date(persisted.createdAt)
+        lastActivity: new Date(persisted.createdAt),
+        createdAt: new Date(persisted.createdAt)
       };
     });
     
@@ -96,7 +106,7 @@ async function listAgents(context: CLIContext): Promise<void> {
       id: running.id,
       name: running.id,
       type: running.type,
-      status: running.status,
+      status: mapRunningStatusToAgentStatus(running.status),
       capabilities: [],
       pid: running.pid,
       uptime: running.startTime ? Date.now() - running.startTime.getTime() : 0,
@@ -104,7 +114,7 @@ async function listAgents(context: CLIContext): Promise<void> {
       memoryUsage: running.memoryUsage,
       cpuUsage: running.cpuUsage,
       lastActivity: running.lastActivity || new Date(),
-      createdAt: running.startTime?.getTime() || Date.now()
+      createdAt: new Date(running.startTime?.getTime() || Date.now())
     }));
     
     let allAgents = [...mergedAgents, ...runningOnlyAgents];
@@ -163,7 +173,7 @@ async function spawnAgent(context: CLIContext): Promise<void> {
     // Create agent configuration
     const agentConfig: AgentProcessConfig = {
       id: agentId,
-      type: agentType as any,
+      type: agentType as 'backend' | 'frontend' | 'devops' | 'test' | 'security' | 'documentation' | 'general',
       specialization: options.specialization,
       maxMemory: options.memory ? parseInt(options.memory) : undefined,
       maxConcurrentTasks: options.maxTasks ? parseInt(options.maxTasks) : 3,
@@ -292,7 +302,7 @@ async function stopAgent(context: CLIContext): Promise<void> {
         process.kill(runtimeInfo.pid, options.force ? 'SIGKILL' : 'SIGTERM');
         printSuccess(`Sent ${options.force ? 'SIGKILL' : 'SIGTERM'} to agent ${agentId}`);
       } catch (killError) {
-        if ((killError as any).code !== 'ESRCH') {
+        if ((killError as NodeJS.ErrnoException).code !== 'ESRCH') {
           throw killError;
         }
       }
@@ -410,91 +420,9 @@ async function removeAgent(context: CLIContext): Promise<void> {
   }
 }
 
-/**
- * Create agent process script
- */
-function createAgentScript(agentId: string, name: string, type: string): string {
-  return `#!/usr/bin/env node
-
-/**
- * Agent Process: ${name}
- * Agent ID: ${agentId}
- * Type: ${type}
- */
-
-const agentId = '${agentId}';
-const agentName = '${name}';
-const agentType = '${type}';
-
-console.log(\`🤖 Agent \${agentName} (\${agentId}) started at \${new Date().toISOString()}\`);
-
-// Agent main loop
-let isRunning = true;
-let taskCount = 0;
-
-async function agentLoop() {
-  while (isRunning) {
-    try {
-      taskCount++;
-      console.log(\`[\${new Date().toISOString()}] \${agentName}: Processing task #\${taskCount}\`);
-      
-      // Simulate different agent behaviors based on type
-      switch (agentType) {
-        case 'architect':
-          console.log(\`[\${agentName}] Analyzing system architecture...\`);
-          break;
-        case 'researcher':
-          console.log(\`[\${agentName}] Conducting research...\`);
-          break;
-        case 'developer':
-          console.log(\`[\${agentName}] Writing code...\`);
-          break;
-        case 'tester':
-          console.log(\`[\${agentName}] Running tests...\`);
-          break;
-        default:
-          console.log(\`[\${agentName}] Executing general tasks...\`);
-      }
-      
-      // Wait before next task
-      await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000));
-      
-    } catch (error) {
-      console.error(\`[\${agentName}] Error:\`, error);
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    }
-  }
-}
-
-// Handle shutdown signals
-process.on('SIGINT', () => {
-  console.log(\`\\n🛑 \${agentName} received SIGINT, shutting down gracefully...\`);
-  isRunning = false;
-  setTimeout(() => process.exit(0), 1000);
-});
-
-process.on('SIGTERM', () => {
-  console.log(\`\\n🛑 \${agentName} received SIGTERM, shutting down gracefully...\`);
-  isRunning = false;
-  setTimeout(() => process.exit(0), 1000);
-});
-
-// Status reporting
-setInterval(() => {
-  console.log(\`[\${new Date().toISOString()}] \${agentName}: Status OK - Tasks completed: \${taskCount}\`);
-}, 10000);
-
-// Start agent
-agentLoop().catch(error => {
-  console.error(\`Fatal error in \${agentName}:\`, error);
-  process.exit(1);
-});
-`;
-}
-
 // Helper functions
 
-function displayAgentsTable(agents: any[]): void {
+function displayAgentsTable(agents: Agent[]): void {
   console.log(successBold('\n🤖 Claude Flow Agents\n'));
   
   const agentTable = formatTable(agents, [
@@ -526,7 +454,7 @@ function getStatusColor(status: string): string {
   }
 }
 
-function formatAsYaml(obj: any, indent: number = 0): string {
+function formatAsYaml(obj: unknown, indent: number = 0): string {
   const spaces = ' '.repeat(indent);
   let result = '';
 
@@ -547,6 +475,26 @@ function formatAsYaml(obj: any, indent: number = 0): string {
   }
 
   return result;
+}
+
+// Helper function to map running status to Agent status
+function mapRunningStatusToAgentStatus(runningStatus: string): 'active' | 'idle' | 'busy' | 'error' | 'offline' {
+  switch (runningStatus) {
+    case 'running':
+      return 'active';
+    case 'starting':
+      return 'active';
+    case 'stopping':
+      return 'offline';
+    case 'stopped':
+      return 'offline';
+    case 'error':
+      return 'error';
+    case 'crashed':
+      return 'error';
+    default:
+      return 'offline';
+  }
 }
 
 export const agentCommand: CLICommand = {

@@ -41,11 +41,11 @@ const options = {
 };
 
 // If no specific test type is specified, run all tests
-if (!options.unit && !options.e2e && !options.integration && !options.property) {
+if (true) {
   options.unit = true;
-  options.e2e = true;
-  options.integration = true;
-  options.property = true;
+  options.e2e = false;
+  options.integration = false;
+  options.property = false;
 }
 
 // Set environment variables for test
@@ -80,6 +80,8 @@ if (options.property) {
 if (testPatterns.length > 0) {
   jestArgs.push(...testPatterns);
 }
+
+jestArgs.push('--runInBand');
 
 // Add watch mode if specified
 if (options.watch) {

@@ -36,7 +36,7 @@ export function createCommandTestRunner(options = {}) {
    */
   const setup = async () => {
     // Create temporary directory for test files
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'flowx-cli-test-'));
+    tempDir = await fs.mkdtemp(path.join('src/tests/.tmp', 'flowx-cli-test-'));
     
     if (debug) {
       console.log(`Test temp directory: ${tempDir}`);

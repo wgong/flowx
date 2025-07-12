@@ -136,6 +136,11 @@ export enum SystemEvents {
   SYSTEM_ERROR = 'system:error',
   SYSTEM_HEALTHCHECK = 'system:healthcheck',
 
+  // Component recovery events
+  COMPONENT_RECOVERED = 'component:recovered',
+  COMPONENT_RECOVERY_FAILED = 'component:recovery_failed',
+  COMPONENT_RECOVERY_ERROR = 'component:recovery_error',
+
   // Coordination events
   RESOURCE_ACQUIRED = 'resource:acquired',
   RESOURCE_RELEASED = 'resource:released',
@@ -167,6 +172,10 @@ export interface EventMap extends Record<string, unknown> {
   [SystemEvents.SYSTEM_SHUTDOWN]: { reason: string };
   [SystemEvents.SYSTEM_ERROR]: { error: Error; component: string };
   [SystemEvents.SYSTEM_HEALTHCHECK]: { status: HealthStatus };
+
+  [SystemEvents.COMPONENT_RECOVERED]: { componentName: string; recoveryTime: Date; previousError?: string };
+  [SystemEvents.COMPONENT_RECOVERY_FAILED]: { componentName: string; error?: string; attemptTime: Date };
+  [SystemEvents.COMPONENT_RECOVERY_ERROR]: { componentName: string; error: string; attemptTime: Date };
 
   [SystemEvents.RESOURCE_ACQUIRED]: { resourceId: string; agentId: string };
   [SystemEvents.RESOURCE_RELEASED]: { resourceId: string; agentId: string };

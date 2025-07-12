@@ -18,9 +18,7 @@ import {
   AgentConfig, 
   AgentEnvironment, 
   AgentMetrics,
-  AgentError,
-  TaskId,
-  TaskDefinition
+  AgentError
 } from "../swarm/types.ts";
 import { DistributedMemorySystem } from "../memory/distributed-memory.ts";
 import { AgentProcessManager, AgentProcessConfig, AgentProcessInfo, TaskRequest, TaskResult } from './agent-process-manager.ts';
@@ -918,8 +916,6 @@ export class AgentManager extends EventEmitter {
 
   private async checkResponsiveness(agentId: string): Promise<number> {
     // Send ping and measure response time
-    const startTime = Date.now();
-    
     try {
       // This would send an actual ping to the agent
       // For now, simulate based on last heartbeat
@@ -1054,7 +1050,9 @@ export class AgentManager extends EventEmitter {
       AGENT_TYPE: agent.type
     };
 
-    const childProcess = spawn('deno', ['run', '--allow-all', (agent.environment as any).startupScript || './scripts/default-agent.ts'], {
+    const startupScript = (agent.environment as { startupScript?: string }).startupScript || './scripts/default-agent.ts';
+
+    const childProcess = spawn('deno', ['run', '--allow-all', startupScript], {
       env: processEnv,
       cwd: agent.environment.workingDirectory,
       stdio: ['pipe', 'pipe', 'pipe']
@@ -1676,7 +1674,7 @@ export class AgentManager extends EventEmitter {
     }
   }
 
-  private enrichAgentData(data: any): any {
+  private enrichAgentData(data: { agentId: string; [key: string]: unknown }): { agentId: string; [key: string]: unknown } {
     const metadata = this.agentMetadata.get(data.agentId);
     return {
       ...data,

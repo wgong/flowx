@@ -21,7 +21,7 @@ describe('Memory-Swarm Integration', () => {
   
   beforeEach(async () => {
     // Create temporary test directory
-    tempDir = path.join(os.tmpdir(), `claude-flow-test-${Date.now()}`);
+    tempDir = path.join('src/tests/.tmp', `claude-flow-test-${Date.now()}`);
     await fs.mkdir(tempDir, { recursive: true });
     
     // Set up components

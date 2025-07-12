@@ -27,7 +27,7 @@ describe('Comprehensive Command Tests', () => {
       const { stdout } = await execAsync(`${cliPath} ${command}`);
       expect(stdout).toBeTruthy();
     } catch (error) {
-      fail(`Command test failed: ${name} - ${error}`);
+      throw new Error(`Command test failed: ${name} - ${error}`);
     }
   }
 
@@ -57,7 +57,7 @@ describe('Comprehensive Command Tests', () => {
           taskId = match[1];
         }
       } catch (error) {
-        fail(`Failed to create task: ${error}`);
+        throw new Error(`Failed to create task: ${error}`);
       }
     });
 
@@ -115,7 +115,7 @@ describe('Comprehensive Command Tests', () => {
     it('should handle invalid commands', async () => {
       try {
         await execAsync(`${cliPath} invalid-command`);
-        fail('Expected command to fail but it succeeded');
+        throw new Error('Expected command to fail but it succeeded');
       } catch (error) {
         // We expect this to fail
         expect(error).toBeTruthy();

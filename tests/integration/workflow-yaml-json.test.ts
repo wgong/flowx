@@ -16,7 +16,7 @@ describe('Workflow Format Integration Tests', () => {
     const fs = require('fs');
     const os = require('os');
     const path = require('path');
-    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'workflow-format-test-'));
+    testDir = fs.mkdtempSync(path.join('src/tests/.tmp', 'workflow-format-test-'));
   });
 
   afterEach(async () => {

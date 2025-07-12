@@ -1,5 +1,5 @@
 {
-  "name": "app",
+  "name": "md-convert",
   "version": "1.0.0",
   "description": "app created by Claude Flow Swarm",
   "main": "server.js",

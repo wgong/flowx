@@ -1,16 +1,14 @@
-/**
- * Jest configuration for FlowX
- */
-
-export default {
+module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   transform: {
-    '^.+\\.(ts|tsx)$': 'ts-jest',
+    '^.+\\.(ts|tsx)$': ['ts-jest', { useESM: true }],
     '^.+\\.(js|jsx)$': ['babel-jest', { configFile: './babel.config.json' }]
   },
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
+    'https://deno.land/std@(.*)/(.*)': '<rootDir>/deno-mock.js',
+    '@std/(.*)': '<rootDir>/deno-mock.js'
   },
   extensionsToTreatAsEsm: ['.ts', '.tsx', '.jsx'],
   roots: ['<rootDir>/tests'],
@@ -37,11 +35,6 @@ export default {
       functions: 95,
       lines: 90,
       statements: 90
-    }
-  },
-  globals: {
-    'ts-jest': {
-      useESM: true,
     }
   }
 };

@@ -90,8 +90,10 @@ export async function createTaskTodos(
   } = {},
   coordinator?: TaskCoordinator
 ): Promise<TodoItem[]> {
+  // Create a default coordinator if none provided
   if (!coordinator) {
-    throw new Error('TaskCoordinator instance required for todo creation');
+    const taskEngine = new TaskEngine(10); // Default max concurrent tasks
+    coordinator = new TaskCoordinator(taskEngine);
   }
 
   const context: CoordinationContext = {

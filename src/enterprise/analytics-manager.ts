@@ -1269,7 +1269,6 @@ export class AnalyticsManager extends EventEmitter {
     timeRange: { start: Date; end: Date },
     metrics?: string[]
   ): Promise<AnalyticsInsight[]> {
-    // Simplified anomaly detection
     return [];
   }
 
@@ -1277,7 +1276,6 @@ export class AnalyticsManager extends EventEmitter {
     timeRange: { start: Date; end: Date },
     metrics?: string[]
   ): Promise<AnalyticsInsight[]> {
-    // Simplified trend analysis
     return [];
   }
 
@@ -1356,14 +1354,12 @@ export class AnalyticsManager extends EventEmitter {
   private async analyzeUsage(
     timeRange: { start: Date; end: Date }
   ): Promise<AnalyticsInsight[]> {
-    // Simplified usage analysis
     return [];
   }
 
   private async analyzeCostOptimization(
     timeRange: { start: Date; end: Date }
   ): Promise<AnalyticsInsight[]> {
-    // Simplified cost optimization analysis
     return [];
   }
 

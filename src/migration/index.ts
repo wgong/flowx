@@ -5,14 +5,14 @@
  */
 
 import { Command } from 'commander';
-import { MigrationRunner } from './migration-runner.ts';
-import { MigrationAnalyzer } from './migration-analyzer.ts';
-import { MigrationStrategy } from './types.ts';
-import { logger } from './logger.ts';
-import { ProgressReporter } from './progress-reporter.ts';
-import { ValidationError } from '../utils/errors.ts';
-import { MigrationValidator } from './migration-validator.ts';
-import { colors } from '../utils/colors.ts';
+import { MigrationRunner } from './migration-runner.js';
+import { MigrationAnalyzer } from './migration-analyzer.js';
+import { MigrationStrategy } from './types.js';
+import { logger } from './logger.js';
+import { ProgressReporter } from './progress-reporter.js';
+import { ValidationError } from '../utils/errors.js';
+import { MigrationValidator } from './migration-validator.js';
+import { colors } from '../utils/colors.js';
 import * as path from 'node:path';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';

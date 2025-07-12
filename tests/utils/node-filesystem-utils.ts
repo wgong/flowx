@@ -14,7 +14,7 @@ export class FileSystemTestUtils {
    * Create temporary directory for testing
    */
   static async createTempDir(prefix = 'claude-flow-test-'): Promise<string> {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+    const tempDir = await fs.mkdtemp(path.join('src/tests/.tmp', prefix));
     return tempDir;
   }
 

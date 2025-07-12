@@ -3,6 +3,8 @@
  * Tests memory storage, querying, listing, and management
  */
 
+console.log(`Current working directory in memory-commands.test.js: ${process.cwd()}`);
+
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import { createCommandTestRunner } from '../utils/command-test-base.js';
 

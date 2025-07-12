@@ -116,7 +116,7 @@ export const FileSystemTestUtils = {
     const path = require('path');
     const os = require('os');
     
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memory-test-'));
+    const tempDir = fs.mkdtempSync(path.join('src/tests/.tmp', 'memory-test-'));
     return tempDir;
   },
   

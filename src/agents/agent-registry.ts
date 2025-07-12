@@ -4,7 +4,7 @@
  */
 
 import { DistributedMemorySystem } from "../memory/distributed-memory.ts";
-import { AgentState, AgentId, AgentType, AgentStatus } from "../swarm/types.ts";
+import { AgentState, AgentType, AgentStatus } from "../swarm/types.ts";
 import { EventEmitter } from 'node:events';
 
 export interface AgentRegistryEntry {
@@ -12,7 +12,7 @@ export interface AgentRegistryEntry {
   createdAt: Date;
   lastUpdated: Date;
   tags: string[];
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface AgentQuery {
@@ -373,7 +373,7 @@ export class AgentRegistry extends EventEmitter {
   /**
    * Store agent coordination data
    */
-  async storeCoordinationData(agentId: string, data: any): Promise<void> {
+  async storeCoordinationData(agentId: string, data: Record<string, unknown>): Promise<void> {
     const key = `coordination:${agentId}`;
     await this.memory.store(key, {
       agentId,
@@ -389,7 +389,7 @@ export class AgentRegistry extends EventEmitter {
   /**
    * Retrieve agent coordination data
    */
-  async getCoordinationData(agentId: string): Promise<any> {
+  async getCoordinationData(agentId: string): Promise<Record<string, unknown> | null> {
     const key = `coordination:${agentId}`;
     const result = await this.memory.retrieve(key);
     return result?.value || null;

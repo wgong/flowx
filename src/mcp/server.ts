@@ -65,6 +65,9 @@ export class MCPServer implements IMCPServer {
     name: 'Claude-Flow MCP Server',
     version: '1.0.0',
   };
+  
+  private toolMetrics: Record<string, { count: number, errors: number, totalTime: number }> = {};
+  private errorCounts: Record<string, number> = {};
 
   private readonly supportedProtocolVersion: MCPProtocolVersion = {
     major: 2024,
@@ -241,8 +244,10 @@ export class MCPServer implements IMCPServer {
       failedRequests: routerMetrics.failedRequests,
       averageResponseTime: lbMetrics?.averageResponseTime || 0,
       activeSessions: sessionMetrics.active,
-      toolInvocations: {}, // TODO: Implement tool-specific metrics
-      errors: {}, // TODO: Implement error categorization
+      toolInvocations: Object.fromEntries(
+        Object.entries(this.getToolInvocations()).map(([key, value]) => [key, value.count])
+      ),
+      errors: this.getErrorMetrics(),
       lastReset: lbMetrics?.lastReset || new Date(),
     };
   }
@@ -311,8 +316,15 @@ export class MCPServer implements IMCPServer {
       const requestMetrics = this.loadBalancer?.recordRequestStart(session, request);
 
       try {
+        // Track tool metrics start time
+        const startTime = performance.now();
+        const toolName = request.method;
+        
         // Process request through router
         const result = await this.router.route(request);
+        
+        // Update tool metrics on success
+        this.updateToolMetrics(toolName, performance.now() - startTime);
         
         const response: MCPResponse = {
           jsonrpc: '2.0',
@@ -327,6 +339,13 @@ export class MCPServer implements IMCPServer {
 
         return response;
       } catch (error) {
+        // Record tool error
+        const toolName = request.method;
+        this.updateToolMetricsError(toolName);
+        
+        // Categorize error
+        this.updateErrorMetrics(error);
+        
         // Record failure
         if (requestMetrics) {
           this.loadBalancer?.recordRequestEnd(requestMetrics, undefined, error as Error);
@@ -339,7 +358,10 @@ export class MCPServer implements IMCPServer {
         method: request.method,
         error,
       });
-
+      
+      // Categorize error
+      this.updateErrorMetrics(error);
+      
       return {
         jsonrpc: '2.0',
         id: request.id,
@@ -580,5 +602,70 @@ export class MCPServer implements IMCPServer {
       message: 'Internal error',
       data: error,
     };
+  }
+  
+  private updateToolMetrics(toolName: string, executionTime: number): void {
+    if (!this.toolMetrics[toolName]) {
+      this.toolMetrics[toolName] = { count: 0, errors: 0, totalTime: 0 };
+    }
+    
+    this.toolMetrics[toolName].count++;
+    this.toolMetrics[toolName].totalTime += executionTime;
+  }
+  
+  private updateToolMetricsError(toolName: string): void {
+    if (!this.toolMetrics[toolName]) {
+      this.toolMetrics[toolName] = { count: 0, errors: 0, totalTime: 0 };
+    }
+    
+    this.toolMetrics[toolName].errors++;
+  }
+  
+  private updateErrorMetrics(error: unknown): void {
+    let category = 'unknown';
+    
+    if (error instanceof MCPMethodNotFoundError) {
+      category = 'method_not_found';
+    } else if (error instanceof MCPErrorClass) {
+      category = 'mcp_error';
+    } else if (error instanceof URIError || error instanceof TypeError) {
+      category = 'protocol_error';
+    } else if (error instanceof SyntaxError) {
+      category = 'parsing_error';
+    } else if (error instanceof Error) {
+      // Categorize common error patterns
+      const message = error.message.toLowerCase();
+      if (message.includes('permission') || message.includes('access') || message.includes('auth')) {
+        category = 'permission_denied';
+      } else if (message.includes('timeout') || message.includes('time out')) {
+        category = 'timeout';
+      } else if (message.includes('not found') || message.includes('missing')) {
+        category = 'not_found';
+      } else if (message.includes('invalid') || message.includes('bad')) {
+        category = 'invalid_input';
+      } else {
+        category = 'general_error';
+      }
+    }
+    
+    this.errorCounts[category] = (this.errorCounts[category] || 0) + 1;
+  }
+  
+  private getToolInvocations(): Record<string, { count: number; errors: number; avgTime: number }> {
+    const result: Record<string, { count: number; errors: number; avgTime: number }> = {};
+    
+    for (const [tool, metrics] of Object.entries(this.toolMetrics)) {
+      result[tool] = {
+        count: metrics.count,
+        errors: metrics.errors,
+        avgTime: metrics.count > 0 ? Math.round(metrics.totalTime / metrics.count) : 0
+      };
+    }
+    
+    return result;
+  }
+  
+  private getErrorMetrics(): Record<string, number> {
+    return { ...this.errorCounts };
   }
 }

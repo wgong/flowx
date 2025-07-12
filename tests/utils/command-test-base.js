@@ -29,7 +29,7 @@ export class CommandTestBase {
    */
   async setup() {
     // Create temporary directory for test isolation
-    this.tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'claude-flow-test-'));
+    this.tempDir = await fs.mkdtemp(path.join('src/tests/.tmp', 'claude-flow-test-'));
     
     // Initialize any test-specific state
     this.testState = {};
@@ -63,7 +63,7 @@ export class CommandTestBase {
   async runCommand(args, options = {}) {
     const cmdOptions = {
       cwd: options.cwd || process.cwd(),
-      env: { ...process.env, ...options.env },
+      env: { ...process.env, ...options.env, CLAUDE_FLOW_ENV: 'test' },
       timeout: options.timeout || this.timeout,
     };
     

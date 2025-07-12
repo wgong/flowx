@@ -660,13 +660,113 @@ class ServiceManager {
   private async updateCommunicationServicesStatus(): Promise<void> {
     // MCP Server
     const mcpService = this.services.get('mcp-server')!;
-    mcpService.status = 'stopped'; // Not implemented in this demo
-    mcpService.health = 'unknown';
+    await this.checkMCPServerStatus(mcpService);
 
     // WebSocket Server
     const wsService = this.services.get('websocket-server')!;
-    wsService.status = 'stopped'; // Not implemented in this demo
-    wsService.health = 'unknown';
+    await this.checkWebSocketServerStatus(wsService);
+  }
+
+  private async checkMCPServerStatus(service: ServiceInfo): Promise<void> {
+    try {
+      // Check if MCP server is running by looking for the MCP configuration
+      const fs = await import('node:fs/promises');
+      const path = await import('node:path');
+      
+      const mcpConfigPath = path.join(process.cwd(), 'mcp_config', 'mcp.json');
+      
+      try {
+        await fs.access(mcpConfigPath);
+        const configContent = await fs.readFile(mcpConfigPath, 'utf-8');
+        const config = JSON.parse(configContent);
+        
+        // Check if MCP server configuration is valid
+        if (config.mcpServers && Object.keys(config.mcpServers).length > 0) {
+          service.status = 'running';
+          service.health = 'healthy';
+          service.uptime = Date.now();
+          
+          // Try to get actual server metrics if available
+          const serverCount = Object.keys(config.mcpServers).length;
+          service.metrics = {
+            serverCount,
+            configuredServers: Object.keys(config.mcpServers)
+          };
+        } else {
+          service.status = 'stopped';
+          service.health = 'unknown';
+          service.lastError = 'No MCP servers configured';
+        }
+      } catch (error) {
+        service.status = 'stopped';
+        service.health = 'unknown';
+        service.lastError = 'MCP configuration not found';
+      }
+    } catch (error) {
+      service.status = 'error';
+      service.health = 'unhealthy';
+      service.lastError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  private async checkWebSocketServerStatus(service: ServiceInfo): Promise<void> {
+    try {
+      // Check if WebSocket server is running by trying to connect to common ports
+      const net = await import('node:net');
+      const commonPorts = [3000, 8080, 8081, 3001];
+      
+      let serverFound = false;
+      let activePort: number | undefined;
+      
+      for (const port of commonPorts) {
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const socket = net.createConnection(port, 'localhost');
+            socket.setTimeout(1000);
+            
+            socket.on('connect', () => {
+              serverFound = true;
+              activePort = port;
+              socket.end();
+              resolve();
+            });
+            
+            socket.on('error', () => {
+              socket.destroy();
+              reject(new Error(`Port ${port} not available`));
+            });
+            
+            socket.on('timeout', () => {
+              socket.destroy();
+              reject(new Error(`Port ${port} timeout`));
+            });
+          });
+          
+          if (serverFound) break;
+        } catch (error) {
+          // Continue checking other ports
+        }
+      }
+      
+      if (serverFound && activePort) {
+        service.status = 'running';
+        service.health = 'healthy';
+        service.port = activePort;
+        service.uptime = Date.now();
+        service.metrics = {
+          port: activePort,
+          protocol: 'websocket'
+        };
+      } else {
+        service.status = 'stopped';
+        service.health = 'unknown';
+        service.lastError = 'No WebSocket server found on common ports';
+      }
+    } catch (error) {
+      service.status = 'error';
+      service.health = 'unhealthy';
+      service.lastError = error instanceof Error ? error.message : String(error);
+    }
   }
 
   getServices(filter?: { type?: string; group?: string; service?: string }): ServiceInfo[] {

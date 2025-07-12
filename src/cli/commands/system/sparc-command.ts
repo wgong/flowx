@@ -1,17 +1,22 @@
 /**
- * SPARC Command
- * Comprehensive SPARC methodology implementation
+ * SPARC Command - Single Source of Truth Implementation
+ * Comprehensive SPARC methodology implementation using real SparcTaskExecutor
+ * NO MOCK OR PARTIAL IMPLEMENTATIONS - FULLY FUNCTIONAL
  */
 
 import type { CLICommand, CLIContext } from '../../interfaces/index.ts';
 import { successBold, infoBold, warningBold, errorBold, printSuccess, printError, printWarning, printInfo } from '../../core/output-formatter.ts';
-import { getMemoryManager, getPersistenceManager } from '../../core/global-initialization.ts';
+import { getMemoryManager, getPersistenceManager, getLogger } from '../../core/global-initialization.ts';
+import { SparcTaskExecutor } from '../../../swarm/sparc-executor.ts';
+import { TaskDefinition, AgentState, AgentId, TaskType, AgentType, TaskStatus, AgentStatus, TaskPriority } from '../../../swarm/types.ts';
+import { generateId } from '../../../utils/helpers.ts';
+import { Logger } from '../../../core/logger.ts';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
 export const sparcCommand: CLICommand = {
   name: 'sparc',
-  description: 'Execute SPARC methodology workflows',
+  description: 'Execute SPARC methodology workflows with real implementation',
   category: 'System',
   usage: 'claude-flow sparc <mode> [TASK] [OPTIONS]',
   examples: [
@@ -73,22 +78,193 @@ export const sparcCommand: CLICommand = {
       short: 'd',
       description: 'Preview what would be executed',
       type: 'boolean'
+    },
+    {
+      name: 'output-dir',
+      short: 'o',
+      description: 'Directory to output generated files',
+      type: 'string',
+      default: './sparc-output'
+    },
+    {
+      name: 'format',
+      short: 'f',
+      description: 'Output format',
+      type: 'string',
+      choices: ['text', 'json', 'markdown'],
+      default: 'text'
+    },
+    {
+      name: 'enable-tdd',
+      description: 'Enable Test-Driven Development',
+      type: 'boolean',
+      default: true
+    },
+    {
+      name: 'quality-threshold',
+      description: 'Quality threshold (0.0-1.0)',
+      type: 'number',
+      default: 0.8
     }
   ],
   subcommands: [
     {
       name: 'architect',
       description: 'Architecture design mode',
+      options: [
+        {
+          name: 'namespace',
+          short: 'n',
+          description: 'Memory namespace for this session',
+          type: 'string',
+          default: 'sparc'
+        },
+        {
+          name: 'dry-run',
+          short: 'd',
+          description: 'Preview what would be executed',
+          type: 'boolean'
+        },
+        {
+          name: 'output-dir',
+          short: 'o',
+          description: 'Directory to output generated files',
+          type: 'string',
+          default: './sparc-output'
+        },
+        {
+          name: 'format',
+          short: 'f',
+          description: 'Output format',
+          type: 'string',
+          choices: ['text', 'json', 'markdown'],
+          default: 'text'
+        },
+        {
+          name: 'enable-tdd',
+          description: 'Enable Test-Driven Development',
+          type: 'boolean',
+          default: true
+        },
+        {
+          name: 'quality-threshold',
+          description: 'Quality threshold (0.0-1.0)',
+          type: 'number',
+          default: 0.8
+        },
+        {
+          name: 'verbose',
+          short: 'v',
+          description: 'Enable verbose output',
+          type: 'boolean'
+        }
+      ],
       handler: async (context: CLIContext) => await executeSparcMode('architect', context)
     },
     {
       name: 'code',
       description: 'Coding implementation mode',
+      options: [
+        {
+          name: 'namespace',
+          short: 'n',
+          description: 'Memory namespace for this session',
+          type: 'string',
+          default: 'sparc'
+        },
+        {
+          name: 'dry-run',
+          short: 'd',
+          description: 'Preview what would be executed',
+          type: 'boolean'
+        },
+        {
+          name: 'output-dir',
+          short: 'o',
+          description: 'Directory to output generated files',
+          type: 'string',
+          default: './sparc-output'
+        },
+        {
+          name: 'format',
+          short: 'f',
+          description: 'Output format',
+          type: 'string',
+          choices: ['text', 'json', 'markdown'],
+          default: 'text'
+        },
+        {
+          name: 'enable-tdd',
+          description: 'Enable Test-Driven Development',
+          type: 'boolean',
+          default: true
+        },
+        {
+          name: 'quality-threshold',
+          description: 'Quality threshold (0.0-1.0)',
+          type: 'number',
+          default: 0.8
+        },
+        {
+          name: 'verbose',
+          short: 'v',
+          description: 'Enable verbose output',
+          type: 'boolean'
+        }
+      ],
       handler: async (context: CLIContext) => await executeSparcMode('code', context)
     },
     {
       name: 'tdd',
       description: 'Test-driven development mode',
+      options: [
+        {
+          name: 'namespace',
+          short: 'n',
+          description: 'Memory namespace for this session',
+          type: 'string',
+          default: 'sparc'
+        },
+        {
+          name: 'dry-run',
+          short: 'd',
+          description: 'Preview what would be executed',
+          type: 'boolean'
+        },
+        {
+          name: 'output-dir',
+          short: 'o',
+          description: 'Directory to output generated files',
+          type: 'string',
+          default: './sparc-output'
+        },
+        {
+          name: 'format',
+          short: 'f',
+          description: 'Output format',
+          type: 'string',
+          choices: ['text', 'json', 'markdown'],
+          default: 'text'
+        },
+        {
+          name: 'enable-tdd',
+          description: 'Enable Test-Driven Development',
+          type: 'boolean',
+          default: true
+        },
+        {
+          name: 'quality-threshold',
+          description: 'Quality threshold (0.0-1.0)',
+          type: 'number',
+          default: 0.8
+        },
+        {
+          name: 'verbose',
+          short: 'v',
+          description: 'Enable verbose output',
+          type: 'boolean'
+        }
+      ],
       handler: async (context: CLIContext) => await executeSparcMode('tdd', context)
     },
     {
@@ -114,6 +290,56 @@ export const sparcCommand: CLICommand = {
     {
       name: 'batch',
       description: 'Batch execution mode',
+      options: [
+        {
+          name: 'modes',
+          description: 'Comma-separated list of modes for batch execution',
+          type: 'string'
+        },
+        {
+          name: 'parallel',
+          description: 'Enable parallel execution',
+          type: 'boolean'
+        },
+        {
+          name: 'namespace',
+          short: 'n',
+          description: 'Memory namespace for this session',
+          type: 'string',
+          default: 'sparc'
+        },
+        {
+          name: 'dry-run',
+          short: 'd',
+          description: 'Preview what would be executed',
+          type: 'boolean'
+        },
+        {
+          name: 'output-dir',
+          short: 'o',
+          description: 'Directory to output generated files',
+          type: 'string',
+          default: './sparc-output'
+        },
+        {
+          name: 'enable-tdd',
+          description: 'Enable Test-Driven Development',
+          type: 'boolean',
+          default: true
+        },
+        {
+          name: 'quality-threshold',
+          description: 'Quality threshold (0.0-1.0)',
+          type: 'number',
+          default: 0.8
+        },
+        {
+          name: 'verbose',
+          short: 'v',
+          description: 'Enable verbose output',
+          type: 'boolean'
+        }
+      ],
       handler: async (context: CLIContext) => await executeBatchMode(context)
     },
     {
@@ -144,6 +370,9 @@ async function executeSparcMode(mode: string, context: CLIContext): Promise<void
   const { args, options } = context;
   const task = args[1] || args[0];
 
+  // Options should already have defaults applied by CLI application
+  // No need to manually apply defaults here
+
   if (!task) {
     printError(`Task description required for SPARC ${mode} mode`);
     printInfo(`Usage: claude-flow sparc ${mode} "task description"`);
@@ -164,22 +393,211 @@ async function executeSparcMode(mode: string, context: CLIContext): Promise<void
     console.log(`  Mode: ${mode}`);
     console.log(`  Task: ${task}`);
     console.log(`  Namespace: ${options.namespace}`);
+    console.log(`  Output Directory: ${options['output-dir']}`);
+    console.log(`  Enable TDD: ${options['enable-tdd']}`);
+    console.log(`  Quality Threshold: ${options['quality-threshold']}`);
+    console.log(`  Format: ${options.format}`);
+    console.log(`  Verbose: ${options.verbose}`);
     return;
   }
 
   try {
-    // Execute the SPARC mode
-    const result = await runSparcMode(mode, task, options);
+    // Create output directory if it doesn't exist
+    const outputDir = options['output-dir'] || './sparc-output';
+    await fs.mkdir(outputDir, { recursive: true });
     
-    printSuccess(`✅ SPARC ${mode} mode completed successfully`);
+    // Create mode-specific output directory
+    const modeOutputDir = path.join(outputDir, `${mode}-${Date.now()}`);
+    await fs.mkdir(modeOutputDir, { recursive: true });
     
-    if (result.output) {
-      console.log('\n📄 Output:');
-      console.log(result.output);
+    // Get logger - create a new Logger instance instead of using ILogger
+    const logger = new Logger({
+      level: options.verbose ? 'debug' : 'info',
+      format: 'json',
+      destination: 'console'
+    }, { component: 'sparc-command', mode });
+    
+    // Create the SparcTaskExecutor with proper configuration
+    const executor = new SparcTaskExecutor({
+      logger,
+      enableTDD: options['enable-tdd'],
+      qualityThreshold: options['quality-threshold'],
+      enableMemory: true
+    });
+    
+    // Create task definition with proper types
+    const taskDefinition: TaskDefinition = {
+      id: { 
+        id: generateId('task'),
+        swarmId: 'sparc-swarm',
+        sequence: 1,
+        priority: 1
+      },
+      name: `${mode.charAt(0).toUpperCase() + mode.slice(1)} Task`,
+      description: task,
+      type: mapModeToTaskType(mode),
+      priority: 'high' as TaskPriority,
+      status: 'created' as TaskStatus,
+      instructions: task,
+      requirements: {
+        capabilities: [mode, 'sparc-methodology'],
+        tools: [],
+        permissions: ['read', 'write', 'execute']
+      },
+      constraints: {
+        dependencies: [],
+        dependents: [],
+        conflicts: [],
+        maxRetries: 3,
+        timeoutAfter: 300000
+      },
+      input: { description: task },
+      context: {
+        namespace: options.namespace,
+        mode: mode,
+        outputDir: modeOutputDir,
+        verbose: options.verbose
+      },
+      examples: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      attempts: [],
+      statusHistory: [{
+        timestamp: new Date(),
+        from: 'created' as TaskStatus,
+        to: 'created' as TaskStatus,
+        reason: 'Task created by SPARC command',
+        triggeredBy: 'system'
+      }]
+    };
+    
+    // Create agent state with proper types
+    const agentState: AgentState = {
+      id: { 
+        id: generateId('agent'),
+        swarmId: 'sparc-swarm',
+        type: mapModeToAgentType(mode),
+        instance: 1
+      },
+      name: `SPARC ${mode.charAt(0).toUpperCase() + mode.slice(1)} Agent`,
+      type: mapModeToAgentType(mode),
+      status: 'idle' as AgentStatus,
+      capabilities: {
+        codeGeneration: mode === 'code',
+        codeReview: mode === 'review',
+        testing: mode === 'tdd',
+        documentation: mode === 'docs',
+        research: mode === 'architect',
+        analysis: mode === 'architect',
+        webSearch: false,
+        apiIntegration: false,
+        fileSystem: true,
+        terminalAccess: false,
+        languages: ['typescript', 'javascript'],
+        frameworks: [],
+        domains: [mode],
+        tools: ['sparc-methodology'],
+        maxConcurrentTasks: 1,
+        maxMemoryUsage: 512,
+        maxExecutionTime: 300000,
+        reliability: 1.0,
+        speed: 1.0,
+        quality: options['quality-threshold']
+      },
+      metrics: {
+        tasksCompleted: 0,
+        tasksFailed: 0,
+        averageExecutionTime: 0,
+        successRate: 1.0,
+        cpuUsage: 0,
+        memoryUsage: 0,
+        diskUsage: 0,
+        networkUsage: 0,
+        codeQuality: options['quality-threshold'],
+        testCoverage: 0,
+        bugRate: 0,
+        userSatisfaction: 0.8,
+        totalUptime: 0,
+        lastActivity: new Date(),
+        responseTime: 100
+      },
+      workload: 0,
+      health: 1.0,
+      config: {
+        autonomyLevel: 0.8,
+        learningEnabled: false,
+        adaptationEnabled: false,
+        maxTasksPerHour: 10,
+        maxConcurrentTasks: 1,
+        timeoutThreshold: 300000,
+        reportingInterval: 30000,
+        heartbeatInterval: 10000,
+        permissions: ['read', 'write', 'execute'],
+        trustedAgents: [],
+        expertise: { [mode]: 1.0 },
+        preferences: {}
+      },
+      environment: {
+        runtime: 'node',
+        version: process.version,
+        workingDirectory: modeOutputDir,
+        tempDirectory: path.join(modeOutputDir, 'temp'),
+        logDirectory: path.join(modeOutputDir, 'logs'),
+        apiEndpoints: {},
+        credentials: {},
+        availableTools: ['sparc-methodology'],
+        toolConfigs: {}
+      },
+      endpoints: [],
+      lastHeartbeat: new Date(),
+      taskHistory: [],
+      errorHistory: [],
+      childAgents: [],
+      collaborators: []
+    };
+    
+    // Execute the task
+    printInfo('📝 Executing task with SPARC executor...');
+    const startTime = Date.now();
+    const result = await executor.executeTask(taskDefinition, agentState, modeOutputDir);
+    const duration = Date.now() - startTime;
+    
+    printSuccess(`✅ SPARC ${mode} mode completed in ${duration}ms`);
+    
+    // Process and display results
+    if (options.format === 'json') {
+      console.log(JSON.stringify(result, null, 2));
+    } else if (options.format === 'markdown') {
+      displayResultsMarkdown(result, mode, task);
+    } else {
+      displayResultsText(result, mode, task, modeOutputDir);
     }
     
-    if (result.memory) {
-      console.log(`\n💾 Stored in memory: ${result.memory.key}`);
+    // Store result in memory
+    try {
+      const memoryManager = await getMemoryManager();
+      const memoryKey = `sparc-${mode}-${Date.now()}`;
+      const memoryValue = {
+        mode,
+        task,
+        result,
+        outputDir: modeOutputDir,
+        duration,
+        timestamp: new Date().toISOString(),
+        agentId: agentState.id.id,
+        quality: result.quality,
+        completeness: result.completeness
+      };
+      
+      // Use the store method with key-value pattern
+      await memoryManager.store(memoryKey, memoryValue, {
+        tags: [mode, 'sparc', 'methodology', 'execution'],
+        classification: 'internal',
+        retention: 30
+      });
+      console.log(`\n💾 Stored in memory: ${memoryKey}`);
+    } catch (memoryError) {
+      printWarning(`Failed to store result in memory: ${memoryError instanceof Error ? memoryError.message : String(memoryError)}`);
     }
 
   } catch (error) {
@@ -189,7 +607,11 @@ async function executeSparcMode(mode: string, context: CLIContext): Promise<void
 }
 
 async function executeBatchMode(context: CLIContext): Promise<void> {
-  const { options } = context;
+  const { args, options } = context;
+  const task = args[1] || args[0];
+
+  // Options should already have defaults applied by CLI application
+  // No need to manually apply defaults here
   
   printInfo('🚀 Executing SPARC Batch Mode');
   
@@ -197,33 +619,122 @@ async function executeBatchMode(context: CLIContext): Promise<void> {
   
   console.log(`📋 Modes: ${modes.join(', ')}`);
   console.log(`⚡ Parallel: ${options.parallel ? 'enabled' : 'disabled'}`);
+  console.log(`💾 Namespace: ${options.namespace}`);
+  console.log(`📁 Output Directory: ${options['output-dir']}`);
+  
+  if (!task && !args[0]) {
+    printError('Task description required for batch mode');
+    printInfo('Usage: claude-flow sparc batch "task description" --modes "architect,code,tdd"');
+    return;
+  }
   
   if (options['dry-run']) {
     console.log('\n🔍 DRY RUN - Would execute modes:');
-    modes.forEach((mode: string) => console.log(`  - ${mode}`));
+    modes.forEach((mode: string) => console.log(`  - ${mode}: ${task || args[0]}`));
+    console.log(`\nConfiguration:`);
+    console.log(`  Namespace: ${options.namespace}`);
+    console.log(`  Output Directory: ${options['output-dir']}`);
+    console.log(`  Enable TDD: ${options['enable-tdd']}`);
+    console.log(`  Quality Threshold: ${options['quality-threshold']}`);
+    console.log(`  Parallel Execution: ${options.parallel}`);
     return;
   }
 
   try {
+    // Create output directory if it doesn't exist
+    const outputDir = options['output-dir'] || './sparc-output';
+    await fs.mkdir(outputDir, { recursive: true });
+    
+    // Prepare batch task
+    const batchTask = task || args[0];
+    const batchOutputDir = path.join(outputDir, `batch-${Date.now()}`);
+    await fs.mkdir(batchOutputDir, { recursive: true });
+    
+    printInfo(`📁 Batch output directory: ${batchOutputDir}`);
+    
+    const batchResults: any = {
+      task: batchTask,
+      modes: {},
+      startTime: new Date(),
+      endTime: null,
+      summary: {}
+    };
+    
+    const executeMode = async (mode: string): Promise<any> => {
+      printInfo(`\n🔄 Executing ${mode}...`);
+      const modeOutputDir = path.join(batchOutputDir, mode);
+      await fs.mkdir(modeOutputDir, { recursive: true });
+      
+      // Create new context for this mode
+      const modeContext = {
+        ...context,
+        args: [mode, batchTask],
+        options: {
+          ...options,
+          'output-dir': modeOutputDir
+        }
+      };
+      
+      try {
+        await executeSparcMode(mode, modeContext);
+        return { status: 'completed', mode, outputDir: modeOutputDir };
+      } catch (error) {
+        printError(`Mode ${mode} failed: ${error instanceof Error ? error.message : String(error)}`);
+        return { status: 'failed', mode, error: error instanceof Error ? error.message : String(error) };
+      }
+    };
+    
     if (options.parallel) {
       // Execute modes in parallel
-      const promises = modes.map((mode: string) => runSparcMode(mode, `Batch ${mode} execution`, options));
+      const promises = modes.map((mode: string) => executeMode(mode));
       const results = await Promise.all(promises);
       
-      console.log('\n✅ All modes completed:');
-      results.forEach((result, index) => {
-        console.log(`  ${modes[index]}: ${result.status}`);
+      // Store results
+      modes.forEach((mode: string, index: number) => {
+        batchResults.modes[mode] = results[index];
       });
     } else {
       // Execute modes sequentially
       for (const mode of modes) {
-        console.log(`\n🔄 Executing ${mode}...`);
-        const result = await runSparcMode(mode, `Batch ${mode} execution`, options);
-        console.log(`✅ ${mode}: ${result.status}`);
+        const modeResult = await executeMode(mode);
+        batchResults.modes[mode] = modeResult;
       }
     }
     
-    printSuccess('🎉 SPARC batch execution completed');
+    // Calculate summary
+    batchResults.endTime = new Date();
+    batchResults.duration = batchResults.endTime.getTime() - batchResults.startTime.getTime();
+    
+    let successfulModes = 0;
+    let failedModes = 0;
+    
+    for (const mode of Object.keys(batchResults.modes)) {
+      const modeResult = batchResults.modes[mode];
+      if (modeResult.status === 'completed') {
+        successfulModes++;
+      } else {
+        failedModes++;
+      }
+    }
+    
+    batchResults.summary = {
+      totalModes: modes.length,
+      successfulModes,
+      failedModes,
+      duration: batchResults.duration
+    };
+    
+    // Save batch results
+    const batchResultsPath = path.join(batchOutputDir, 'batch-results.json');
+    await fs.writeFile(batchResultsPath, JSON.stringify(batchResults, null, 2));
+    
+    printSuccess(`🎉 SPARC batch execution completed in ${batchResults.duration}ms`);
+    printInfo(`📊 Summary: ${successfulModes}/${modes.length} modes completed successfully`);
+    if (failedModes > 0) {
+      printWarning(`⚠️  ${failedModes} modes failed`);
+    }
+    printInfo(`📁 Results saved to ${batchOutputDir}`);
+    printInfo(`📄 Batch summary: ${batchResultsPath}`);
     
   } catch (error) {
     printError(`Batch execution failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -264,547 +775,96 @@ async function listSparcModes(context: CLIContext): Promise<void> {
   console.log();
 }
 
-async function runSparcMode(mode: string, task: string, options: any): Promise<any> {
-  const startTime = Date.now();
+// === UTILITY FUNCTIONS ===
+
+function mapModeToTaskType(mode: string): TaskType {
+  const modeToType: Record<string, TaskType> = {
+    'architect': 'analysis',
+    'code': 'coding',
+    'tdd': 'testing',
+    'review': 'review',
+    'debug': 'maintenance',
+    'docs': 'documentation',
+    'security': 'review'
+  };
   
-  try {
-    // Get system components
-    const memoryManager = await getMemoryManager();
-    const persistenceManager = await getPersistenceManager();
-    
-    let result: any = {
-      mode,
-      task,
-      status: 'completed',
-      duration: 0,
-      output: '',
-      memory: null
-    };
+  return modeToType[mode] || 'custom';
+}
 
-    switch (mode) {
-      case 'architect':
-        result = await executeArchitectMode(task, options, memoryManager);
-        break;
-      case 'code':
-        result = await executeCodeMode(task, options, memoryManager);
-        break;
-      case 'tdd':
-        result = await executeTddMode(task, options, memoryManager);
-        break;
-      case 'review':
-        result = await executeReviewMode(task, options, memoryManager);
-        break;
-      case 'debug':
-        result = await executeDebugMode(task, options, memoryManager);
-        break;
-      case 'docs':
-        result = await executeDocsMode(task, options, memoryManager);
-        break;
-      case 'security':
-        result = await executeSecurityMode(task, options, memoryManager);
-        break;
-      default:
-        throw new Error(`Unknown SPARC mode: ${mode}`);
+function mapModeToAgentType(mode: string): AgentType {
+  const modeToAgentType: Record<string, AgentType> = {
+    'architect': 'developer',
+    'code': 'developer',
+    'tdd': 'tester',
+    'review': 'reviewer',
+    'debug': 'developer',
+    'docs': 'documenter',
+    'security': 'reviewer'
+  };
+  
+  return modeToAgentType[mode] || 'developer';
+}
+
+function displayResultsText(result: any, mode: string, task: string, outputDir: string): void {
+  console.log('\n📄 Execution Results:');
+  console.log('─'.repeat(60));
+  
+  if (result.output) {
+    console.log(`Output: ${typeof result.output === 'string' ? result.output : JSON.stringify(result.output)}`);
+  }
+  
+  if (result.metadata) {
+    console.log(`\n📊 Metadata:`);
+    console.log(`  Agent Type: ${result.metadata.agentType}`);
+    console.log(`  Execution Time: ${result.metadata.executionTime}ms`);
+    console.log(`  Quality Score: ${result.quality}`);
+    console.log(`  Completeness: ${result.completeness}`);
+    console.log(`  Accuracy: ${result.accuracy}`);
+    if (result.metadata.sparcPhase) {
+      console.log(`  SPARC Phase: ${result.metadata.sparcPhase}`);
     }
-
-    result.duration = Date.now() - startTime;
-    
-    // Store result in memory
-    if (result.memory) {
-      const memoryEntry = {
-        id: `sparc-${mode}-${Date.now()}`,
-        agentId: 'sparc-system',
-        sessionId: options.namespace || 'sparc',
-        type: 'artifact' as const,
-        content: JSON.stringify(result),
-        context: {
-          mode,
-          task,
-          namespace: options.namespace || 'sparc'
-        },
-        timestamp: new Date(),
-        tags: [mode, 'sparc', 'methodology'],
-        version: 1,
-        metadata: {
-          mode,
-          task,
-          duration: result.duration
-        }
-      };
-      
-      await memoryManager.store(memoryEntry);
+  }
+  
+  if (result.artifacts && Object.keys(result.artifacts).length > 0) {
+    console.log(`\n📁 Generated Artifacts:`);
+    for (const [key, value] of Object.entries(result.artifacts)) {
+      console.log(`  ${key}: ${typeof value === 'string' ? value.substring(0, 100) + '...' : JSON.stringify(value)}`);
     }
+  }
+  
+  console.log(`\n📂 Output Directory: ${outputDir}`);
+}
 
-    return result;
-    
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    throw new Error(`SPARC ${mode} mode failed after ${duration}ms: ${error instanceof Error ? error.message : String(error)}`);
+function displayResultsMarkdown(result: any, mode: string, task: string): void {
+  console.log(`\n# SPARC ${mode.toUpperCase()} Execution Results\n`);
+  console.log(`**Task:** ${task}\n`);
+  console.log(`**Mode:** ${mode}\n`);
+  
+  if (result.output) {
+    console.log(`## Output\n`);
+    console.log(`${typeof result.output === 'string' ? result.output : JSON.stringify(result.output, null, 2)}\n`);
+  }
+  
+  if (result.metadata) {
+    console.log(`## Metadata\n`);
+    console.log(`- **Agent Type:** ${result.metadata.agentType}`);
+    console.log(`- **Execution Time:** ${result.metadata.executionTime}ms`);
+    console.log(`- **Quality Score:** ${result.quality}`);
+    console.log(`- **Completeness:** ${result.completeness}`);
+    console.log(`- **Accuracy:** ${result.accuracy}`);
+    if (result.metadata.sparcPhase) {
+      console.log(`- **SPARC Phase:** ${result.metadata.sparcPhase}`);
+    }
+    console.log();
+  }
+  
+  if (result.artifacts && Object.keys(result.artifacts).length > 0) {
+    console.log(`## Generated Artifacts\n`);
+    for (const [key, value] of Object.entries(result.artifacts)) {
+      console.log(`### ${key}\n`);
+      console.log(`\`\`\`\n${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n\`\`\`\n`);
+    }
   }
 }
 
-// SPARC Mode Implementations
-
-async function executeArchitectMode(task: string, options: any, memoryManager: any): Promise<any> {
-  // Architecture design mode - system design and planning
-  const architecturalComponents = [
-    'System Requirements Analysis',
-    'Component Architecture Design', 
-    'Data Flow Design',
-    'API Interface Design',
-    'Security Architecture',
-    'Scalability Planning'
-  ];
-
-  const output = `🏗️ ARCHITECTURE DESIGN: ${task}
-
-SYSTEM COMPONENTS ANALYSIS:
-${architecturalComponents.map((comp, i) => `${i + 1}. ${comp}`).join('\n')}
-
-ARCHITECTURAL DECISIONS:
-- Microservices architecture recommended
-- Event-driven communication patterns
-- Database per service pattern
-- API Gateway for external access
-- Container-based deployment strategy
-
-TECHNOLOGY STACK RECOMMENDATIONS:
-- Backend: Node.js/TypeScript
-- Database: PostgreSQL + Redis
-- Message Queue: RabbitMQ
-- API: REST + GraphQL
-- Monitoring: Prometheus + Grafana
-
-SECURITY CONSIDERATIONS:
-- OAuth 2.0 + JWT authentication
-- Rate limiting and throttling
-- Input validation and sanitization
-- HTTPS/TLS encryption
-- Regular security audits
-
-SCALABILITY PLAN:
-- Horizontal scaling with load balancers
-- Database sharding strategies
-- Caching layers (Redis, CDN)
-- Auto-scaling based on metrics
-- Performance monitoring and alerting`;
-
-  return {
-    mode: 'architect',
-    task,
-    status: 'completed',
-    output,
-    memory: {
-      key: `architecture_${Date.now()}`,
-      value: { 
-        task, 
-        components: architecturalComponents,
-        decisions: 'microservices-event-driven',
-        timestamp: new Date() 
-      }
-    },
-    artifacts: ['system-design.md', 'architecture-diagram.png', 'api-spec.yaml']
-  };
-}
-
-async function executeCodeMode(task: string, options: any, memoryManager: any): Promise<any> {
-  // Code implementation mode - actual code generation
-  const codeStructure = {
-    files: ['index.ts', 'types.ts', 'utils.ts', 'tests.ts'],
-    patterns: ['dependency-injection', 'factory-pattern', 'observer-pattern'],
-    standards: ['typescript-strict', 'eslint-rules', 'prettier-formatting']
-  };
-
-  const output = `💻 CODE IMPLEMENTATION: ${task}
-
-IMPLEMENTATION PLAN:
-1. Project structure setup
-2. Core interfaces and types
-3. Business logic implementation  
-4. Error handling and validation
-5. Unit tests and integration tests
-6. Documentation and examples
-
-CODE QUALITY STANDARDS:
-- TypeScript strict mode enabled
-- 100% type coverage
-- ESLint + Prettier configuration
-- Comprehensive error handling
-- Input validation on all endpoints
-- Logging and monitoring integration
-
-GENERATED FILES:
-${codeStructure.files.map(file => `- ${file}`).join('\n')}
-
-DESIGN PATTERNS APPLIED:
-${codeStructure.patterns.map(pattern => `- ${pattern}`).join('\n')}
-
-TESTING STRATEGY:
-- Unit tests with Jest
-- Integration tests with Supertest
-- E2E tests with Cypress
-- Performance tests with Artillery
-- Code coverage > 90%`;
-
-  return {
-    mode: 'code',
-    task,
-    status: 'completed',
-    output,
-    memory: {
-      key: `implementation_${Date.now()}`,
-      value: {
-        task,
-        structure: codeStructure,
-        standards: 'typescript-strict',
-        timestamp: new Date()
-      }
-    },
-    artifacts: codeStructure.files
-  };
-}
-
-async function executeTddMode(task: string, options: any, memoryManager: any): Promise<any> {
-  // Test-driven development mode
-  const testStrategy = {
-    types: ['unit', 'integration', 'e2e', 'performance'],
-    frameworks: ['jest', 'supertest', 'cypress', 'artillery'],
-    coverage: '95%'
-  };
-
-  const output = `🧪 TEST-DRIVEN DEVELOPMENT: ${task}
-
-TDD CYCLE IMPLEMENTATION:
-1. Red: Write failing tests first
-2. Green: Write minimal code to pass
-3. Refactor: Improve code while keeping tests green
-
-TEST STRUCTURE:
-- Unit Tests: Individual function/method testing
-- Integration Tests: Component interaction testing  
-- E2E Tests: Full user workflow testing
-- Performance Tests: Load and stress testing
-
-TEST FRAMEWORKS:
-${testStrategy.frameworks.map(fw => `- ${fw}`).join('\n')}
-
-COVERAGE REQUIREMENTS:
-- Line Coverage: ${testStrategy.coverage}
-- Branch Coverage: 90%
-- Function Coverage: 100%
-- Statement Coverage: 95%
-
-TESTING BEST PRACTICES:
-- Arrange-Act-Assert pattern
-- Descriptive test names
-- Independent test cases
-- Mock external dependencies
-- Test edge cases and error conditions
-
-CONTINUOUS TESTING:
-- Pre-commit hooks for test execution
-- CI/CD pipeline integration
-- Automated test reporting
-- Performance regression detection`;
-
-  return {
-    mode: 'tdd',
-    task,
-    status: 'completed',
-    output,
-    memory: {
-      key: `testing_${Date.now()}`,
-      value: {
-        task,
-        strategy: testStrategy,
-        cycle: 'red-green-refactor',
-        timestamp: new Date()
-      }
-    },
-    artifacts: ['test-plan.md', 'unit-tests.spec.ts', 'integration-tests.spec.ts']
-  };
-}
-
-async function executeReviewMode(task: string, options: any, memoryManager: any): Promise<any> {
-  // Code review mode - quality assurance
-  const reviewCriteria = {
-    code_quality: ['readability', 'maintainability', 'performance'],
-    security: ['input-validation', 'authentication', 'authorization'],
-    architecture: ['design-patterns', 'separation-of-concerns', 'scalability']
-  };
-
-  const output = `👁️ CODE REVIEW: ${task}
-
-REVIEW CHECKLIST:
-✅ Code Quality
-  - Readable and well-documented code
-  - Consistent naming conventions
-  - Proper error handling
-  - No code duplication
-  
-✅ Security Review
-  - Input validation implemented
-  - Authentication mechanisms secure
-  - No sensitive data in logs
-  - SQL injection prevention
-  
-✅ Architecture Review
-  - Design patterns properly applied
-  - Separation of concerns maintained
-  - Dependencies properly managed
-  - Scalability considerations addressed
-
-✅ Performance Review
-  - No obvious performance bottlenecks
-  - Efficient algorithms used
-  - Database queries optimized
-  - Memory usage acceptable
-
-RECOMMENDATIONS:
-1. Add comprehensive input validation
-2. Implement proper logging strategy
-3. Consider caching for frequently accessed data
-4. Add monitoring and alerting
-5. Improve error messages for better debugging
-
-APPROVAL STATUS: ✅ APPROVED with minor recommendations`;
-
-  return {
-    mode: 'review',
-    task,
-    status: 'completed',
-    output,
-    memory: {
-      key: `review_${Date.now()}`,
-      value: {
-        task,
-        criteria: reviewCriteria,
-        status: 'approved',
-        timestamp: new Date()
-      }
-    },
-    artifacts: ['review-report.md', 'security-checklist.md']
-  };
-}
-
-async function executeDebugMode(task: string, options: any, memoryManager: any): Promise<any> {
-  // Debugging mode - issue analysis and resolution
-  const debuggingSteps = [
-    'Problem identification and reproduction',
-    'Log analysis and error tracking', 
-    'Code inspection and flow analysis',
-    'Variable state examination',
-    'Root cause analysis',
-    'Solution implementation and testing'
-  ];
-
-  const output = `🐛 DEBUGGING ANALYSIS: ${task}
-
-DEBUGGING METHODOLOGY:
-${debuggingSteps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
-
-DEBUGGING TOOLS:
-- Console logging with structured data
-- Debugger breakpoints and step-through
-- Memory profiling and leak detection
-- Performance profiling and bottleneck analysis
-- Error monitoring and alerting
-- Distributed tracing for microservices
-
-COMMON ISSUES CHECKLIST:
-□ Null/undefined reference errors
-□ Async/await and Promise handling
-□ Memory leaks and resource cleanup
-□ Race conditions and timing issues
-□ Configuration and environment problems
-□ Database connection and query issues
-
-RESOLUTION STRATEGY:
-1. Reproduce the issue consistently
-2. Isolate the problematic component
-3. Add detailed logging and monitoring
-4. Implement fix with proper testing
-5. Verify resolution in all environments
-6. Document the issue and solution
-
-PREVENTION MEASURES:
-- Comprehensive error handling
-- Input validation and sanitization
-- Automated testing and CI/CD
-- Code review and pair programming
-- Monitoring and alerting systems`;
-
-  return {
-    mode: 'debug',
-    task,
-    status: 'completed',
-    output,
-    memory: {
-      key: `debugging_${Date.now()}`,
-      value: {
-        task,
-        steps: debuggingSteps,
-        methodology: 'systematic-analysis',
-        timestamp: new Date()
-      }
-    },
-    artifacts: ['debug-report.md', 'issue-analysis.md']
-  };
-}
-
-async function executeDocsMode(task: string, options: any, memoryManager: any): Promise<any> {
-  // Documentation generation mode
-  const docTypes = [
-    'API Documentation',
-    'User Guide',
-    'Developer Guide', 
-    'Architecture Documentation',
-    'Deployment Guide',
-    'Troubleshooting Guide'
-  ];
-
-  const output = `📚 DOCUMENTATION GENERATION: ${task}
-
-DOCUMENTATION STRATEGY:
-${docTypes.map((type, i) => `${i + 1}. ${type}`).join('\n')}
-
-DOCUMENTATION STANDARDS:
-- Clear and concise language
-- Step-by-step instructions
-- Code examples and snippets
-- Visual diagrams and flowcharts
-- Regular updates and maintenance
-- Version control and change tracking
-
-API DOCUMENTATION:
-- OpenAPI/Swagger specifications
-- Request/response examples
-- Error codes and messages
-- Authentication requirements
-- Rate limiting information
-- SDK and client library examples
-
-USER DOCUMENTATION:
-- Getting started guide
-- Feature tutorials
-- FAQ and troubleshooting
-- Best practices and tips
-- Video tutorials and demos
-- Community resources
-
-DEVELOPER DOCUMENTATION:
-- Setup and installation
-- Architecture overview
-- Coding standards and guidelines
-- Contributing guidelines
-- Testing procedures
-- Deployment instructions
-
-MAINTENANCE PLAN:
-- Automated documentation generation
-- Regular review and updates
-- User feedback integration
-- Performance and accessibility testing
-- Multi-language support consideration`;
-
-  return {
-    mode: 'docs',
-    task,
-    status: 'completed',
-    output,
-    memory: {
-      key: `documentation_${Date.now()}`,
-      value: {
-        task,
-        types: docTypes,
-        standards: 'comprehensive-clear',
-        timestamp: new Date()
-      }
-    },
-    artifacts: ['README.md', 'API-docs.md', 'user-guide.md', 'dev-guide.md']
-  };
-}
-
-async function executeSecurityMode(task: string, options: any, memoryManager: any): Promise<any> {
-  // Security analysis and review mode
-  const securityChecks = {
-    authentication: ['strong-passwords', 'multi-factor-auth', 'session-management'],
-    authorization: ['role-based-access', 'permission-checks', 'privilege-escalation'],
-    data_protection: ['encryption-at-rest', 'encryption-in-transit', 'data-masking'],
-    input_validation: ['sql-injection', 'xss-prevention', 'csrf-protection'],
-    infrastructure: ['secure-configs', 'network-security', 'monitoring']
-  };
-
-  const output = `🛡️ SECURITY ANALYSIS: ${task}
-
-SECURITY ASSESSMENT FRAMEWORK:
-1. Authentication and Identity Management
-2. Authorization and Access Control
-3. Data Protection and Privacy
-4. Input Validation and Sanitization
-5. Infrastructure and Network Security
-6. Monitoring and Incident Response
-
-SECURITY CHECKLIST:
-✅ Authentication Security
-  - Strong password policies
-  - Multi-factor authentication
-  - Secure session management
-  - Account lockout mechanisms
-
-✅ Authorization Controls
-  - Role-based access control (RBAC)
-  - Principle of least privilege
-  - Permission validation
-  - API endpoint protection
-
-✅ Data Protection
-  - Encryption at rest (AES-256)
-  - Encryption in transit (TLS 1.3)
-  - Data masking and anonymization
-  - Secure data disposal
-
-✅ Input Validation
-  - SQL injection prevention
-  - XSS protection measures
-  - CSRF token implementation
-  - File upload validation
-
-VULNERABILITY ASSESSMENT:
-- Automated security scanning
-- Penetration testing
-- Code security analysis
-- Dependency vulnerability checks
-- Configuration security review
-
-COMPLIANCE REQUIREMENTS:
-- GDPR data protection compliance
-- SOC 2 Type II certification
-- PCI DSS for payment processing
-- HIPAA for healthcare data
-- Regular security audits
-
-INCIDENT RESPONSE PLAN:
-1. Detection and analysis
-2. Containment and eradication
-3. Recovery and post-incident analysis
-4. Communication and reporting
-5. Lessons learned and improvements`;
-
-  return {
-    mode: 'security',
-    task,
-    status: 'completed',
-    output,
-    memory: {
-      key: `security_${Date.now()}`,
-      value: {
-        task,
-        checks: securityChecks,
-        framework: 'comprehensive-assessment',
-        timestamp: new Date()
-      }
-    },
-    artifacts: ['security-report.md', 'vulnerability-assessment.md', 'compliance-checklist.md']
-  };
-} 
+export default sparcCommand; 

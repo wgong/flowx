@@ -174,9 +174,9 @@ export async function getPersistenceManager(): Promise<PersistenceManager> {
   throw new Error('PersistenceManager not initialized. Call initializeGlobalServices() first.');
 }
 
-export async function getMemoryManager(): Promise<MemoryManager & MemoryVault> {
+export async function getMemoryManager(): Promise<MemoryVault> {
   if (globalConfig?.memory) {
-    return globalConfig.memory as MemoryManager & MemoryVault;
+    return globalConfig.memory;
   }
   throw new Error('MemoryManager not initialized. Call initializeGlobalServices() first.');
 }
@@ -288,7 +288,7 @@ export async function reinitializeServices(
  * Get initialization status
  */
 export function isServicesInitialized(): boolean {
-  return isInitialized;
+  return isInitialized && !!globalPersistenceManager && !!globalConfig?.memory && !!globalLogger;
 }
 
 /**
@@ -332,4 +332,6 @@ export function getInitializationStatus(): {
       config: !!globalConfig
     }
   };
-} 
+}
+
+ 

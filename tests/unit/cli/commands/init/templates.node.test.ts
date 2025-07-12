@@ -57,7 +57,7 @@ describe('Template Generation', () => {
   
   beforeEach(async () => {
     // Create temporary directory for tests
-    tempDir = path.join(os.tmpdir(), `template-test-${Date.now()}`);
+    tempDir = path.join('src/tests/.tmp', `template-test-${Date.now()}`);
     await fs.mkdir(tempDir, { recursive: true });
   });
   

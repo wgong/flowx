@@ -5,6 +5,8 @@
 import { ProcessManager } from "./process-manager.ts";
 import { ILogger } from "../../../core/logger.ts";
 import { logger } from "../../../core/logger.ts";
+import * as readline from 'readline';
+import type { CLICommand, CLIContext } from '../../interfaces/index.ts';
 
 export class ProcessUI {
   private processManager: ProcessManager;
@@ -31,7 +33,6 @@ export class ProcessUI {
     console.log('─'.repeat(40));
 
     // Simple command loop
-    const readline = require('readline');
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,

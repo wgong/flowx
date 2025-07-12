@@ -6,7 +6,7 @@
 
 import { EventEmitter } from 'node:events';
 import { spawn, ChildProcess } from 'node:child_process';
-import { writeFile, readFile, mkdir, access } from 'node:fs/promises';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ILogger } from '../core/logger.ts';
 
@@ -32,7 +32,7 @@ export interface ClaudeRequest {
   }>;
   tools?: string[];
   systemPrompt?: string;
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
   outputFormat?: 'text' | 'json' | 'markdown';
 }
 
@@ -70,8 +70,8 @@ export class ClaudeApiClient extends EventEmitter {
     id: string;
     request: ClaudeRequest;
     options: TaskExecutionOptions;
-    resolve: Function;
-    reject: Function;
+    resolve: (value: ClaudeResponse | PromiseLike<ClaudeResponse>) => void;
+    reject: (reason?: Error) => void;
   }> = [];
   private isProcessing = false;
 
@@ -175,7 +175,7 @@ Please implement this requirement completely.
   /**
    * Check if Claude CLI is available
    */
-  async healthCheck(): Promise<{ healthy: boolean; details: any }> {
+  async healthCheck(): Promise<{ healthy: boolean; details: Record<string, unknown> }> {
     try {
       const result = await this.runClaudeCommand(['--version'], { timeout: 5000 });
       return {
@@ -261,7 +261,9 @@ Please implement this requirement completely.
   }
 
   private async processRequestQueue(): Promise<void> {
-    if (this.isProcessing || this.requestQueue.length === 0) return;
+    if (this.isProcessing || this.requestQueue.length === 0) {
+      return;
+    }
 
     this.isProcessing = true;
     const queued = this.requestQueue.shift()!;
@@ -270,7 +272,9 @@ Please implement this requirement completely.
       const result = await this.executeClaudeTask(queued.request, queued.options, queued.id);
       queued.resolve(result);
     } catch (error) {
-      queued.reject(error);
+      // Fix: Ensure error is typed as Error
+      const errorToReject = error instanceof Error ? error : new Error(String(error));
+      queued.reject(errorToReject);
     } finally {
       this.isProcessing = false;
     }
@@ -318,7 +322,8 @@ Please implement this requirement completely.
 
       // Check for created/modified files
       if (options.allowFileOperations !== false) {
-        response.files = await this.detectFileChanges(workDir);
+        // Fix: Remove workDir parameter from detectFileChanges call
+        response.files = await this.detectFileChanges();
       }
 
       this.logger.info('Claude CLI task completed', {
@@ -465,7 +470,7 @@ Please implement this requirement completely.
     }
   }
 
-  private async detectFileChanges(workDir: string): Promise<Array<{ path: string; content: string; operation: string }>> {
+  private async detectFileChanges(): Promise<Array<{ path: string; content: string; operation: string }>> {
     // This is a simplified implementation
     // In a full implementation, we'd track file changes more comprehensively
     const files: Array<{ path: string; content: string; operation: string }> = [];
@@ -493,7 +498,7 @@ Please implement this requirement completely.
   }
 
   private generateRequestId(): string {
-    return `claude-cli-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return `claude-api-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   }
 }
 
@@ -514,4 +519,4 @@ export function createClaudeClient(logger: ILogger, config?: ClaudeCliConfig): C
   return new ClaudeApiClient(defaultConfig, logger);
 }
 
-export default ClaudeApiClient; 
+export default ClaudeApiClient;

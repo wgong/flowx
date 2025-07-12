@@ -860,10 +860,18 @@ function configToYaml(config: any): string {
   return toYaml(config);
 }
 
-function yamlToConfig(yamlContent: string): any {
-  // Simple YAML parsing (in a real implementation, use a proper YAML library)
-  // For now, just throw an error suggesting JSON format
-  throw new Error('YAML import not yet implemented. Please use JSON format.');
+async function yamlToConfig(yamlContent: string): Promise<any> {
+  // YAML parsing using js-yaml
+  try {
+    // @ts-ignore - Dynamic import for optional YAML support
+    const yaml = await import('js-yaml');
+    return yaml.load(yamlContent);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Cannot resolve module')) {
+      throw new Error('YAML support requires js-yaml package. Please install it or use JSON format.');
+    }
+    throw new Error(`Failed to parse YAML: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 // Profile management functions
@@ -957,26 +965,96 @@ async function switchProfile(profileName: string, options: any): Promise<void> {
 // Interactive prompts
 
 async function confirmPrompt(message: string, defaultValue: boolean): Promise<boolean> {
-  // Mock implementation - in real scenario would use inquirer or similar
-  return defaultValue;
+  try {
+    const inquirer = await import('inquirer');
+    const { confirmed } = await inquirer.default.prompt([{
+      type: 'confirm',
+      name: 'confirmed',
+      message,
+      default: defaultValue
+    }]);
+    return confirmed;
+  } catch (error) {
+    // Fallback if inquirer is not available
+    printWarning('Interactive prompts not available, using default value');
+    return defaultValue;
+  }
 }
 
 async function promptChoice(message: string, choices: string[], defaultValue: string): Promise<string> {
-  // Mock implementation - in real scenario would use inquirer
-  return defaultValue;
+  try {
+    const inquirer = await import('inquirer');
+    const { choice } = await inquirer.default.prompt([{
+      type: 'list',
+      name: 'choice',
+      message,
+      choices,
+      default: defaultValue
+    }]);
+    return choice;
+  } catch (error) {
+    // Fallback if inquirer is not available
+    printWarning('Interactive prompts not available, using default value');
+    return defaultValue;
+  }
 }
 
 async function promptNumber(message: string, defaultValue: number, min?: number, max?: number): Promise<number> {
-  // Mock implementation - in real scenario would use inquirer
-  return defaultValue;
+  try {
+    const inquirer = await import('inquirer');
+    const { number } = await inquirer.default.prompt([{
+      type: 'number',
+      name: 'number',
+      message,
+      default: defaultValue,
+      validate: (input: number) => {
+        if (min !== undefined && input < min) {
+          return `Value must be at least ${min}`;
+        }
+        if (max !== undefined && input > max) {
+          return `Value must be at most ${max}`;
+        }
+        return true;
+      }
+    }]);
+    return number;
+  } catch (error) {
+    // Fallback if inquirer is not available
+    printWarning('Interactive prompts not available, using default value');
+    return defaultValue;
+  }
 }
 
 async function promptString(message: string, defaultValue: string): Promise<string> {
-  // Mock implementation - in real scenario would use inquirer
-  return defaultValue;
+  try {
+    const inquirer = await import('inquirer');
+    const { text } = await inquirer.default.prompt([{
+      type: 'input',
+      name: 'text',
+      message,
+      default: defaultValue
+    }]);
+    return text;
+  } catch (error) {
+    // Fallback if inquirer is not available
+    printWarning('Interactive prompts not available, using default value');
+    return defaultValue;
+  }
 }
 
 async function promptBoolean(message: string, defaultValue: boolean): Promise<boolean> {
-  // Mock implementation - in real scenario would use inquirer
-  return defaultValue;
+  try {
+    const inquirer = await import('inquirer');
+    const { value } = await inquirer.default.prompt([{
+      type: 'confirm',
+      name: 'value',
+      message,
+      default: defaultValue
+    }]);
+    return value;
+  } catch (error) {
+    // Fallback if inquirer is not available
+    printWarning('Interactive prompts not available, using default value');
+    return defaultValue;
+  }
 } 

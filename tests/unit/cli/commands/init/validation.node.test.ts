@@ -80,7 +80,7 @@ describe('Validation Functions', () => {
   
   beforeEach(async () => {
     // Create temporary directory for tests
-    tempDir = path.join(os.tmpdir(), `validation-test-${Date.now()}`);
+    tempDir = path.join('src/tests/.tmp', `validation-test-${Date.now()}`);
     await fs.mkdir(tempDir, { recursive: true });
   });
   

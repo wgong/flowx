@@ -25,7 +25,7 @@ describe('Swarm System Integration Tests', () => {
 
   beforeEach(async () => {
     // Create temporary directory for test isolation
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'swarm-integration-test-'));
+    tempDir = await fs.mkdtemp(path.join('src/tests/.tmp', 'swarm-integration-test-'));
     
     // Setup test logger
     logger = new Logger({

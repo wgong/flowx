@@ -27,7 +27,7 @@ describe('Memory Backends - Comprehensive Tests', () => {
   let fakeTime: FakeTime;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'memory-test-'));
+    tempDir = await fs.mkdtemp(path.join('src/tests/.tmp', 'memory-test-'));
     fakeTime = new FakeTime();
   });
 

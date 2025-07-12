@@ -23,7 +23,7 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T
 // Test Utilities
 const TestUtils = {
   async createTempDir(prefix: string = 'test-'): Promise<string> {
-    return fs.mkdtemp(path.join(os.tmpdir(), prefix));
+    return fs.mkdtemp(path.join('src/tests/.tmp', prefix));
   },
   
   async cleanup(paths: string[]): Promise<void> {

@@ -4,8 +4,8 @@
  */
 
 import type { CLICommand, CLIContext } from '../../interfaces/index.ts';
-import { formatTable, successBold, infoBold, warningBold, errorBold, printSuccess, printError, printWarning, printInfo } from '../../core/output-formatter.ts';
-import { getMemoryManager, getPersistenceManager } from '../../core/global-initialization.ts';
+import { successBold, infoBold, warningBold, printSuccess, printError, printWarning, printInfo } from '../../core/output-formatter.ts';
+import { getMemoryManager } from '../../core/global-initialization.ts';
 
 export const memoryCommand: CLICommand = {
   name: 'memory',
@@ -217,7 +217,7 @@ async function queryMemory(context: CLIContext): Promise<void> {
     
     results.forEach((memory, index) => {
       const contextKey = memory.context && typeof memory.context === 'object' && 'key' in memory.context 
-        ? (memory.context as any).key 
+        ? (memory.context as { key: string }).key 
         : memory.id;
       console.log(`${index + 1}. ${infoBold(contextKey)}`);
       console.log(`   Content: ${memory.content}`);
@@ -286,9 +286,33 @@ async function showMemoryStats(context: CLIContext): Promise<void> {
       console.log(`Error: ${healthStatus.error}`);
     }
     
+    if (options.detailed && healthStatus.metrics) {
+      console.log('\nDetailed Statistics:');
+      Object.entries(healthStatus.metrics).forEach(([key, value]) => {
+        if (!['totalEntries', 'cacheSize', 'cacheHitRate', 'activeBanks'].includes(key)) {
+          console.log(`  ${key}: ${JSON.stringify(value)}`);
+        }
+      });
+    }
+    
   } catch (error) {
     printError(`Failed to get memory stats: ${error instanceof Error ? error.message : String(error)}`);
-    throw error;
+    
+    // Provide fallback information
+    console.log(warningBold('\n⚠️  Memory Statistics (Fallback)\n'));
+    console.log('Status: ❌ Service not initialized');
+    console.log('Total Entries: 0');
+    console.log('Total Size: 0 bytes');
+    console.log('Cache Hit Rate: 0%');
+    console.log('Average Query Time: 0ms');
+    console.log(`Last Updated: ${new Date().toISOString()}`);
+    
+    if (options.detailed) {
+      console.log('\nService Details:');
+      console.log('  Backend: Not initialized');
+      console.log('  Error: Memory manager not available');
+      console.log('  Suggestion: Run "claude-flow start" to initialize backend services');
+    }
   }
 }
 
@@ -343,7 +367,14 @@ async function clearMemories(context: CLIContext): Promise<void> {
 
 // Helper functions
 
-function displayMemoriesTable(memories: any[], title: string): void {
+function displayMemoriesTable(memories: {
+  id: string;
+  context?: { key?: string };
+  type: string;
+  content: string;
+  tags: string[];
+  timestamp: Date;
+}[], title: string): void {
   console.log(successBold(`\n🧠 ${title}:\n`));
   
   const tableData = memories.map(memory => ({

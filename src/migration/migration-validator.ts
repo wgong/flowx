@@ -4,9 +4,9 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { ValidationResult, ValidationCheck } from './types.ts';
-import { logger } from './logger.ts';
-import { colors } from '../utils/colors.ts';
+import { ValidationResult, ValidationCheck } from './types.js';
+import { logger } from './logger.js';
+import { colors } from '../utils/colors.js';
 import globPkg from 'glob';
 const { glob } = globPkg;
 

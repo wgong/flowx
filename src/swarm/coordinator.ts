@@ -645,7 +645,22 @@ export class SwarmCoordinator extends EventEmitter implements SwarmEventEmitter 
         type: task.type,
         description: task.description,
         instructions: task.instructions || task.description,
-        requirements: task.requirements,
+        // Convert TaskRequirements to Record<string, unknown>
+        requirements: {
+          capabilities: task.requirements.capabilities,
+          tools: task.requirements.tools,
+          permissions: task.requirements.permissions,
+          estimatedDuration: task.requirements.estimatedDuration,
+          maxDuration: task.requirements.maxDuration,
+          memoryRequired: task.requirements.memoryRequired,
+          cpuRequired: task.requirements.cpuRequired,
+          environment: task.requirements.environment,
+          reviewRequired: task.requirements.reviewRequired,
+          testingRequired: task.requirements.testingRequired,
+          documentationRequired: task.requirements.documentationRequired,
+          agentType: task.requirements.agentType,
+          minReliability: task.requirements.minReliability
+        } as Record<string, unknown>,
         agent: {
           instructions: task.instructions || this.generateTaskInstructions(task),
           constraints: task.constraints,

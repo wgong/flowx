@@ -208,7 +208,7 @@ export async function createTestFile(
   const nodePath = require('path');
   
   // Use node's temp directory
-  const tempDir = await fs.mkdtemp(`${os.tmpdir()}${nodePath.sep}`);
+  const tempDir = await fs.mkdtemp(`src/tests/.tmp${nodePath.sep}`);
   const filePath = nodePath.join(tempDir, path);
   const dir = filePath.substring(0, filePath.lastIndexOf(nodePath.sep));
   

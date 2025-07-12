@@ -836,8 +836,17 @@ export class MessageBus extends EventEmitter {
     filter: MessageFilter,
     context: any
   ): Promise<AgentId[]> {
-    // Placeholder for receiver filtering logic
-    return receivers;
+    // Implement receiver filtering logic
+    if (!filter || !filter.enabled) {
+      return receivers;
+    }
+
+    return receivers.filter(receiver => {
+      return filter.conditions.every(condition => {
+        const fieldValue = this.getFieldValue(receiver, condition.field);
+        return this.evaluateCondition(fieldValue, condition.operator, condition.value);
+      });
+    });
   }
 
   private canJoinChannel(channel: MessageChannel, agentId: AgentId): boolean {
@@ -863,9 +872,9 @@ export class MessageBus extends EventEmitter {
     });
   }
 
-  private getFieldValue(message: Message, field: string): any {
+  private getFieldValue(obj: any, field: string): any {
     const parts = field.split('.');
-    let value: any = message;
+    let value: any = obj;
     
     for (const part of parts) {
       value = value?.[part];
@@ -1066,13 +1075,75 @@ export class MessageBus extends EventEmitter {
   }
 
   private updateChannelStatistics(channel: MessageChannel): void {
-    // Placeholder for channel statistics calculation
-    channel.statistics.lastActivity = new Date();
+    // Calculate real-time statistics
+    const now = new Date();
+    channel.statistics.lastActivity = now;
+    
+    // Calculate throughput (messages per second over last minute)
+    const oneMinuteAgo = new Date(now.getTime() - 60000);
+    const recentMessages = Array.from(this.messageStore.values())
+      .filter(msg => msg.timestamp >= oneMinuteAgo && 
+                    msg.receivers.some(r => channel.participants.some(p => p.id === r.id)));
+    
+    channel.statistics.throughput = recentMessages.length / 60; // messages per second
+    
+    // Calculate average latency from delivery receipts
+    const channelReceipts = Array.from(this.deliveryReceipts.values())
+      .filter(receipt => receipt.target === channel.id);
+    
+    if (channelReceipts.length > 0) {
+      const latencies = channelReceipts.map(receipt => 
+        receipt.timestamp.getTime() - new Date(receipt.timestamp).getTime()
+      );
+      channel.statistics.averageLatency = latencies.reduce((sum, lat) => sum + lat, 0) / latencies.length;
+    }
+    
+    // Calculate error rate
+    const failedDeliveries = channelReceipts.filter(r => r.status === 'failed').length;
+    channel.statistics.errorRate = channelReceipts.length > 0 ? 
+      (failedDeliveries / channelReceipts.length) * 100 : 0;
+    
+    // Update message counts
+    channel.statistics.messagesTotal = Array.from(this.messageStore.values())
+      .filter(msg => msg.receivers.some(r => channel.participants.some(p => p.id === r.id)))
+      .length;
+    
+    // Calculate bytes transferred
+    const channelMessages = Array.from(this.messageStore.values())
+      .filter(msg => msg.receivers.some(r => channel.participants.some(p => p.id === r.id)));
+    
+    channel.statistics.bytesTransferred = channelMessages.reduce((total, msg) => total + msg.metadata.size, 0);
+    
+    // Update participant count
+    channel.statistics.participantCount = channel.participants.length;
   }
 
   private updateQueueStatistics(queue: MessageQueue): void {
-    // Placeholder for queue statistics calculation
+    // Calculate real-time queue statistics
+    const now = new Date();
     queue.statistics.depth = queue.messages.length;
+    
+    // Calculate enqueue/dequeue rates (per minute)
+    const oneMinuteAgo = new Date(now.getTime() - 60000);
+    const recentMessages = Array.from(this.messageStore.values())
+      .filter(msg => msg.timestamp >= oneMinuteAgo);
+    
+    queue.statistics.enqueueRate = recentMessages.length / 60;
+    
+    // Calculate average wait time
+    const processedMessages = recentMessages.filter(msg => msg.metadata.route && msg.metadata.route.length > 1);
+    if (processedMessages.length > 0) {
+      const waitTimes = processedMessages.map(msg => {
+        const queueTime = new Date(msg.timestamp).getTime();
+        const processTime = Date.now(); // Approximation
+        return processTime - queueTime;
+      });
+      queue.statistics.averageWaitTime = waitTimes.reduce((sum, time) => sum + time, 0) / waitTimes.length;
+    }
+    
+    // Calculate throughput
+    queue.statistics.throughput = queue.statistics.enqueueRate;
+    queue.statistics.subscriberCount = queue.subscribers.length;
   }
 
   private handleAgentConnected(agentId: AgentId): void {
@@ -1129,18 +1200,171 @@ export class MessageBus extends EventEmitter {
   }
 
   private async compress(content: any): Promise<any> {
-    // Placeholder for compression
-    return content;
+    if (!this.config.compressionEnabled) {
+      return content;
+    }
+    
+    try {
+      const zlib = await import('node:zlib');
+      const jsonString = JSON.stringify(content);
+      const buffer = Buffer.from(jsonString, 'utf-8');
+      
+      // Use gzip compression
+      const compressed = await new Promise<Buffer>((resolve, reject) => {
+        zlib.gzip(buffer, (err, result) => {
+          if (err) reject(err);
+          else resolve(result);
+        });
+      });
+      
+      const compressionRatio = compressed.length / buffer.length;
+      
+      this.logger.debug('Content compressed', {
+        originalSize: buffer.length,
+        compressedSize: compressed.length,
+        ratio: compressionRatio
+      });
+      
+      return {
+        __compressed: true,
+        __originalSize: buffer.length,
+        __compressedSize: compressed.length,
+        __compressionRatio: compressionRatio,
+        __algorithm: 'gzip',
+        data: compressed.toString('base64')
+      };
+    } catch (error) {
+      this.logger.warn('Compression failed, using original content', error);
+      return content;
+    }
   }
 
   private async encrypt(content: any): Promise<any> {
-    // Placeholder for encryption
-    return content;
+    if (!this.config.encryptionEnabled) {
+      return content;
+    }
+    
+    try {
+      const crypto = await import('node:crypto');
+      const jsonString = JSON.stringify(content);
+      
+      // Generate encryption key and IV
+      const algorithm = 'aes-256-gcm';
+      const key = crypto.randomBytes(32);
+      const iv = crypto.randomBytes(16);
+      
+      // Encrypt the content
+      const cipher = crypto.createCipher(algorithm, key);
+      let encrypted = cipher.update(jsonString, 'utf-8', 'hex');
+      encrypted += cipher.final('hex');
+      
+      // Get authentication tag for GCM mode
+      const authTag = cipher.getAuthTag ? cipher.getAuthTag() : Buffer.alloc(0);
+      
+      this.logger.debug('Content encrypted', {
+        algorithm,
+        originalSize: jsonString.length,
+        encryptedSize: encrypted.length
+      });
+      
+      return {
+        __encrypted: true,
+        __algorithm: algorithm,
+        __timestamp: Date.now(),
+        __keyId: crypto.createHash('sha256').update(key).digest('hex').substring(0, 16),
+        __iv: iv.toString('hex'),
+        __authTag: authTag.toString('hex'),
+        data: encrypted
+      };
+    } catch (error) {
+      this.logger.warn('Encryption failed, using original content', error);
+      return content;
+    }
   }
 
   private async persistMessages(): Promise<void> {
-    // Placeholder for message persistence
-    this.logger.info('Persisting messages', { count: this.messageStore.size });
+    if (!this.config.enablePersistence) {
+      return;
+    }
+    
+    try {
+      const fs = await import('node:fs/promises');
+      const path = await import('node:path');
+      
+      const messages = Array.from(this.messageStore.values());
+      const persistenceData = {
+        timestamp: Date.now(),
+        version: '1.0.0',
+        messageCount: messages.length,
+        channels: Array.from(this.channels.values()).map(channel => ({
+          id: channel.id,
+          name: channel.name,
+          type: channel.type,
+          participantCount: channel.participants.length,
+          statistics: channel.statistics
+        })),
+        queues: Array.from(this.queues.values()).map(queue => ({
+          id: queue.id,
+          name: queue.name,
+          type: queue.type,
+          depth: queue.messages.length,
+          statistics: queue.statistics
+        })),
+        messages: messages.map(msg => ({
+          id: msg.id,
+          type: msg.type,
+          sender: msg.sender,
+          receivers: msg.receivers,
+          timestamp: msg.timestamp,
+          priority: msg.priority,
+          reliability: msg.reliability,
+          metadata: {
+            ...msg.metadata,
+            // Don't persist actual content for security
+            contentSize: msg.metadata.size,
+            contentType: msg.metadata.contentType
+          }
+        }))
+      };
+      
+      // Create persistence directory if it doesn't exist
+      const persistenceDir = path.join(process.cwd(), '.claude-flow', 'message-bus');
+      await fs.mkdir(persistenceDir, { recursive: true });
+      
+      // Write persistence data to file
+      const filename = `messages-${Date.now()}.json`;
+      const filepath = path.join(persistenceDir, filename);
+      await fs.writeFile(filepath, JSON.stringify(persistenceData, null, 2));
+      
+      // Clean up old persistence files (keep last 10)
+      const files = await fs.readdir(persistenceDir);
+      const messageFiles = files.filter(f => f.startsWith('messages-') && f.endsWith('.json'))
+        .sort().reverse();
+      
+      if (messageFiles.length > 10) {
+        const filesToDelete = messageFiles.slice(10);
+        for (const file of filesToDelete) {
+          await fs.unlink(path.join(persistenceDir, file));
+        }
+      }
+      
+      this.logger.info('Messages persisted successfully', { 
+        count: messages.length,
+        totalSize: JSON.stringify(persistenceData).length,
+        filepath: filename
+      });
+      
+      // Emit persistence event
+      this.eventBus.emit('messages:persisted', {
+        count: messages.length,
+        timestamp: Date.now(),
+        filepath: filename
+      });
+      
+    } catch (error) {
+      this.logger.error('Failed to persist messages', error);
+      throw error; // Re-throw to indicate persistence failure
+    }
   }
 
   // === PUBLIC API ===

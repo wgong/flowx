@@ -5,9 +5,9 @@
 import * as fs from 'fs-extra';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
-import { MigrationBackup, BackupFile } from './types.ts';
-import { logger } from './logger.ts';
-import * as chalk from 'chalk';
+import { MigrationBackup, BackupFile } from './types.js';
+import { logger } from './logger.js';
+import chalk from 'chalk';
 import inquirer from 'inquirer';
 
 // Helper function to check if path exists

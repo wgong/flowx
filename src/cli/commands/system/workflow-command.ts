@@ -12,6 +12,12 @@ import * as path from 'path';
 import { TaskEngine, WorkflowTask, Workflow as TaskWorkflow } from '../../../task/engine.ts';
 import { SwarmCoordinator } from '../../../swarm/coordinator.ts';
 
+// Dynamic import for YAML support
+type YAMLModule = {
+  load: (content: string) => any;
+  dump: (obj: any) => string;
+};
+
 interface WorkflowStep {
   id: string;
   name: string;
@@ -278,8 +284,17 @@ async function createWorkflow(context: CLIContext): Promise<void> {
       if (options.file.endsWith('.json')) {
         workflowDef = JSON.parse(content);
       } else if (options.file.endsWith('.yml') || options.file.endsWith('.yaml')) {
-        // Simple YAML parsing - in production use proper YAML parser
-        throw new Error('YAML support not implemented. Please use JSON format.');
+        // YAML parsing using js-yaml
+        try {
+          // @ts-ignore - Dynamic import for optional YAML support
+          const yaml = await import('js-yaml');
+          workflowDef = yaml.load(content);
+        } catch (error) {
+          if (error instanceof Error && error.message.includes('Cannot resolve module')) {
+            throw new Error('YAML support requires js-yaml package. Please install it or use JSON format.');
+          }
+          throw new Error(`Failed to parse YAML file: ${error instanceof Error ? error.message : String(error)}`);
+        }
       }
     }
 

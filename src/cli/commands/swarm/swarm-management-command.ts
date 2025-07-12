@@ -7,13 +7,10 @@ import type { CLICommand, CLIContext } from '../../interfaces/index.ts';
 import { formatTable, successBold, infoBold, warningBold, errorBold, printSuccess, printError, printWarning, printInfo } from '../../core/output-formatter.ts';
 import { SwarmCoordinator } from '../../../swarm/coordinator.ts';
 import { generateId } from '../../../utils/helpers.ts';
-import SwarmDemoCommand from './swarm-demo-command.ts';
+import { SwarmStrategy } from '../../../swarm/types.ts';
 
 // Global swarm coordinators registry
 const activeSwarms = new Map<string, SwarmCoordinator>();
-
-// Create instance of SwarmDemoCommand
-const swarmDemoCommand = new SwarmDemoCommand();
 
 export const swarmCommand: CLICommand = {
   name: 'swarm',
@@ -26,8 +23,7 @@ export const swarmCommand: CLICommand = {
     'claude-flow swarm status swarm-001',
     'claude-flow swarm scale swarm-001 --agents 10',
     'claude-flow swarm start swarm-001',
-    'claude-flow swarm stop swarm-001',
-    'claude-flow swarm demo hello-world --agents 10'
+    'claude-flow swarm stop swarm-001'
   ],
   subcommands: [
     {
@@ -196,12 +192,6 @@ export const swarmCommand: CLICommand = {
           type: 'boolean'
         }
       ]
-    },
-    {
-      name: 'demo',
-      description: 'Run comprehensive swarm demonstrations',
-      handler: async (context: CLIContext) => await swarmDemoCommand.handler(context),
-      subcommands: swarmDemoCommand.subcommands
     }
   ],
   handler: async (context: CLIContext) => {
@@ -235,8 +225,8 @@ async function createSwarm(context: CLIContext): Promise<void> {
         faultTolerance: 'retry',
         communication: 'direct'
       },
-      mode: coordinatorType as any,
-      strategy: strategy as any
+      mode: coordinatorType as 'hierarchical' | 'mesh' | 'centralized',
+      strategy: strategy as SwarmStrategy
     });
     
     // Start the coordinator
@@ -288,8 +278,6 @@ async function listSwarms(context: CLIContext): Promise<void> {
     // Get all active swarms
     for (const [swarmId, coordinator] of activeSwarms) {
       const status = coordinator.getSwarmStatus();
-      const agents = coordinator.getAgents();
-      const tasks = coordinator.getTasks();
       
       swarms.push({
         id: swarmId,
@@ -409,7 +397,7 @@ async function showSwarmStatus(context: CLIContext): Promise<void> {
     }
     
     // Active tasks
-    const activeTasks = tasks.filter((t: any) => t.status === 'running' || t.status === 'pending');
+    const activeTasks = tasks.filter((t: { status: string; }) => t.status === 'running' || t.status === 'pending');
     if (activeTasks.length > 0) {
       console.log(infoBold('🔄 Active Tasks:'));
       const taskTable = formatTable(activeTasks, [
@@ -494,7 +482,7 @@ async function scaleSwarm(context: CLIContext): Promise<void> {
       // Scale up - add agents
       const toAdd = targetAgents - currentCount;
       for (let i = 0; i < toAdd; i++) {
-        const agentType = ['researcher', 'developer', 'analyzer'][i % 3] as any;
+        const agentType = ['researcher', 'developer', 'analyzer'][i % 3] as 'researcher' | 'developer' | 'analyzer';
         await coordinator.registerAgent(
           `scaled-agent-${currentCount + i + 1}`,
           agentType,

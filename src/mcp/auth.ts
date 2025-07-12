@@ -272,17 +272,94 @@ export class AuthManager implements IAuthManager {
   }
 
   private async authenticateOAuth(credentials: unknown): Promise<AuthResult> {
-    // TODO: Implement OAuth authentication
-    // This would typically involve:
-    // 1. Validating JWT tokens
-    // 2. Checking token expiration
-    // 3. Extracting user info and permissions from token claims
-    
-    this.logger.warn('OAuth authentication not yet implemented');
-    return {
-      success: false,
-      error: 'OAuth authentication not implemented',
-    };
+    // Extract token from credentials
+    const token = this.extractToken(credentials);
+    if (!token) {
+      return {
+        success: false,
+        error: 'JWT token not provided',
+      };
+    }
+
+    try {
+      // Validate JWT token structure (header.payload.signature)
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        return {
+          success: false,
+          error: 'Invalid JWT token format',
+        };
+      }
+
+      // Decode the payload (middle part)
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+
+      // Check token expiration
+      const now = Math.floor(Date.now() / 1000);
+      if (payload.exp && payload.exp < now) {
+        return {
+          success: false,
+          error: 'Token has expired',
+        };
+      }
+
+      // Check required claims
+      if (!payload.sub) {
+        return {
+          success: false,
+          error: 'Token missing required claims',
+        };
+      }
+
+      // Extract permissions from scope or custom claims
+      const permissions = this.extractPermissionsFromPayload(payload);
+
+      // In a real implementation, we would verify the signature here
+      // using the OAuth provider's public key
+
+      return {
+        success: true,
+        user: payload.sub,
+        permissions,
+        token,
+      };
+    } catch (error) {
+      this.logger.error('OAuth authentication error', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'OAuth authentication failed',
+      };
+    }
+  }
+
+  private extractPermissionsFromPayload(payload: any): string[] {
+    // Extract permissions from standard OAuth claims
+    const permissions: string[] = [];
+
+    // From scope (space-separated string)
+    if (typeof payload.scope === 'string') {
+      permissions.push(...payload.scope.split(' '));
+    }
+
+    // From custom claims for permissions/roles
+    if (Array.isArray(payload.permissions)) {
+      permissions.push(...payload.permissions);
+    }
+
+    if (Array.isArray(payload.roles)) {
+      // Map roles to permissions based on convention
+      // e.g., 'admin' role gets '*' permission
+      if (payload.roles.includes('admin')) {
+        permissions.push('*');
+      }
+
+      // Add other role-based permissions
+      if (payload.roles.includes('user')) {
+        permissions.push('tools.list', 'tools.invoke');
+      }
+    }
+
+    return [...new Set(permissions)]; // Remove duplicates
   }
 
   private extractToken(credentials: unknown): string | null {

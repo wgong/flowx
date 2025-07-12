@@ -81,15 +81,15 @@ import {
   ValidationResult,
   MigrationProgress,
   MigrationManifest
-} from './types.ts';
-import { MigrationAnalyzer } from './migration-analyzer.ts';
-import { logger } from './logger.ts';
-import { ProgressReporter } from './progress-reporter.ts';
-import { MigrationValidator } from './migration-validator.ts';
+} from './types.js';
+import { MigrationAnalyzer } from './migration-analyzer.js';
+import { logger } from './logger.js';
+import { ProgressReporter } from './progress-reporter.js';
+import { MigrationValidator } from './migration-validator.js';
 import globPkg from 'glob';
 const { glob } = globPkg;
 import * as inquirer from 'inquirer';
-import { colors } from '../utils/colors.ts';
+import { colors } from '../utils/colors.js';
 
 export class MigrationRunner {
   private options: MigrationOptions;

@@ -13,7 +13,7 @@ describe('ConfigManager', () => {
 
   beforeEach(async () => {
     // Setup temporary directory for test configuration files
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'config-test-'));
+    tempDir = await fs.mkdtemp(path.join('src/tests/.tmp', 'config-test-'));
     configPath = path.join(tempDir, 'config.json');
     
     // Reset the configManager before each test

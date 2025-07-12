@@ -86,25 +86,53 @@ export function createSwarmTools(logger: ILogger): MCPTool[] {
       handler: async (input: any, context?: SwarmToolContext) => {
         const swarmId = process.env.CLAUDE_SWARM_ID || 'default-swarm';
         
-        // Legacy functionality - would integrate with swarm state system
-        const mockState = {
-          swarmId,
-          objective: 'Legacy swarm status',
-          startTime: Date.now() - 60000, // Started 1 minute ago
-          agents: []
-        };
+        // Use real SwarmCoordinator if available, otherwise provide legacy compatibility
+        if (context?.swarmCoordinator) {
+          try {
+            const status = await context.swarmCoordinator.getSwarmStatus();
+            const agents = context.agentManager ? await context.agentManager.getAllAgents() : [];
+            
+            return {
+              swarmId: status.swarmId || swarmId,
+              objective: status.objective || 'No active objective',
+              runtime: status.runtime || '0s',
+              totalAgents: agents.length,
+              activeAgents: agents.filter((a: any) => a.status === 'active').length,
+              completedAgents: agents.filter((a: any) => a.status === 'completed').length,
+              failedAgents: agents.filter((a: any) => a.status === 'failed').length,
+              agents: agents.map((a: any) => ({
+                id: a.id,
+                name: a.name,
+                type: a.type,
+                status: a.status,
+                progress: a.progress || 0
+              }))
+            };
+          } catch (error) {
+            logger.warn('Failed to get real swarm status, using fallback', error);
+          }
+        }
         
-        const runtime = Math.floor((Date.now() - mockState.startTime) / 1000);
+        // Fallback for legacy compatibility
+        const agents = context?.agentManager ? await context.agentManager.getAllAgents() : [];
+        const startTime = Date.now() - 60000; // Started 1 minute ago
+        const runtime = Math.floor((Date.now() - startTime) / 1000);
         
         return {
-          swarmId: mockState.swarmId,
-          objective: mockState.objective,
+          swarmId,
+          objective: 'Legacy swarm status',
           runtime: `${runtime}s`,
-          totalAgents: mockState.agents.length,
+          totalAgents: agents.length,
           activeAgents: 0,
           completedAgents: 0,
           failedAgents: 0,
-          agents: mockState.agents,
+          agents: agents.map((a: any) => ({
+            id: a.id,
+            name: a.name,
+            type: a.type,
+            status: a.status || 'offline',
+            progress: 0
+          }))
         };
       }
     },
@@ -781,25 +809,23 @@ export async function handleDispatchAgent(args: any): Promise<any> {
 export async function handleSwarmStatus(args: any): Promise<any> {
   const swarmId = process.env.CLAUDE_SWARM_ID || 'default-swarm';
   
-  // Legacy functionality - would integrate with swarm state system
-  const mockState = {
-    swarmId,
-    objective: 'Legacy swarm status',
-    startTime: Date.now() - 60000, // Started 1 minute ago
-    agents: []
-  };
+  // This is a legacy function - in real implementations, this would be replaced
+  // by direct calls to the SwarmCoordinator through the MCP context
   
-  const runtime = Math.floor((Date.now() - mockState.startTime) / 1000);
+  // For now, provide a basic status response
+  const startTime = Date.now() - 60000; // Started 1 minute ago
+  const runtime = Math.floor((Date.now() - startTime) / 1000);
   
   return {
-    swarmId: mockState.swarmId,
-    objective: mockState.objective,
+    swarmId,
+    objective: 'Legacy swarm status handler',
     runtime: `${runtime}s`,
-    totalAgents: mockState.agents.length,
+    totalAgents: 0,
     activeAgents: 0,
     completedAgents: 0,
     failedAgents: 0,
-    agents: mockState.agents,
+    agents: [],
+    note: 'This is a legacy handler. Use swarm/get-status tool for real functionality.'
   };
 }
 
