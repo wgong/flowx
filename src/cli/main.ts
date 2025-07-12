@@ -66,8 +66,8 @@ async function main() {
         sqlitePath: '.claude-flow/memory.db'
       };
       
-      // Initialize with 15 second timeout for better reliability
-      await initializeGlobalServices(eventBus, logger, memoryConfig, 15000);
+      // Initialize with fast 3 second timeout for better reliability
+      await initializeGlobalServices(eventBus, logger, memoryConfig, 3000);
       
       const initTime = Date.now() - startTime;
       console.log(`✅ Backend services initialized (${initTime}ms)`);
@@ -93,7 +93,8 @@ async function main() {
         
         console.log('⚠️  Fallback services created');
       } catch (fallbackError) {
-        console.error('❌ Failed to create fallback services:', fallbackError);
+        console.error('❌ Failed to create fallback services:', fallbackError instanceof Error ? fallbackError.message : fallbackError);
+        console.log('⚠️  Continuing with minimal functionality...');
       }
     }
     

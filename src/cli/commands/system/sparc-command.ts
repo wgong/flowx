@@ -370,8 +370,27 @@ async function executeSparcMode(mode: string, context: CLIContext): Promise<void
   const { args, options } = context;
   const task = args[1] || args[0];
 
-  // Options should already have defaults applied by CLI application
-  // No need to manually apply defaults here
+  // Ensure namespace has a default value if not provided
+  if (options.namespace === undefined) {
+    options.namespace = 'sparc';
+  }
+
+  // Ensure other defaults are applied
+  if (options['output-dir'] === undefined) {
+    options['output-dir'] = './sparc-output';
+  }
+
+  if (options['enable-tdd'] === undefined) {
+    options['enable-tdd'] = true;
+  }
+
+  if (options['quality-threshold'] === undefined) {
+    options['quality-threshold'] = 0.8;
+  }
+
+  if (options.format === undefined) {
+    options.format = 'text';
+  }
 
   if (!task) {
     printError(`Task description required for SPARC ${mode} mode`);
