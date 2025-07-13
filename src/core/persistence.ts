@@ -2,14 +2,14 @@
  * Persistence layer for Claude-Flow using SQLite
  */
 
-// @ts-ignore - sql.js doesn't have proper type definitions
-import initSqlJs from 'sql.js';
+// @ts-ignore - sql.ts doesn't have proper type definitions
+import initSqlJs from 'sql.ts';
 import { join } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { Buffer } from "node:buffer";
 
-// Simple type definitions for sql.js
+// Simple type definitions for sql.ts
 interface Database {
   run(sql: string, params?: any[]): void;
   exec(sql: string): any[];
@@ -59,7 +59,7 @@ export interface PersistedTask {
 }
 
 export class PersistenceManager {
-  public db: any; // sql.js Database - made public for direct access
+  public db: any; // sql.ts Database - made public for direct access
   private dbPath: string;
   private SQL: any;
 
@@ -68,7 +68,7 @@ export class PersistenceManager {
   }
 
   async initialize(): Promise<void> {
-    // Initialize sql.js
+    // Initialize sql.ts
     this.SQL = await initSqlJs();
     
     // Ensure directory exists

@@ -72,7 +72,7 @@ export const daemonCommand: CLICommand = {
     'claude-flow daemon start claude-flow-server',
     'claude-flow daemon stop all',
     'claude-flow daemon status',
-    'claude-flow daemon create --name web-server --command "node server.js"',
+    'claude-flow daemon create --name web-server --command "node server.ts"',
     'claude-flow daemon logs claude-flow-server --follow'
   ],
   subcommands: [
@@ -294,7 +294,7 @@ class DaemonManager {
       const files = await fs.readdir(this.configDir);
       
       for (const file of files) {
-        if (file.endsWith('.json')) {
+        if (file.endsWith('.tson')) {
           const configPath = path.join(this.configDir, file);
           const configData = await fs.readFile(configPath, 'utf8');
           const config: DaemonConfig = JSON.parse(configData);
@@ -315,12 +315,12 @@ class DaemonManager {
   }
 
   async saveDaemonConfig(config: DaemonConfig): Promise<void> {
-    const configPath = path.join(this.configDir, `${config.name}.json`);
+    const configPath = path.join(this.configDir, `${config.name}.tson`);
     await fs.writeFile(configPath, JSON.stringify(config, null, 2));
   }
 
   async removeDaemonConfig(name: string): Promise<void> {
-    const configPath = path.join(this.configDir, `${name}.json`);
+    const configPath = path.join(this.configDir, `${name}.tson`);
     await fs.unlink(configPath);
   }
 
@@ -774,7 +774,7 @@ async function showDaemonStatus(context: CLIContext): Promise<void> {
       return;
     }
 
-    if (options.json) {
+    if (options.tson) {
       console.log(JSON.stringify(statuses, null, 2));
       return;
     }

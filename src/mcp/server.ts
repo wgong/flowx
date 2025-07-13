@@ -27,7 +27,7 @@ import { RequestRouter } from "./router.ts";
 import { SessionManager, ISessionManager } from "./session-manager.ts";
 import { AuthManager, IAuthManager } from "./auth.ts";
 import { LoadBalancer, ILoadBalancer, RequestQueue } from "./load-balancer.ts";
-import { createClaudeFlowTools, ClaudeFlowToolContext } from "./claude-flow-tools.ts";
+import { createFlowXTools, FlowXToolContext } from "./flowx-tools.ts";
 import { createSwarmTools, SwarmToolContext } from "./swarm-tools.ts";
 import { platform, arch } from 'node:os';
 import { performance } from 'node:perf_hooks';
@@ -129,13 +129,13 @@ export class MCPServer implements IMCPServer {
       throw new MCPErrorClass('MCP server already running');
     }
 
-    this.logger.info('Starting MCP server', { transport: this.config.transport });
+    this.logger.info('Starting MCP server');
 
     try {
-      // Set up request handler
-      this.transport.onRequest(async (request) => {
-        return await this.handleRequest(request);
-      });
+      // Start session manager
+      if (this.sessionManager && 'start' in this.sessionManager) {
+        (this.sessionManager as any).start();
+      }
 
       // Start transport
       await this.transport.start();
@@ -147,7 +147,7 @@ export class MCPServer implements IMCPServer {
       this.logger.info('MCP server started successfully');
     } catch (error) {
       this.logger.error('Failed to start MCP server', error);
-      throw new MCPErrorClass('Failed to start MCP server', { error });
+      throw error;
     }
   }
 
@@ -162,9 +162,24 @@ export class MCPServer implements IMCPServer {
       // Stop transport
       await this.transport.stop();
 
+      // Stop session manager
+      if (this.sessionManager && 'stop' in this.sessionManager) {
+        (this.sessionManager as any).stop();
+      }
+
       // Clean up session manager
       if (this.sessionManager && 'destroy' in this.sessionManager) {
         (this.sessionManager as any).destroy();
+      }
+
+      // Clean up load balancer
+      if (this.loadBalancer && 'destroy' in this.loadBalancer) {
+        (this.loadBalancer as any).destroy();
+      }
+
+      // Clean up auth manager
+      if (this.authManager && 'destroy' in this.authManager) {
+        (this.authManager as any).destroy();
       }
 
       // Clean up all sessions
@@ -464,7 +479,7 @@ export class MCPServer implements IMCPServer {
           version: '1.0.0',
           platform: platform(),
           arch: arch(),
-          runtime: 'Node.js',
+          runtime: 'Node.ts',
           uptime: performance.now(),
         };
       },
@@ -522,16 +537,16 @@ export class MCPServer implements IMCPServer {
 
     // Register Claude-Flow specific tools if orchestrator is available
     if (this.orchestrator) {
-      const claudeFlowTools = createClaudeFlowTools(this.logger);
+      const claudeFlowTools = createFlowXTools(this.logger);
       
       for (const tool of claudeFlowTools) {
         // Wrap the handler to inject orchestrator context
         const originalHandler = tool.handler;
         tool.handler = async (input: unknown, context?: MCPContext) => {
-          const claudeFlowContext: ClaudeFlowToolContext = {
+          const claudeFlowContext: FlowXToolContext = {
             ...context,
             orchestrator: this.orchestrator,
-          } as ClaudeFlowToolContext;
+          } as FlowXToolContext;
           
           return await originalHandler(input, claudeFlowContext);
         };

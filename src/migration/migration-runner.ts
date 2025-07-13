@@ -81,15 +81,15 @@ import {
   ValidationResult,
   MigrationProgress,
   MigrationManifest
-} from './types.js';
-import { MigrationAnalyzer } from './migration-analyzer.js';
-import { logger } from './logger.js';
-import { ProgressReporter } from './progress-reporter.js';
-import { MigrationValidator } from './migration-validator.js';
+} from './types.ts';
+import { MigrationAnalyzer } from './migration-analyzer.ts';
+import { logger } from './logger.ts';
+import { ProgressReporter } from './progress-reporter.ts';
+import { MigrationValidator } from './migration-validator.ts';
 import globPkg from 'glob';
 const { glob } = globPkg;
 import * as inquirer from 'inquirer';
-import { colors } from '../utils/colors.js';
+import { colors } from '../utils/colors.ts';
 
 export class MigrationRunner {
   private options: MigrationOptions;
@@ -325,8 +325,8 @@ export class MigrationRunner {
   }
 
   private async updateConfigurations(result: MigrationResult): Promise<void> {
-    // Update package.json scripts if needed
-    const packageJsonPath = path.join(this.options.projectPath, 'package.json');
+    // Update package.tson scripts if needed
+    const packageJsonPath = path.join(this.options.projectPath, 'package.tson');
     if (await pathExists(packageJsonPath)) {
       const packageJson = await readJson(packageJsonPath);
       
@@ -350,7 +350,7 @@ export class MigrationRunner {
 
       if (modified && !this.options.dryRun) {
         await writeJson(packageJsonPath, packageJson, { spaces: 2 });
-        result.filesModified.push('package.json');
+        result.filesModified.push('package.tson');
       }
     }
   }
@@ -395,7 +395,7 @@ export class MigrationRunner {
     }
 
     // Backup other important files
-    const importantFiles = ['CLAUDE.md', '.roomodes', 'package.json'];
+    const importantFiles = ['CLAUDE.md', '.roomodes', 'package.tson'];
     for (const file of importantFiles) {
       const filePath = path.join(this.options.projectPath, file);
       if (await pathExists(filePath)) {
@@ -410,7 +410,7 @@ export class MigrationRunner {
     }
 
     // Save backup manifest
-    const manifestPath = path.join(backupPath, 'backup-manifest.json');
+    const manifestPath = path.join(backupPath, 'backup-manifest.tson');
     await writeJson(manifestPath, backup, { spaces: 2 });
 
     logger.success(`Backup created at ${backupPath}`);
@@ -460,7 +460,7 @@ export class MigrationRunner {
     }
 
     // Restore files
-    const backup = await readJson(path.join(backupPath, 'backup-manifest.json'));
+    const backup = await readJson(path.join(backupPath, 'backup-manifest.tson'));
     
     for (const file of backup.files) {
       const targetPath = path.join(this.options.projectPath, file.path);
@@ -501,7 +501,7 @@ export class MigrationRunner {
     for (const backup of backups.sort().reverse()) {
       const backupPath = path.join(backupDir, backup);
       const stats = await fs.stat(backupPath);
-      const manifest = await readJson(path.join(backupPath, 'backup-manifest.json')).catch(() => null);
+      const manifest = await readJson(path.join(backupPath, 'backup-manifest.tson')).catch(() => null);
 
       console.log(`\n${colors.bold(backup)}`);
       console.log(`  Created: ${stats.mtime.toLocaleString()}`);

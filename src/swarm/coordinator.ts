@@ -11,14 +11,14 @@
 
 import { EventEmitter } from 'node:events';
 import { join, dirname } from 'node:path';
-import { Logger } from "../core/logger.js";
-import { generateId } from "../utils/helpers.js";
+import { Logger } from "../core/logger.ts";
+import { generateId } from "../utils/helpers.ts";
 import {
   SwarmId, AgentId, TaskId, AgentState, TaskDefinition, SwarmObjective,
   SwarmConfig, SwarmStatus, AgentType, TaskType, TaskStatus, TaskPriority,
   SwarmEvent, SwarmEventEmitter, EventType
-} from "./types.js";
-import { AgentProcessManager } from "../agents/agent-process-manager.js";
+} from "./types.ts";
+import { AgentProcessManager } from "../agents/agent-process-manager.ts";
 
 export class SwarmCoordinator extends EventEmitter implements SwarmEventEmitter {
   private logger: Logger;
@@ -515,6 +515,12 @@ export class SwarmCoordinator extends EventEmitter implements SwarmEventEmitter 
   }
 
   private areTaskDependenciesMet(task: TaskDefinition): boolean {
+    // Safety check for missing task constraints
+    if (!task.constraints) {
+      this.logger.warn('Task missing constraints property', { taskId: task.id.id });
+      return true;
+    }
+    
     if (!task.constraints.dependencies || task.constraints.dependencies.length === 0) {
       return true;
     }
@@ -616,6 +622,10 @@ export class SwarmCoordinator extends EventEmitter implements SwarmEventEmitter 
   }
 
   private async assignTaskToAgent(task: TaskDefinition, agent: AgentState): Promise<void> {
+    if (!task || !agent) {
+      this.logger.error('Invalid task or agent', { taskId: task?.id?.id, agentId: agent?.id?.id });
+      throw new Error('Cannot assign task: Invalid task or agent');
+    }
     this.logger.info('Assigning task to agent', { 
       taskId: task.id.id, 
       agentId: agent.id.id,
@@ -681,6 +691,12 @@ export class SwarmCoordinator extends EventEmitter implements SwarmEventEmitter 
   // =============================================================================
 
   private async decomposeObjective(objective: SwarmObjective): Promise<TaskDefinition[]> {
+    if (!objective) {
+      this.logger.error('Trying to decompose null objective');
+      return [];
+    }
+    
+    this.logger.info('Starting objective decomposition', { objectiveId: objective.id });
     const tasks: TaskDefinition[] = [];
     
     // Analyze the objective to determine task breakdown
@@ -928,7 +944,7 @@ export class SwarmCoordinator extends EventEmitter implements SwarmEventEmitter 
       const outputDir = this.extractOutputDirectory(objective.description);
       if (!outputDir) return;
 
-      const summaryPath = this.joinPath(outputDir, 'swarm-summary.json');
+      const summaryPath = this.joinPath(outputDir, 'swarm-summary.tson');
       const summary = {
         objective: {
           id: objective.id,

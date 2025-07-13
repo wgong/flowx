@@ -1402,13 +1402,13 @@ class MemoryPersistence {
   }
 
   async saveState(state: any): Promise<void> {
-    const statePath = path.join(this.config.persistencePath, 'state.json');
+    const statePath = path.join(this.config.persistencePath, 'state.tson');
     await fs.writeFile(statePath, JSON.stringify(state, null, 2));
   }
 
   async loadState(): Promise<any> {
     try {
-      const statePath = path.join(this.config.persistencePath, 'state.json');
+      const statePath = path.join(this.config.persistencePath, 'state.tson');
       const content = await fs.readFile(statePath, 'utf-8');
       return JSON.parse(content);
     } catch (error) {
@@ -1417,14 +1417,14 @@ class MemoryPersistence {
   }
 
   async saveBackup(backupId: string, backup: MemoryBackup): Promise<void> {
-    const backupPath = path.join(this.config.persistencePath, 'backups', `${backupId}.json`);
+    const backupPath = path.join(this.config.persistencePath, 'backups', `${backupId}.tson`);
     await fs.mkdir(path.dirname(backupPath), { recursive: true });
     await fs.writeFile(backupPath, JSON.stringify(backup, null, 2));
   }
 
   async loadBackup(backupId: string): Promise<MemoryBackup | null> {
     try {
-      const backupPath = path.join(this.config.persistencePath, 'backups', `${backupId}.json`);
+      const backupPath = path.join(this.config.persistencePath, 'backups', `${backupId}.tson`);
       const content = await fs.readFile(backupPath, 'utf-8');
       return JSON.parse(content);
     } catch (error) {

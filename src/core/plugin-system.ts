@@ -412,7 +412,7 @@ export class PluginManager extends EventEmitter {
     if (manifest.engines) {
       const nodeVersion = process.version;
       if (manifest.engines.node && !this.satisfiesVersion(nodeVersion, manifest.engines.node)) {
-        throw new Error(`Node.js version ${nodeVersion} does not satisfy requirement: ${manifest.engines.node}`);
+        throw new Error(`Node.ts version ${nodeVersion} does not satisfy requirement: ${manifest.engines.node}`);
       }
     }
   }

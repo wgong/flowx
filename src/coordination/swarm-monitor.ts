@@ -392,7 +392,7 @@ export class SwarmMonitor extends EventEmitter {
     
     try {
       const date = new Date();
-      const filename = `metrics_${date.toISOString().split('T')[0]}.jsonl`;
+      const filename = `metrics_${date.toISOString().split('T')[0]}.tsonl`;
       const filepath = path.join(this.config.historyPath, filename);
       
       const line = JSON.stringify({

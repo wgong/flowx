@@ -5,8 +5,8 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { TaskEngine, WorkflowTask, TaskFilter, TaskSort, Workflow, ResourceRequirement, TaskSchedule } from "./engine.js";
-import { generateId } from "../utils/helpers.js";
+import { TaskEngine, WorkflowTask, TaskFilter, TaskSort, Workflow, ResourceRequirement, TaskSchedule } from "./engine.ts";
+import { generateId } from "../utils/helpers.ts";
 
 export interface TaskCommandContext {
   taskEngine: TaskEngine;

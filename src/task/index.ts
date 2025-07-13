@@ -4,26 +4,26 @@
  * Integrates with TodoWrite/TodoRead for coordination and Memory for persistence
  */
 
-export { TaskEngine } from "./engine.js";
-export type { WorkflowTask } from "./engine.js";
+export { TaskEngine } from "./engine.ts";
+export type { WorkflowTask } from "./engine.ts";
 
-export type { TaskCommandContext } from "./commands.js";
+export type { TaskCommandContext } from "./commands.ts";
 
-export { TaskCoordinator } from "./coordination.js";
-export type { CoordinationContext, TodoItem } from "./coordination.js";
+export { TaskCoordinator } from "./coordination.ts";
+export type { CoordinationContext, TodoItem } from "./coordination.ts";
 
 
 // Import the types we need for the functions below
-import { TaskEngine } from "./engine.js";
-import { TaskCoordinator, TodoItem, CoordinationContext } from "./coordination.js";
-import { TaskCommandContext } from "./commands.js";
+import { TaskEngine } from "./engine.ts";
+import { TaskCoordinator, TodoItem, CoordinationContext } from "./coordination.ts";
+import { TaskCommandContext } from "./commands.ts";
 import { 
   createTaskCreateCommand,
   createTaskListCommand,
   createTaskStatusCommand,
   createTaskCancelCommand,
   createTaskWorkflowCommand
-} from "./commands.js";
+} from "./commands.ts";
 
 /**
  * Initialize the complete task management system
@@ -259,7 +259,7 @@ const results = await coordinator.coordinateBatchOperations([
   },
   {
     type: 'analyze',
-    targets: ['package.json', 'tsconfig.json'],
+    targets: ['package.tson', 'tsconfig.tson'],
     configuration: { focus: 'dependencies' }
   },
   {

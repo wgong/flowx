@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Claude Flow CLI - Main Entry Point
+ * FlowX CLI - Main Entry Point
  * Optimized for fast startup with lazy service initialization
  */
 
@@ -15,7 +15,7 @@ async function main() {
   try {
     // Fast CLI startup - don't initialize heavy services immediately
     const app = new CLIApplication(
-      'claude-flow',
+      'flowx',
       'AI-powered development workflows'
     );
 
@@ -48,7 +48,7 @@ async function main() {
     }
 
     // For actual commands, initialize services with timeout and progress
-    console.log('🚀 Initializing Claude Flow CLI...');
+    console.log('🚀 Initializing FlowX CLI...');
     const startTime = Date.now();
     
     try {
@@ -63,7 +63,7 @@ async function main() {
         syncInterval: 60000, // 1 minute
         conflictResolution: 'last-write' as const,
         retentionDays: 30,
-        sqlitePath: '.claude-flow/memory.db'
+        sqlitePath: '.flowx/memory.db'
       };
       
       // Initialize with fast 3 second timeout for better reliability

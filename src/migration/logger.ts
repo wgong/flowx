@@ -4,7 +4,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { colors } from '../utils/colors.js';
+import { colors } from '../utils/colors.ts';
 
 export interface LogEntry {
   timestamp: Date;

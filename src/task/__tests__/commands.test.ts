@@ -11,11 +11,11 @@ import {
   createTaskWorkflowCommand,
   TaskCommandContext
 } from '../commands.ts';
-import { TaskEngine, WorkflowTask, TaskStatus } from '../engine.js';
+import { TaskEngine, WorkflowTask, TaskStatus } from '../engine.ts';
 import { Command } from 'commander';
 
 // Mock dependencies
-jest.mock('../engine.js');
+jest.mock('../engine.ts');
 jest.mock('commander');
 
 describe('Task Commands', () => {

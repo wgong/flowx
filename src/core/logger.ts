@@ -6,8 +6,9 @@ import * as fs from 'node:fs/promises';
 import * as path from 'path';
 import { Buffer } from 'node:buffer';
 import * as process from 'node:process';
-import { LoggingConfig } from "../utils/types.js";
-import { formatBytes } from "../utils/helpers.js";
+// Remove interface import that gets stripped in Node.js strip-only mode
+// import { LoggingConfig } from "../utils/types.ts";
+import { formatBytes } from "../utils/helpers.ts";
 import { EventEmitter } from 'node:events';
 
 export interface ILogger {
@@ -15,15 +16,21 @@ export interface ILogger {
   info(message: string, meta?: unknown): void;
   warn(message: string, meta?: unknown): void;
   error(message: string, error?: unknown): void;
-  configure(config: LoggingConfig): Promise<void>;
+  configure(config: any): Promise<void>; // Use any instead of LoggingConfig
 }
 
-export enum LogLevel {
-  DEBUG = 0,
-  INFO = 1,
-  WARN = 2,
-  ERROR = 3,
-}
+// Convert enum to const object for Node.js strip-only mode compatibility
+export const LogLevel = {
+  DEBUG: 0,
+  INFO: 1,
+  WARN: 2,
+  ERROR: 3,
+} as const;
+
+export type LogLevel = typeof LogLevel[keyof typeof LogLevel];
+
+// Add mapping for log level names
+const LogLevelNames = ['DEBUG', 'INFO', 'WARN', 'ERROR'] as const;
 
 interface LogEntry {
   timestamp: string;
@@ -39,7 +46,7 @@ interface LogEntry {
  */
 export class Logger implements ILogger {
   private static instance: Logger;
-  private config: LoggingConfig;
+  private config: any; // Use any instead of LoggingConfig
   private context: Record<string, unknown>;
   private fileHandle?: fs.FileHandle;
   private currentFileSize = 0;
@@ -47,7 +54,7 @@ export class Logger implements ILogger {
   private isClosing = false;
 
   constructor(
-    config: LoggingConfig = {
+    config: any = { // Use any instead of LoggingConfig
       level: 'info',
       format: 'json',
       destination: 'console',
@@ -66,7 +73,7 @@ export class Logger implements ILogger {
   /**
    * Gets the singleton instance of the logger
    */
-  static getInstance(config?: LoggingConfig): Logger {
+  static getInstance(config?: any): Logger { // Use any instead of LoggingConfig
     if (!Logger.instance) {
       if (!config) {
         // Use default config if none provided and not in test environment
@@ -88,7 +95,7 @@ export class Logger implements ILogger {
   /**
    * Updates logger configuration
    */
-  async configure(config: LoggingConfig): Promise<void> {
+  async configure(config: any): Promise<void> { // Use any instead of LoggingConfig
     this.config = config;
     
     // Reset file handle if destination changed
@@ -144,7 +151,7 @@ export class Logger implements ILogger {
 
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
-      level: LogLevel[level],
+      level: LogLevelNames[level], // Use LogLevelNames array instead of LogLevel[level]
       message,
       context: this.context,
       data,
@@ -277,33 +284,33 @@ export class Logger implements ILogger {
   }
 
   private async cleanupOldFiles(): Promise<void> {
-    if (!this.config.filePath || !this.config.maxFiles) {
-      return;
-    }
-
-    const dir = path.dirname(this.config.filePath);
-    const baseFileName = path.basename(this.config.filePath);
+    if (!this.config.maxFiles || this.config.maxFiles <= 0) return;
 
     try {
-      const entries = await fs.readdir(dir, { withFileTypes: true });
-      const files: string[] = [];
-      
-      for (const entry of entries) {
-        if (entry.isFile() && entry.name.startsWith(baseFileName + '.')) {
-          files.push(entry.name);
-        }
-      }
+      const dir = path.dirname(this.config.filePath);
+      const files = await fs.readdir(dir);
+      const logFiles = files
+        .filter(file => file.startsWith(path.basename(this.config.filePath)))
+        .sort()
+        .slice(this.config.maxFiles);
 
-      // Sort files by timestamp (newest first)
-      files.sort().reverse();
-
-      // Remove old files
-      const filesToRemove = files.slice(this.config.maxFiles - 1);
-      for (const file of filesToRemove) {
+      for (const file of logFiles) {
         await fs.unlink(path.join(dir, file));
       }
     } catch (error) {
       console.error('Failed to cleanup old log files:', error);
+    }
+  }
+
+  /**
+   * Resets the singleton instance (for testing)
+   */
+  static reset(): void {
+    if (Logger.instance) {
+      Logger.instance.close().catch(() => {
+        // Ignore errors during cleanup
+      });
+      Logger.instance = null as any;
     }
   }
 }

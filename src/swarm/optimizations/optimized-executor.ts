@@ -73,9 +73,11 @@ export class OptimizedExecutor extends EventEmitter {
   };
   
   private activeExecutions = new Set<string>();
+  private config: ExecutorConfig;
   
-  constructor(private config: ExecutorConfig = {}) {
+  constructor(config: ExecutorConfig = {}) {
     super();
+    this.config = config;
     
     this.logger = new Logger(
       { level: 'info', format: 'json', destination: 'console' },
@@ -160,7 +162,7 @@ export class OptimizedExecutor extends EventEmitter {
         
         // Save result to file asynchronously
         if (this.config.fileOperations?.outputDir) {
-          const outputPath = `${this.config.fileOperations.outputDir}/${task.id.id}.json`;
+          const outputPath = `${this.config.fileOperations.outputDir}/${task.id.id}.tson`;
           await this.fileManager.writeJSON(outputPath, {
             taskId: task.id.id,
             agentId: agentId.id,

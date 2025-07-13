@@ -162,7 +162,7 @@ async function startMcpServer(context: CLIContext): Promise<void> {
     
     // Configure Express middleware
     app.use(require('cors')());
-    app.use(require('express').json());
+    app.use(require('express').tson());
     
     // Initialize MCP server
     mcpServer = {
@@ -524,7 +524,7 @@ function setupApiRoutes(): void {
   
   // Health endpoint
   app.get('/health', (req: any, res: any) => {
-    res.json({
+    res.tson({
       status: 'healthy',
       version: '1.0.0',
       timestamp: new Date().toISOString()
@@ -533,7 +533,7 @@ function setupApiRoutes(): void {
   
   // API routes
   app.get('/api', (req: any, res: any) => {
-    res.json({
+    res.tson({
       name: 'MCP API',
       version: '1.0.0',
       endpoints: [
@@ -547,7 +547,7 @@ function setupApiRoutes(): void {
   // List tools
   app.get('/api/tools', (req: any, res: any) => {
     const tools = Array.from(mcpServer!.tools.values());
-    res.json(tools);
+    res.tson(tools);
   });
   
   // Get tool by name
@@ -556,10 +556,10 @@ function setupApiRoutes(): void {
     const tool = mcpServer!.tools.get(name);
     
     if (!tool) {
-      return res.status(404).json({ error: `Tool not found: ${name}` });
+      return res.status(404).tson({ error: `Tool not found: ${name}` });
     }
     
-    res.json(tool);
+    res.tson(tool);
   });
   
   // Execute tool
@@ -569,17 +569,17 @@ function setupApiRoutes(): void {
       const tool = mcpServer!.tools.get(toolName);
       
       if (!tool) {
-        return res.status(404).json({ error: `Tool not found: ${toolName}` });
+        return res.status(404).tson({ error: `Tool not found: ${toolName}` });
       }
       
       if (!tool.handler || tool.status !== 'active') {
-        return res.status(400).json({ error: `Tool not available: ${toolName}` });
+        return res.status(400).tson({ error: `Tool not available: ${toolName}` });
       }
       
       const result = await tool.handler(req.body);
-      res.json(result);
+      res.tson(result);
     } catch (error) {
-      res.status(500).json({ 
+      res.status(500).tson({ 
         error: error instanceof Error ? error.message : String(error) 
       });
     }
@@ -592,9 +592,9 @@ function setupApiRoutes(): void {
       const query = req.query;
       const results = await memoryManager.query(query);
       
-      res.json(results);
+      res.tson(results);
     } catch (error) {
-      res.status(500).json({ 
+      res.status(500).tson({ 
         error: error instanceof Error ? error.message : String(error) 
       });
     }
@@ -607,12 +607,12 @@ function setupApiRoutes(): void {
       const result = await memoryManager.retrieve(id);
       
       if (!result) {
-        return res.status(404).json({ error: `Memory entry not found: ${id}` });
+        return res.status(404).tson({ error: `Memory entry not found: ${id}` });
       }
       
-      res.json(result);
+      res.tson(result);
     } catch (error) {
-      res.status(500).json({ 
+      res.status(500).tson({ 
         error: error instanceof Error ? error.message : String(error) 
       });
     }
@@ -623,9 +623,9 @@ function setupApiRoutes(): void {
       const memoryManager = await getMemoryManager();
       await memoryManager.store(req.body);
       
-      res.json({ success: true, id: req.body.id });
+      res.tson({ success: true, id: req.body.id });
     } catch (error) {
-      res.status(500).json({ 
+      res.status(500).tson({ 
         error: error instanceof Error ? error.message : String(error) 
       });
     }

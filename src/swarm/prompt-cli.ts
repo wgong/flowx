@@ -153,7 +153,7 @@ program
       const resolver = new PromptPathResolver(options.base);
       const directories = await resolver.discoverPromptDirectories();
       
-      if (options.json) {
+      if (options.tson) {
         console.log(JSON.stringify({ directories }, null, 2));
         return;
       }
@@ -223,12 +223,12 @@ program
         
         if (result.valid) {
           validFiles++;
-          if (!options.json) {
+          if (!options.tson) {
             console.log(`✅ ${file}`);
           }
         } else {
           invalidFiles++;
-          if (!options.json) {
+          if (!options.tson) {
             console.log(`❌ ${file}`);
             result.issues.forEach((issue: string) => {
               console.log(`   ⚠️  ${issue}`);
@@ -236,7 +236,7 @@ program
           }
         }
         
-        if (options.json) {
+        if (options.tson) {
           results.push({
             file,
             valid: result.valid,
@@ -248,7 +248,7 @@ program
         }
       }
       
-      if (options.json) {
+      if (options.tson) {
         console.log(JSON.stringify({
           summary: { total: files.length, valid: validFiles, invalid: invalidFiles },
           results
@@ -287,7 +287,7 @@ program
         console.log('✅ Enterprise configuration initialized');
       } else if (options.show) {
         const config = await configManager.loadConfig();
-        if (options.json) {
+        if (options.tson) {
           console.log(JSON.stringify(config, null, 2));
         } else {
           console.log('📋 Current Configuration:');
@@ -297,7 +297,7 @@ program
         const config = await configManager.loadConfig();
         const profiles = configManager.listProfiles();
         
-        if (options.json) {
+        if (options.tson) {
           const profileData: Record<string, any> = {};
           profiles.forEach(profile => {
             profileData[profile] = configManager.getProfile(profile);

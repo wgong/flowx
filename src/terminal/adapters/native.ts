@@ -36,10 +36,12 @@ class NativeTerminal implements Terminal {
   private alive = true;
   private stdoutData = '';
   private stderrData = '';
+  private logger: ILogger;
 
-  constructor(shell: string, private logger: ILogger) {
+  constructor(shell: string, logger: ILogger) {
     this.id = generateId('native-term');
     this.shell = shell;
+    this.logger = logger;
     this.commandMarker = `__CLAUDE_FLOW_${this.id}__`;
   }
 
@@ -371,8 +373,10 @@ class NativeTerminal implements Terminal {
 export class NativeAdapter implements ITerminalAdapter {
   private terminals = new Map<string, NativeTerminal>();
   private shell: string;
+  private logger: ILogger;
 
-  constructor(private logger: ILogger) {
+  constructor(logger: ILogger) {
+    this.logger = logger;
     // Detect available shell
     this.shell = this.detectShell();
   }

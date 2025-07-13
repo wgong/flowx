@@ -173,6 +173,7 @@ export class LoadBalancer implements ILoadBalancer {
   private requestTimes: number[] = [];
   private requestsInLastSecond = 0;
   private lastSecondTimestamp = 0;
+  private cleanupInterval?: NodeJS.Timeout;
 
   constructor(
     private config: MCPLoadBalancerConfig,
@@ -200,9 +201,16 @@ export class LoadBalancer implements ILoadBalancer {
     };
 
     // Clean up old session rate limiters periodically
-    setInterval(() => {
+    this.cleanupInterval = setInterval(() => {
       this.cleanupSessionRateLimiters();
     }, 300000); // Every 5 minutes
+  }
+
+  destroy(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
+    this.sessionRateLimiters.clear();
   }
 
   async shouldAllowRequest(session: MCPSession, request: MCPRequest): Promise<boolean> {

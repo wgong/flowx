@@ -129,7 +129,6 @@ export class CoordinationMetricsCollector {
       cleanupInterval: 60 * 60 * 1000, // 1 hour
     };
     this.setupEventHandlers();
-    this.startCleanupTimer();
   }
 
   /**
@@ -138,6 +137,10 @@ export class CoordinationMetricsCollector {
   start(): void {
     this.logger.info('Starting coordination metrics collection');
     
+    // Start cleanup timer
+    this.startCleanupTimer();
+    
+    // Start collection interval
     this.collectionInterval = setInterval(() => {
       this.collectMetrics();
     }, this.collectionIntervalMs) as unknown as number;
@@ -147,12 +150,17 @@ export class CoordinationMetricsCollector {
    * Stop metrics collection
    */
   stop(): void {
+    this.logger.info('Stopping coordination metrics collection');
+    
     if (this.collectionInterval) {
       clearInterval(this.collectionInterval);
-      delete this.collectionInterval;
+      this.collectionInterval = undefined;
     }
     
-    this.logger.info('Stopped coordination metrics collection');
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
   }
 
   /**

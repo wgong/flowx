@@ -4,8 +4,8 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { Task, TaskStatus, AgentProfile, Resource } from "../utils/types.js";
-import { generateId } from "../utils/helpers.js";
+import { Task, TaskStatus, AgentProfile, Resource } from "../utils/types.ts";
+import { generateId } from "../utils/helpers.ts";
 
 export interface TaskDependency {
   taskId: string;
@@ -124,23 +124,44 @@ export interface TaskSort {
   direction: 'asc' | 'desc';
 }
 
+// Extended Resource interface for task engine
+export interface ExtendedResource extends Resource {
+  capacity?: number;
+  inUseBy?: string[];
+}
+
 export class TaskEngine extends EventEmitter {
   private tasks = new Map<string, WorkflowTask>();
   private executions = new Map<string, TaskExecution>();
   private workflows = new Map<string, Workflow>();
-  private resources = new Map<string, Resource>();
+  private resources = new Map<string, ExtendedResource>();
   private dependencyGraph = new Map<string, Set<string>>();
   private readyQueue: string[] = [];
   private runningTasks = new Set<string>();
   private cancelledTasks = new Set<string>();
   private taskState = new Map<string, Record<string, unknown>>();
 
+  private maxConcurrent: number;
+  private memoryManager?: any; // Memory interface for persistence
+
+  // Scheduler properties
+  private schedulerTimer: NodeJS.Timeout | null = null;
+  private schedulerRunning: boolean = false;
+  private lastSchedulerRun: number = 0;
+  private schedulerIntervalMs: number = 1000; // 1 second default scheduler interval
+  private logger?: any;
+
   constructor(
-    private maxConcurrent: number = 10,
-    private memoryManager?: any // Memory interface for persistence
+    maxConcurrent: number = 10,
+    memoryManager?: any, // Memory interface for persistence
+    logger?: any
   ) {
     super();
+    this.maxConcurrent = maxConcurrent;
+    this.memoryManager = memoryManager;
+    this.logger = logger;
     this.setupEventHandlers();
+    this.startTaskScheduler();
   }
 
   private setupEventHandlers(): void {
@@ -148,6 +169,8 @@ export class TaskEngine extends EventEmitter {
     this.on('task:completed', this.handleTaskCompleted.bind(this));
     this.on('task:failed', this.handleTaskFailed.bind(this));
     this.on('task:cancelled', this.handleTaskCancelled.bind(this));
+    this.on('task:progress', this.handleTaskProgress.bind(this));
+    this.on('task:checkpoint', this.handleTaskCheckpoint.bind(this));
   }
 
   /**
@@ -187,10 +210,11 @@ export class TaskEngine extends EventEmitter {
       await this.memoryManager.store(`task:${task.id}`, task);
     }
 
-    // Remove circular dependency by not emitting here
-    // this.emit('task:created', { task });
-    // Comment out automatic scheduling to keep tasks in pending state for testing
-    // this.scheduleTask(task);
+    // Emit creation event
+    this.emit('task:created', { task });
+    
+    // Automatically schedule tasks that are ready to run
+    await this.scheduleTask(task);
 
     return task;
   }
@@ -430,10 +454,622 @@ export class TaskEngine extends EventEmitter {
     return Array.from(this.workflows.values());
   }
 
-  // Missing private methods implementation
+  /**
+   * Start the task scheduler
+   */
+  public startTaskScheduler(): void {
+    if (this.schedulerTimer !== null) {
+      return;
+    }
+    
+    this.log('info', 'Starting task scheduler');
+    
+    this.schedulerTimer = setInterval(() => {
+      this.runScheduler();
+    }, this.schedulerIntervalMs);
+  }
+  
+  /**
+   * Stop the task scheduler
+   */
+  public stopTaskScheduler(): void {
+    if (this.schedulerTimer === null) {
+      return;
+    }
+    
+    this.log('info', 'Stopping task scheduler');
+    
+    clearInterval(this.schedulerTimer);
+    this.schedulerTimer = null;
+  }
+  
+  /**
+   * Main scheduler run function
+   */
+  private async runScheduler(): Promise<void> {
+    if (this.schedulerRunning) {
+      return;
+    }
+    
+    try {
+      this.schedulerRunning = true;
+      this.lastSchedulerRun = Date.now();
+      
+      // Process scheduled tasks
+      await this.processScheduledTasks();
+      
+      // Process ready tasks
+      await this.processReadyTasks();
+      
+      // Check for timed out tasks
+      await this.checkTimeoutTasks();
+      
+    } catch (error) {
+      this.log('error', 'Scheduler error', error);
+    } finally {
+      this.schedulerRunning = false;
+    }
+  }
+  
+  /**
+   * Process scheduled tasks that are ready to start
+   */
+  private async processScheduledTasks(): Promise<void> {
+    const now = new Date();
+    
+    for (const task of this.tasks.values()) {
+      // Skip tasks that are already queued or running
+      if (task.status !== 'pending') continue;
+      
+      // Check if task is scheduled to start now
+      if (task.schedule?.startTime && task.schedule.startTime <= now) {
+        await this.scheduleTask(task);
+      }
+    }
+  }
+  
+  /**
+   * Process tasks in ready queue
+   */
+  private async processReadyTasks(): Promise<void> {
+    // Stop if we're already at max concurrent tasks
+    if (this.runningTasks.size >= this.maxConcurrent) {
+      return;
+    }
+    
+    // Get tasks from ready queue, respecting max concurrent limit
+    const availableSlots = this.maxConcurrent - this.runningTasks.size;
+    const tasksToRun = Math.min(availableSlots, this.readyQueue.length);
+    
+    if (tasksToRun <= 0) return;
+    
+    // Sort queue by priority before processing
+    this.sortReadyQueue();
+    
+    for (let i = 0; i < tasksToRun; i++) {
+      const taskId = this.readyQueue.shift();
+      if (!taskId) break;
+      
+      const task = this.tasks.get(taskId);
+      if (!task) continue;
+      
+      // Execute task
+      await this.executeTask(task);
+    }
+  }
+  
+  /**
+   * Sort the ready queue by priority
+   */
+  private sortReadyQueue(): void {
+    // Create a sorted copy of the queue
+    const sortedQueue = [...this.readyQueue].sort((a, b) => {
+      const taskA = this.tasks.get(a);
+      const taskB = this.tasks.get(b);
+      
+      if (!taskA || !taskB) return 0;
+      
+      // Sort by priority (higher priority first)
+      return taskB.priority - taskA.priority;
+    });
+    
+    // Replace the queue with the sorted version
+    this.readyQueue = sortedQueue;
+  }
+  
+  /**
+   * Check and acquire required resources for a task
+   */
+  private async checkResourceAvailability(task: WorkflowTask): Promise<boolean> {
+    // Check each required resource
+    for (const req of task.resourceRequirements) {
+      const resource = this.resources.get(req.resourceId);
+      
+      // Resource doesn't exist
+      if (!resource) {
+        return false;
+      }
+      
+      // Resource is locked exclusively by another task
+      if (resource.lockedBy && resource.lockedBy !== task.id) {
+        return false;
+      }
+      
+      // For exclusive resources, check if they're in use
+      if (req.exclusive && resource.inUseBy && resource.inUseBy.length > 0) {
+        return false;
+      }
+      
+      // Check capacity for non-exclusive resources
+      if (!req.exclusive && resource.capacity !== undefined) {
+        const inUse = resource.inUseBy?.length || 0;
+        if (inUse >= resource.capacity) {
+          return false;
+        }
+      }
+    }
+    
+    return true;
+  }
+  
+  /**
+   * Acquire resources needed for a task
+   */
+  private async acquireTaskResources(task: WorkflowTask): Promise<boolean> {
+    // First check if all resources are available
+    const allAvailable = await this.checkResourceAvailability(task);
+    if (!allAvailable) return false;
+    
+    // Then acquire each resource
+    for (const req of task.resourceRequirements) {
+      const resource = this.resources.get(req.resourceId);
+      if (!resource) continue;
+      
+      if (req.exclusive) {
+        resource.lockedBy = task.id;
+      }
+      
+      if (!resource.inUseBy) {
+        resource.inUseBy = [];
+      }
+      
+      resource.inUseBy.push(task.id);
+    }
+    
+    return true;
+  }
+  
+  /**
+   * Execute a task
+   */
+  private async executeTask(task: WorkflowTask): Promise<void> {
+    // Mark task as running
+    task.status = 'running';
+    this.runningTasks.add(task.id);
+    
+    // Create execution record
+    const execution: TaskExecution = {
+      id: generateId('exec'),
+      taskId: task.id,
+      agentId: task.assignedAgent || 'system',
+      startedAt: new Date(),
+      status: 'running',
+      progress: 0,
+      metrics: {
+        cpuUsage: 0,
+        memoryUsage: 0,
+        diskIO: 0,
+        networkIO: 0,
+        customMetrics: {}
+      },
+      logs: []
+    };
+    
+    this.executions.set(task.id, execution);
+    
+    // Update in memory store
+    if (this.memoryManager) {
+      await this.memoryManager.store(`task:${task.id}`, task);
+      await this.memoryManager.store(`execution:${task.id}`, execution);
+    }
+    
+    try {
+      // Acquire required resources
+      const resourcesAcquired = await this.acquireTaskResources(task);
+      if (!resourcesAcquired) {
+        throw new Error(`Failed to acquire resources for task ${task.id}`);
+      }
+      
+      // Create initial checkpoint
+      await this.createTaskCheckpoint(task, 'Execution started', {});
+      
+      // Emit event that task has started
+      this.emit('task:running', { taskId: task.id, execution });
+      
+      this.log('info', `Task ${task.id} started execution`);
+      
+      // In a real implementation, this would actually execute the task via an agent
+      // or external system. For now, we'll simulate execution.
+      
+      let result;
+      try {
+        result = await this.simulateTaskExecution(task, execution);
+      } catch (executionError) {
+        const errorMessage = executionError instanceof Error ? executionError.message : String(executionError);
+        throw new Error(`Task execution error: ${errorMessage}`);
+      }
+      
+      // Task completed successfully
+      execution.status = 'completed';
+      execution.completedAt = new Date();
+      execution.progress = 100;
+      
+      task.status = 'completed';
+      task.progressPercentage = 100;
+      task.actualDurationMs = execution.completedAt.getTime() - execution.startedAt.getTime();
+      
+      // Create final checkpoint
+      await this.createTaskCheckpoint(task, 'Execution completed', { result });
+      
+      // Update in memory store
+      if (this.memoryManager) {
+        await this.memoryManager.store(`task:${task.id}`, task);
+        await this.memoryManager.store(`execution:${task.id}`, execution);
+      }
+      
+      // Release task resources
+      await this.releaseTaskResources(task.id);
+      
+      // Remove from running tasks
+      this.runningTasks.delete(task.id);
+      
+      // Emit completion event
+      this.emit('task:completed', { taskId: task.id, result });
+      
+      this.log('info', `Task ${task.id} completed successfully`);
+      
+      // Check if any pending tasks can now be scheduled
+      await this.checkDependentTasks(task.id);
+      
+    } catch (error) {
+      // Task failed
+      execution.status = 'failed';
+      execution.completedAt = new Date();
+      
+      task.status = 'failed';
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      task.metadata = { 
+        ...task.metadata, 
+        error: errorMessage,
+        failedAt: new Date()
+      };
+      
+      // Update in memory store
+      if (this.memoryManager) {
+        await this.memoryManager.store(`task:${task.id}`, task);
+        await this.memoryManager.store(`execution:${task.id}`, execution);
+      }
+      
+      // Release task resources
+      await this.releaseTaskResources(task.id);
+      
+      // Remove from running tasks
+      this.runningTasks.delete(task.id);
+      
+      // Add log entry
+      this.addExecutionLog(execution, 'error', `Task failed: ${errorMessage}`);
+      
+      // Emit failure event
+      this.emit('task:failed', { taskId: task.id, error });
+      
+      this.log('error', `Task ${task.id} failed`, error);
+      
+      // Check if task should be retried
+      const taskError = error instanceof Error ? error : new Error(String(error));
+      await this.handleTaskRetry(task, taskError);
+    }
+  }
+  
+  /**
+   * Handle task retry logic
+   */
+  private async handleTaskRetry(task: WorkflowTask, error: Error): Promise<void> {
+    const retryCount = (task.metadata?.retryCount as number) || 0;
+    
+    if (retryCount >= task.retryPolicy!.maxAttempts) {
+      this.log('info', `Task ${task.id} retry limit reached, giving up`);
+      return;
+    }
+    
+    // Calculate backoff time
+    const backoffMs = task.retryPolicy!.backoffMs * Math.pow(
+      task.retryPolicy!.backoffMultiplier,
+      retryCount
+    );
+    
+    // Update retry count
+    task.metadata = { ...task.metadata, retryCount: retryCount + 1 };
+    
+    // Schedule retry after backoff
+    this.log('info', `Scheduling retry for task ${task.id} in ${backoffMs}ms`);
+    
+    setTimeout(async () => {
+      // Reset task state for retry
+      task.status = 'pending';
+      if (task.metadata) {
+        delete task.metadata.error;
+        delete task.metadata.failedAt;
+      }
+      
+      if (this.memoryManager) {
+        await this.memoryManager.store(`task:${task.id}`, task);
+      }
+      
+      // Schedule the task again
+      await this.scheduleTask(task);
+      
+      this.log('info', `Task ${task.id} scheduled for retry ${retryCount + 1}/${task.retryPolicy!.maxAttempts}`);
+    }, backoffMs);
+  }
+  
+  /**
+   * Simulate actual task execution
+   */
+  private async simulateTaskExecution(task: WorkflowTask, execution: TaskExecution): Promise<any> {
+    // For simulation, we'll use the estimated duration or default to a random duration
+    const duration = task.estimatedDurationMs || (1000 + Math.random() * 5000);
+    
+    // Simulate progress updates
+    const progressInterval = Math.max(duration / 10, 100); // Update at least 10 times or every 100ms
+    
+    const startTime = Date.now();
+    let lastProgressUpdate = startTime;
+    
+    // Add initial log
+    this.addExecutionLog(execution, 'info', `Starting task execution: ${task.description}`);
+    
+    return new Promise((resolve, reject) => {
+      // Set up progress tracking
+      const progressTimer = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(Math.floor((elapsed / duration) * 100), 99); // Cap at 99% until complete
+        
+        execution.progress = progress;
+        task.progressPercentage = progress;
+        
+        // Update metrics
+        execution.metrics = {
+          ...execution.metrics,
+          cpuUsage: 10 + Math.random() * 90, // Simulate varying CPU usage
+          memoryUsage: 50 + Math.random() * 50, // Simulate memory usage
+          diskIO: Math.random() * 100,
+          networkIO: Math.random() * 100
+        };
+        
+        // Add log entry for significant progress changes
+        if (Date.now() - lastProgressUpdate > 1000) { // Max once per second
+          this.addExecutionLog(execution, 'info', `Task progress: ${progress}%`);
+          lastProgressUpdate = Date.now();
+          
+          // Emit progress event
+          this.emit('task:progress', { 
+            taskId: task.id, 
+            progress, 
+            metrics: execution.metrics 
+          });
+        }
+        
+        // Simulate checkpoint at 50%
+        if (progress >= 50 && !task.checkpoints.some(cp => cp.description.includes('50%'))) {
+          this.createTaskCheckpoint(task, 'Execution 50% complete', { 
+            progress, 
+            timestamp: new Date() 
+          });
+        }
+        
+      }, progressInterval);
+      
+      // Simulate task completion or failure
+      setTimeout(() => {
+        clearInterval(progressTimer);
+        
+        // 90% success rate in simulation
+        if (Math.random() < 0.9) {
+          // Success
+          const result = {
+            success: true,
+            data: { taskId: task.id, executionTime: Date.now() - startTime }
+          };
+          resolve(result);
+        } else {
+          // Simulated failure
+          reject(new Error('Simulated task failure'));
+        }
+      }, duration);
+      
+      // Also handle timeout
+      if (task.timeout) {
+        setTimeout(() => {
+          clearInterval(progressTimer);
+          reject(new Error('Task execution timed out'));
+        }, task.timeout);
+      }
+    });
+  }
+  
+  /**
+   * Create a task checkpoint
+   */
+  private async createTaskCheckpoint(
+    task: WorkflowTask, 
+    description: string, 
+    state: Record<string, unknown>
+  ): Promise<TaskCheckpoint> {
+    const checkpoint: TaskCheckpoint = {
+      id: generateId('checkpoint'),
+      timestamp: new Date(),
+      description,
+      state,
+      artifacts: []
+    };
+    
+    task.checkpoints.push(checkpoint);
+    
+    // Update in memory
+    if (this.memoryManager) {
+      await this.memoryManager.store(`task:${task.id}`, task);
+    }
+    
+    // Emit event
+    this.emit('task:checkpoint', { taskId: task.id, checkpoint });
+    
+    return checkpoint;
+  }
+  
+  /**
+   * Add a log entry to an execution
+   */
+  private addExecutionLog(
+    execution: TaskExecution, 
+    level: 'debug' | 'info' | 'warn' | 'error', 
+    message: string,
+    metadata?: Record<string, unknown>
+  ): void {
+    const log: TaskLog = {
+      timestamp: new Date(),
+      level,
+      message,
+      metadata
+    };
+    
+    execution.logs.push(log);
+    
+    // Limit log size
+    if (execution.logs.length > 1000) {
+      execution.logs = execution.logs.slice(-1000);
+    }
+  }
+  
+  /**
+   * Check for tasks that have timed out
+   */
+  private async checkTimeoutTasks(): Promise<void> {
+    const now = Date.now();
+    
+    for (const taskId of this.runningTasks) {
+      const task = this.tasks.get(taskId);
+      const execution = this.executions.get(taskId);
+      
+      if (!task || !execution || !execution.startedAt || !task.timeout) continue;
+      
+      const runningTime = now - execution.startedAt.getTime();
+      
+      if (runningTime > task.timeout) {
+        this.log('warn', `Task ${taskId} timed out after ${runningTime}ms`);
+        
+        // Add log entry
+        this.addExecutionLog(execution, 'error', `Task timed out after ${runningTime}ms`);
+        
+        // Mark as failed
+        execution.status = 'failed';
+        execution.completedAt = new Date();
+        
+        task.status = 'failed';
+        task.metadata = { 
+          ...task.metadata, 
+          error: 'Task execution timed out', 
+          failedAt: new Date() 
+        };
+        
+        // Update in memory store
+        if (this.memoryManager) {
+          await this.memoryManager.store(`task:${task.id}`, task);
+          await this.memoryManager.store(`execution:${task.id}`, execution);
+        }
+        
+        // Release resources
+        await this.releaseTaskResources(taskId);
+        
+        // Remove from running tasks
+        this.runningTasks.delete(taskId);
+        
+        // Emit failure event
+        this.emit('task:failed', { 
+          taskId, 
+          error: new Error('Task execution timed out') 
+        });
+        
+        // Check if task should be retried
+        await this.handleTaskRetry(task, new Error('Task execution timed out'));
+      }
+    }
+  }
+  
+  /**
+   * Check for dependent tasks that can be scheduled
+   */
+  private async checkDependentTasks(taskId: string): Promise<void> {
+    const dependents = this.dependencyGraph.get(taskId);
+    if (!dependents || dependents.size === 0) return;
+    
+    // Check each dependent task to see if it can be scheduled
+    for (const depTaskId of dependents) {
+      const depTask = this.tasks.get(depTaskId);
+      if (!depTask || depTask.status !== 'pending') continue;
+      
+      // Check if all dependencies are satisfied
+      if (this.areDependenciesMet(depTask)) {
+        await this.scheduleTask(depTask);
+      }
+    }
+  }
+  
+  /**
+   * Handle task progress updates
+   */
+  private handleTaskProgress(data: { taskId: string; progress: number; metrics: TaskMetrics }): void {
+    const { taskId, progress, metrics } = data;
+    
+    const task = this.tasks.get(taskId);
+    if (task) {
+      task.progressPercentage = progress;
+      
+      // No need to store progress updates to memory - too frequent
+    }
+  }
+  
+  /**
+   * Handle task checkpoint events
+   */
+  private handleTaskCheckpoint(data: { taskId: string; checkpoint: TaskCheckpoint }): void {
+    // This is already handled directly in createTaskCheckpoint
+    // Keeping the handler for completeness of event system
+  }
+  
+  /**
+   * Simplified logging function
+   */
+  private log(level: 'debug' | 'info' | 'warn' | 'error', message: string, error?: any): void {
+    if (!this.logger) return;
+    
+    switch (level) {
+      case 'debug':
+        this.logger.debug?.(message, error);
+        break;
+      case 'info':
+        this.logger.info?.(message, error);
+        break;
+      case 'warn':
+        this.logger.warn?.(message, error);
+        break;
+      case 'error':
+        this.logger.error?.(message, error);
+        break;
+    }
+  }
+
   private handleTaskCreated(data: { task: WorkflowTask }): void {
-    // Prevent circular calls by only emitting, not processing
-    // this.emit('task:created', data);
+    this.log('info', `Task created: ${data.task.id} - ${data.task.description}`);
   }
 
   private handleTaskCompleted(data: { taskId: string; result: any }): void {
@@ -442,25 +1078,34 @@ export class TaskEngine extends EventEmitter {
       task.status = 'completed';
       task.progressPercentage = 100;
       task.actualDurationMs = Date.now() - task.createdAt.getTime();
+      
+      this.log('info', `Task completed: ${task.id} - ${task.description}`);
+      
+      // Trigger scheduler to process next tasks
+      this.processReadyTasks();
     }
-    // Prevent circular calls by only emitting, not processing
-    // this.emit('task:completed', data);
   }
 
   private handleTaskFailed(data: { taskId: string; error: Error }): void {
     const task = this.tasks.get(data.taskId);
     if (task) {
       task.status = 'failed';
+      this.log('error', `Task failed: ${task.id} - ${data.error.message}`);
+      
+      // Trigger scheduler to process next tasks
+      this.processReadyTasks();
     }
-    this.emit('task:failed', data);
   }
 
   private handleTaskCancelled(data: { taskId: string; reason: string }): void {
     const task = this.tasks.get(data.taskId);
     if (task) {
       task.status = 'cancelled';
+      this.log('info', `Task cancelled: ${task.id} - ${data.reason}`);
+      
+      // Trigger scheduler to process next tasks
+      this.processReadyTasks();
     }
-    this.emit('task:cancelled', data);
   }
 
   private updateDependencyGraph(task: WorkflowTask): void {
@@ -478,11 +1123,46 @@ export class TaskEngine extends EventEmitter {
     }
   }
 
-  private scheduleTask(task: WorkflowTask): void {
+  /**
+   * Schedule a task for execution if it's ready to run
+   */
+  private async scheduleTask(task: WorkflowTask): Promise<void> {
+    // Skip if task is already queued, running or completed
+    if (['queued', 'running', 'completed', 'failed', 'cancelled'].includes(task.status)) {
+      return;
+    }
+    
     // Add to ready queue if no dependencies or all dependencies met
     if (task.dependencies.length === 0 || this.areDependenciesMet(task)) {
+      // Check if task has scheduled start time that's in the future
+      if (task.schedule?.startTime && task.schedule.startTime > new Date()) {
+        this.log('debug', `Task ${task.id} scheduled to start at ${task.schedule.startTime}`);
+        return;
+      }
+      
+      // Check resource availability if the task has resource requirements
+      if (task.resourceRequirements.length > 0) {
+        const resourcesAvailable = await this.checkResourceAvailability(task);
+        if (!resourcesAvailable) {
+          this.log('debug', `Task ${task.id} waiting for resources`);
+          return;
+        }
+      }
+      
+      // Queue the task
       this.readyQueue.push(task.id);
       task.status = 'queued';
+      
+      if (this.memoryManager) {
+        await this.memoryManager.store(`task:${task.id}`, task);
+      }
+      
+      this.log('info', `Task ${task.id} added to ready queue`);
+      
+      // Trigger scheduler to process queued tasks
+      this.processReadyTasks();
+    } else {
+      this.log('debug', `Task ${task.id} waiting for dependencies`);
     }
   }
 
@@ -565,6 +1245,4 @@ export class TaskEngine extends EventEmitter {
       }
     }
   }
-
-  private logger?: any; // Add logger property for rollback method
 }

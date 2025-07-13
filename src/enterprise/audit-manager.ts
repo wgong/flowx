@@ -930,7 +930,7 @@ export class AuditManager extends EventEmitter {
     try {
       // Load frameworks
       const frameworkFiles = await readdir(join(this.auditPath, 'frameworks'));
-      for (const file of frameworkFiles.filter(f => f.endsWith('.json'))) {
+      for (const file of frameworkFiles.filter(f => f.endsWith('.tson'))) {
         const content = await readFile(join(this.auditPath, 'frameworks', file), 'utf-8');
         const framework: ComplianceFramework = JSON.parse(content);
         this.frameworks.set(framework.id, framework);
@@ -938,7 +938,7 @@ export class AuditManager extends EventEmitter {
 
       // Load audit trails
       const trailFiles = await readdir(join(this.auditPath, 'trails'));
-      for (const file of trailFiles.filter(f => f.endsWith('.json'))) {
+      for (const file of trailFiles.filter(f => f.endsWith('.tson'))) {
         const content = await readFile(join(this.auditPath, 'trails', file), 'utf-8');
         const trail: AuditTrail = JSON.parse(content);
         this.auditTrails.set(trail.id, trail);
@@ -946,7 +946,7 @@ export class AuditManager extends EventEmitter {
 
       // Load reports
       const reportFiles = await readdir(join(this.auditPath, 'reports'));
-      for (const file of reportFiles.filter(f => f.endsWith('.json'))) {
+      for (const file of reportFiles.filter(f => f.endsWith('.tson'))) {
         const content = await readFile(join(this.auditPath, 'reports', file), 'utf-8');
         const report: AuditReport = JSON.parse(content);
         this.reports.set(report.id, report);
@@ -1540,17 +1540,17 @@ export class AuditManager extends EventEmitter {
   }
 
   private async saveFramework(framework: ComplianceFramework): Promise<void> {
-    const filePath = join(this.auditPath, 'frameworks', `${framework.id}.json`);
+    const filePath = join(this.auditPath, 'frameworks', `${framework.id}.tson`);
     await writeFile(filePath, JSON.stringify(framework, null, 2));
   }
 
   private async saveAuditTrail(trail: AuditTrail): Promise<void> {
-    const filePath = join(this.auditPath, 'trails', `${trail.id}.json`);
+    const filePath = join(this.auditPath, 'trails', `${trail.id}.tson`);
     await writeFile(filePath, JSON.stringify(trail, null, 2));
   }
 
   private async saveReport(report: AuditReport): Promise<void> {
-    const filePath = join(this.auditPath, 'reports', `${report.id}.json`);
+    const filePath = join(this.auditPath, 'reports', `${report.id}.tson`);
     await writeFile(filePath, JSON.stringify(report, null, 2));
   }
 }

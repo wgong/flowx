@@ -5,8 +5,8 @@
 import * as fs from 'fs-extra';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
-import { MigrationBackup, BackupFile } from './types.js';
-import { logger } from './logger.js';
+import { MigrationBackup, BackupFile } from './types.ts';
+import { logger } from './logger.ts';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
 
@@ -54,9 +54,9 @@ export class RollbackManager {
       '.claude',
       'CLAUDE.md',
       '.roomodes',
-      'package.json',
-      'memory/memory-store.json',
-      'coordination/config.json'
+      'package.tson',
+      'memory/memory-store.tson',
+      'coordination/config.tson'
     ];
 
     for (const target of backupTargets) {
@@ -75,7 +75,7 @@ export class RollbackManager {
     }
 
     // Save backup manifest
-    const manifestPath = path.join(backupPath, 'backup-manifest.json');
+    const manifestPath = path.join(backupPath, 'backup-manifest.tson');
     await fs.writeJson(manifestPath, backup, { spaces: 2 });
 
     // Update backup index
@@ -130,7 +130,7 @@ export class RollbackManager {
     const backups: MigrationBackup[] = [];
 
     for (const folder of backupFolders.sort().reverse()) {
-      const manifestPath = path.join(this.backupDir, folder, 'backup-manifest.json');
+      const manifestPath = path.join(this.backupDir, folder, 'backup-manifest.tson');
       
       if (await pathExists(manifestPath)) {
         try {
@@ -336,7 +336,7 @@ export class RollbackManager {
   }
 
   async importBackup(importPath: string): Promise<MigrationBackup> {
-    const manifestPath = path.join(importPath, 'backup-manifest.json');
+    const manifestPath = path.join(importPath, 'backup-manifest.tson');
     
     if (!await pathExists(manifestPath)) {
       throw new Error('Invalid backup: missing manifest');
@@ -353,7 +353,7 @@ export class RollbackManager {
   }
 
   private async updateBackupIndex(backup: MigrationBackup): Promise<void> {
-    const indexPath = path.join(this.backupDir, 'backup-index.json');
+    const indexPath = path.join(this.backupDir, 'backup-index.tson');
     
     let index: Record<string, any> = {};
     if (await pathExists(indexPath)) {

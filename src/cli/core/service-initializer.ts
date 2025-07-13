@@ -57,7 +57,7 @@ export class ServiceInitializer {
 
     // Initialize config manager
     const config = ConfigManager.getInstance();
-    const configPath = join(dataDir, 'config.json');
+    const configPath = join(dataDir, 'config.tson');
     
     try {
       await config.load(configPath);

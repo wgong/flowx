@@ -567,9 +567,9 @@ async function backupConfiguration(verbose: boolean): Promise<void> {
     
     // Backup configuration files
     const configFiles = [
-      '.claude-flow.config.json',
+      '.claude-flow.config.tson',
       'claude-flow.yml',
-      'config/default.json'
+      'config/default.tson'
     ];
     
     for (const file of configFiles) {

@@ -9,19 +9,24 @@ import { ITransport, RequestHandler, NotificationHandler } from "./base.ts";
 import { MCPRequest, MCPResponse, MCPNotification } from "../../utils/types.ts";
 import { ILogger } from "../../core/logger.ts";
 import { MCPTransportError } from "../../utils/errors.ts";
+import { EventEmitter } from 'node:events';
 
 /**
  * Stdio transport implementation
  */
-export class StdioTransport implements ITransport {
+export class StdioTransport extends EventEmitter implements ITransport {
   private requestHandler?: RequestHandler;
   private notificationHandler?: NotificationHandler;
   private readline?: Interface;
   private messageCount = 0;
   private notificationCount = 0;
   private running = false;
+  private logger: ILogger;
 
-  constructor(private logger: ILogger) {}
+  constructor(logger: ILogger) {
+    super();
+    this.logger = logger;
+  }
 
   async start(): Promise<void> {
     if (this.running) {
@@ -105,7 +110,7 @@ export class StdioTransport implements ITransport {
     try {
       message = JSON.parse(line);
       
-      if (!message.jsonrpc || message.jsonrpc !== '2.0') {
+      if (!message.tsonrpc || message.tsonrpc !== '2.0') {
         throw new Error('Invalid JSON-RPC version');
       }
 

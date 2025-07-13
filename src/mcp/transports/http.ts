@@ -8,7 +8,6 @@ import { WebSocketServer, WebSocket } from 'ws';
 import cors from 'cors';
 import helmet from 'helmet';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { ITransport, RequestHandler, NotificationHandler } from "./base.ts";
 import { MCPRequest, MCPResponse, MCPNotification, MCPConfig } from "../../utils/types.ts";
 import { ILogger } from "../../core/logger.ts";
@@ -164,8 +163,7 @@ export class HttpTransport implements ITransport {
 
   private setupRoutes(): void {
     // Get current file directory for static files
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
+    // Use __dirname instead of import.meta.url for Jest compatibility
     const consoleDir = join(__dirname, '../../ui/console');
 
     // Serve static files for the web console

@@ -1,207 +1,100 @@
-# Migration Guide: Claude-Flow to FlowX
+# Claude-Flow to FlowX Migration Guide
 
-This guide is designed to help users transition smoothly from Claude-Flow to FlowX. It covers all the necessary steps and changes needed to upgrade your projects and workflows.
+This guide helps users migrate from Claude-Flow to FlowX.
 
-## Table of Contents
-1. [Introduction](#introduction)
-2. [Command-Line Changes](#command-line-changes)
-3. [Configuration Files](#configuration-files)
-4. [API Changes](#api-changes)
-5. [Directory Structure](#directory-structure)
-6. [Scripting and Automation](#scripting-and-automation)
-7. [Troubleshooting](#troubleshooting)
+## What's Changed
 
-## Introduction
+Claude-Flow has been rebranded as FlowX. This migration includes:
 
-FlowX is the next evolution of Claude-Flow, offering improved stability, performance, and features. This rebranding and upgrade marks a significant milestone in the project's development.
+- Renamed CLI command from `claude-flow` to `flowx`
+- Updated configuration paths from `.claude-flow/` to `.flowx/`
+- Fixed several bugs and improved stability
+- Enhanced test coverage for key components
+- Improved error handling and dependency management
 
-Key improvements in FlowX include:
-- Enhanced performance and stability
-- Better integration with Claude Code
-- Improved multi-agent orchestration
-- More consistent API design
-- Expanded documentation and examples
+## Migration Steps
 
-## Command-Line Changes
+### 1. Update Executable References
 
-### Executable Name
-
-The primary change is the executable name:
-
-**Old:**
-```bash
-./claude-flow <command> [options]
-```
-
-**New:**
-```bash
-./flowx <command> [options]
-```
-
-For backward compatibility, both `claude-flow` and `flowx` commands are supported in this release, but future versions may deprecate the `claude-flow` command.
-
-### Package References
-
-If you've installed the package globally or as a dependency:
-
-**Old:**
-```bash
-npm install -g claude-flow
-npx claude-flow <command>
-```
-
-**New:**
-```bash
-npm install -g flowx
-npx flowx <command>
-```
-
-### Automated Migration
-
-You can use the built-in migration utility to update your scripts and configurations:
+If you've been using `claude-flow` in scripts or automation:
 
 ```bash
-./flowx migrate
+# Before
+claude-flow command [options]
+
+# After
+flowx command [options]
 ```
 
-This will scan your project for claude-flow references and offer to update them to flowx.
+For backward compatibility, `claude-flow` will continue to work during the transition period.
 
-## Configuration Files
+### 2. Configuration Files
 
-### Directory Changes
-
-Configuration directory has been updated:
-
-**Old:**
-```
-./.claude-flow/
-```
-
-**New:**
-```
-./.flowx/
-```
-
-The initialization command will automatically create the new directory structure:
+Configuration has moved from `.claude-flow/` to `.flowx/`:
 
 ```bash
-./flowx init --migrate
+# Move your configuration files
+mkdir -p .flowx
+cp -r .claude-flow/* .flowx/
 ```
 
-This will copy configuration from `.claude-flow` to `.flowx` if it exists.
+### 3. Environment Variables
 
-### Configuration Format
+Update any environment variables:
 
-Configuration file formats remain the same, but references to Claude-Flow in the content should be updated to FlowX:
-
-```json
-{
-  "name": "my-project",
-  "version": "1.0.0",
-  "platform": "flowx",
-  "settings": {
-    // Settings remain the same
-  }
-}
-```
-
-## API Changes
-
-For developers using the JavaScript/TypeScript API directly:
-
-### Package Imports
-
-**Old:**
-```javascript
-import { Orchestrator } from 'claude-flow';
-```
-
-**New:**
-```javascript
-import { Orchestrator } from 'flowx';
-```
-
-### Class and Method Names
-
-Most class and method names remain the same, but any with explicit Claude-Flow references have been updated:
-
-**Old:**
-```javascript
-const agent = new ClaudeFlowAgent();
-agent.initializeClaudeFlow();
-```
-
-**New:**
-```javascript
-const agent = new FlowXAgent();
-agent.initializeFlowX();
-```
-
-## Directory Structure
-
-When initializing a new project, the directory structure is now:
-
-```
-my-project/
-├── .flowx/
-│   ├── config.json
-│   ├── settings.json
-│   └── commands/
-├── memory/
-│   ├── agents/
-│   └── sessions/
-└── flowx
-```
-
-## Scripting and Automation
-
-If you have scripts or CI/CD pipelines that reference `claude-flow`, update them to use `flowx` instead:
-
-**Old:**
 ```bash
-#!/bin/bash
-./claude-flow start --ui
-./claude-flow sparc "Build an API"
+# Before
+CLAUDE_FLOW_ENV=development
+
+# After
+FLOWX_ENV=development
 ```
 
-**New:**
+### 4. API References
+
+If you're using the API directly:
+
+```typescript
+// Before
+import { ClaudeFlowError } from './utils/errors.ts';
+import { createClaudeFlowTools } from './mcp/claude-flow-tools.ts';
+
+// After
+import { FlowXError } from './utils/errors.ts';
+import { createFlowXTools } from './mcp/flowx-tools.ts';
+```
+
+### 5. Memory Files
+
+Memory storage has been moved:
+
 ```bash
-#!/bin/bash
-./flowx start --ui
-./flowx sparc "Build an API"
+# Update memory database path reference
+mv .claude-flow/memory.db .flowx/memory.db
 ```
 
-## Troubleshooting
+## Breaking Changes
 
-### Common Issues
+- Error class names have changed (e.g., `ClaudeFlowError` → `FlowXError`)
+- Some internal APIs have been modified for better type safety
+- Configuration paths now use `.flowx/` instead of `.claude-flow/`
 
-1. **Command Not Found**
-   
-   If you see `command not found: flowx`, you may need to:
-   - Run `./flowx init` in your project directory to create the local wrapper
-   - Install globally with `npm install -g flowx`
+## Bug Fixes
 
-2. **Configuration Not Found**
-   
-   If you see errors about missing configuration:
-   - Run `./flowx init --migrate` to migrate your configuration
-   - Check that your `.flowx` directory contains your configuration files
+This migration includes important fixes for:
 
-3. **API Reference Errors**
-   
-   If you're using the API directly and encounter errors:
-   - Update all imports from 'claude-flow' to 'flowx'
-   - Check class and method names for any remaining Claude-Flow references
+- Circular dependency detection and handling
+- Circuit breaker behavior in transient network conditions
+- Conflict resolution for resource management
+- Enhanced Jest compatibility for testing
+- Improved error reporting with more context
 
-### Support
+## Need Help?
 
-If you encounter any issues during migration, please:
-- Check the [documentation](https://github.com/sethdford/flowx/docs)
-- Open an issue on [GitHub](https://github.com/sethdford/flowx/issues)
-- Join the [Discord community](https://discord.gg/flowx) for real-time help
+If you encounter any issues migrating from Claude-Flow to FlowX, please:
 
-## Conclusion
+1. Check the detailed documentation in the `docs/` directory
+2. Review any error messages for specific migration guidance
+3. File an issue in our GitHub repository with details about your migration challenge
 
-The migration from Claude-Flow to FlowX should be straightforward for most users. The core functionality remains the same, with improvements in performance, stability, and features.
-
-We're excited about this next chapter and are committed to making FlowX the best AI orchestration platform available. Thank you for your continued support!
+We're committed to making this transition as smooth as possible!

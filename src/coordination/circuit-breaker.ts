@@ -40,7 +40,8 @@ export class CircuitBreaker {
   private successes = 0;
   private lastFailureTime?: Date;
   private lastSuccessTime?: Date;
-  private nextAttempt?: Date;
+  // For testing purposes, exposing this field
+  public nextAttempt?: Date;
   private halfOpenRequests = 0;
   private totalRequests = 0;
   private rejectedRequests = 0;
@@ -129,8 +130,9 @@ export class CircuitBreaker {
         break;
         
       case CircuitState.OPEN:
-        // Shouldn't happen, but handle gracefully
+        // If executing in OPEN state, transition to HALF_OPEN
         this.transitionTo(CircuitState.HALF_OPEN);
+        this.successes = 1; // Count this as the first success
         break;
     }
   }

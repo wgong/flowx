@@ -93,22 +93,22 @@ export class MCPPerformanceMonitor extends EventEmitter {
   private alertRules = new Map<string, AlertRule>();
   private activeAlerts = new Map<string, Alert>();
   private optimizationSuggestions: OptimizationSuggestion[] = [];
-  
+  private logger: ILogger;
+
   private metricsTimer?: number | null;
   private alertCheckTimer?: number | null;
   private cleanupTimer?: number | null;
-  
+
   private readonly config = {
-    metricsInterval: 10000, // 10 seconds
-    alertCheckInterval: 5000, // 5 seconds
-    maxHistorySize: 1000,
+    historySize: 1000,
     maxResponseTimeHistory: 10000,
     cleanupInterval: 300000, // 5 minutes
     requestTimeout: 30000, // 30 seconds
   };
 
-  constructor(private logger: ILogger) {
+  constructor(logger: ILogger) {
     super();
+    this.logger = logger;
     this.setupDefaultAlertRules();
     this.startMonitoring();
   }
@@ -367,17 +367,17 @@ export class MCPPerformanceMonitor extends EventEmitter {
       this.historicalMetrics.push(metrics);
       
       // Keep only recent history
-      if (this.historicalMetrics.length > this.config.maxHistorySize) {
+      if (this.historicalMetrics.length > this.config.historySize) {
         this.historicalMetrics.shift();
       }
       
       this.emit('metricsCollected', metrics);
-    }, this.config.metricsInterval) as unknown as number;
+    }, this.config.cleanupInterval) as unknown as number;
 
     // Check alerts periodically
     this.alertCheckTimer = setInterval(() => {
       this.checkAlerts();
-    }, this.config.alertCheckInterval) as unknown as number;
+    }, this.config.cleanupInterval) as unknown as number;
 
     // Cleanup old data
     this.cleanupTimer = setInterval(() => {

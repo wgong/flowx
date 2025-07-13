@@ -2,8 +2,8 @@
  * Progress Reporter - Provides visual feedback during migration
  */
 
-import { colors } from '../utils/colors.js';
-import { MigrationProgress } from './types.js';
+import { colors } from '../utils/colors.ts';
+import { MigrationProgress } from './types.ts';
 
 export class ProgressReporter {
   private progress: MigrationProgress;

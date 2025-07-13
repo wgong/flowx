@@ -138,7 +138,7 @@ describe('Swarm Optimizations', () => {
     
     it('should write and read JSON files', async () => {
       const testData = { id: 1, name: 'test', values: [1, 2, 3] };
-      const path = `${testDir}/test.json`;
+      const path = `${testDir}/test.tson`;
       
       const writeResult = await fileManager.writeJSON(path, testData);
       expect(writeResult.success).toBe(true);

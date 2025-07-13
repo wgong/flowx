@@ -17,16 +17,22 @@ export interface DependencyPath {
   from: string;
   to: string;
   path: string[];
+  weight?: number;
 }
 
 /**
  * Manages task dependencies and determines execution order
  */
 export class DependencyGraph {
+  private dependencies = new Map<string, Set<string>>();
+  private dependents = new Map<string, Set<string>>();
   private nodes = new Map<string, DependencyNode>();
   private completedTasks = new Set<string>();
+  private logger: ILogger;
 
-  constructor(private logger: ILogger) {}
+  constructor(logger: ILogger) {
+    this.logger = logger;
+  }
 
   /**
    * Add a task to the dependency graph
@@ -44,21 +50,41 @@ export class DependencyGraph {
       status: 'pending',
     };
 
-    // Validate dependencies exist
-    for (const depId of task.dependencies) {
-      if (!this.nodes.has(depId) && !this.completedTasks.has(depId)) {
-        throw new TaskDependencyError(task.id, [depId]);
+    // Add node first so that circular dependency detection can work
+    this.nodes.set(task.id, node);
+
+    // Check for circular dependencies
+    const tempNode = this.nodes.get(task.id);
+    if (tempNode) {
+      // Add a temp node to check for circular deps
+      for (const depId of task.dependencies) {
+        const depNode = this.nodes.get(depId);
+        if (depNode) {
+          depNode.dependents.add(task.id);
+        }
+      }
+
+      // Check for cycles
+      const cycles = this.detectCycles();
+      if (cycles.length > 0) {
+        // Remove the node and its dependency references since it creates cycles
+        for (const depId of task.dependencies) {
+          const depNode = this.nodes.get(depId);
+          if (depNode) {
+            depNode.dependents.delete(task.id);
+          }
+        }
+        this.nodes.delete(task.id);
+        throw new TaskDependencyError(task.id, cycles[0], 'Circular dependency detected');
       }
     }
 
-    // Add node
-    this.nodes.set(task.id, node);
-
-    // Update dependents for dependencies
+    // Validate dependencies exist
     for (const depId of task.dependencies) {
-      const depNode = this.nodes.get(depId);
-      if (depNode) {
-        depNode.dependents.add(task.id);
+      if (!this.nodes.has(depId) && !this.completedTasks.has(depId)) {
+        // Remove the node since dependencies don't exist
+        this.nodes.delete(task.id);
+        throw new TaskDependencyError(task.id, [depId]);
       }
     }
 
@@ -316,7 +342,157 @@ export class DependencyGraph {
     return sorted;
   }
 
+  /**
+   * Find the critical path in the dependency graph
+   * Critical path is the longest path from a source node to a sink node
+   * This is useful for determining which tasks are most important for meeting deadlines
+   */
+  findCriticalPath(): DependencyPath | null {
+    // Check for cycles first, as critical path doesn't exist in cyclic graphs
+    const cycles = this.detectCycles();
+    if (cycles.length > 0) {
+      this.logger.error('Cannot find critical path due to cycles', { cycles });
+      return null;
+    }
+    
+    // Get topological sort order
+    const sorted = this.topologicalSort();
+    if (!sorted || sorted.length === 0) {
+      return null;
+    }
+    
+    // Find source nodes (no dependencies) and sink nodes (no dependents)
+    const sourceNodes: string[] = [];
+    const sinkNodes: string[] = [];
+    
+    for (const [taskId, node] of this.nodes.entries()) {
+      if (node.dependencies.size === 0) {
+        sourceNodes.push(taskId);
+      }
+      if (node.dependents.size === 0) {
+        sinkNodes.push(taskId);
+      }
+    }
+    
+    if (sourceNodes.length === 0 || sinkNodes.length === 0) {
+      return null;
+    }
+    
+    // Calculate longest path from each source to each sink
+    let criticalPath: DependencyPath | null = null;
+    let maxLength = 0;
+    
+    for (const source of sourceNodes) {
+      for (const sink of sinkNodes) {
+        const path = this.findLongestPath(source, sink);
+        if (path && path.path.length > maxLength) {
+          maxLength = path.path.length;
+          criticalPath = path;
+        }
+      }
+    }
+    
+    return criticalPath;
+  }
+  
+  /**
+   * Helper method to find the longest path between two nodes
+   * Uses dynamic programming approach based on topological sort
+   */
+  private findLongestPath(from: string, to: string): DependencyPath | null {
+    const topo = this.topologicalSort();
+    if (!topo) return null;
+    
+    // Initialize distances and predecessors
+    const dist: Map<string, number> = new Map();
+    const pred: Map<string, string> = new Map();
+    
+    // Set initial distances to -Infinity except for source
+    for (const task of topo) {
+      dist.set(task, task === from ? 0 : Number.NEGATIVE_INFINITY);
+    }
+    
+    // Process in topological order
+    for (const taskId of topo) {
+      const node = this.nodes.get(taskId);
+      if (!node) continue;
+      
+      // Relax edges
+      for (const dependent of node.dependents) {
+        const newDist = dist.get(taskId)! + 1; // Each edge has weight 1
+        
+        if (newDist > (dist.get(dependent) || Number.NEGATIVE_INFINITY)) {
+          dist.set(dependent, newDist);
+          pred.set(dependent, taskId);
+        }
+      }
+    }
+    
+    // Check if we can reach the target
+    if ((dist.get(to) || Number.NEGATIVE_INFINITY) === Number.NEGATIVE_INFINITY) {
+      return null;
+    }
+    
+    // Reconstruct path
+    const path: string[] = [];
+    let current = to;
+    
+    while (current !== from) {
+      path.unshift(current);
+      current = pred.get(current)!;
+    }
+    
+    path.unshift(from);
+    
+    return {
+      from,
+      to,
+      path,
+      weight: dist.get(to)
+    };
+  }
 
+  /**
+   * Generate DOT graph representation for visualization
+   */
+  toDot(): string {
+    let dot = 'digraph TaskDependencies {\n';
+    
+    // Add nodes
+    for (const [taskId, node] of this.nodes.entries()) {
+      let nodeStyle = '';
+      
+      switch (node.status) {
+        case 'ready':
+          nodeStyle = ' [color=green]';
+          break;
+        case 'running':
+          nodeStyle = ' [color=blue]';
+          break;
+        case 'failed':
+          nodeStyle = ' [color=red]';
+          break;
+        case 'completed':
+          nodeStyle = ' [color=grey]';
+          break;
+        default:
+          nodeStyle = '';
+          break;
+      }
+      
+      dot += `  "${taskId}"${nodeStyle};\n`;
+    }
+    
+    // Add edges
+    for (const [taskId, node] of this.nodes.entries()) {
+      for (const depId of node.dependencies) {
+        dot += `  "${depId}" -> "${taskId}";\n`;
+      }
+    }
+    
+    dot += '}';
+    return dot;
+  }
 
   /**
    * Get graph statistics

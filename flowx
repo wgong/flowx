@@ -1,0 +1,9 @@
+#!/usr/bin/env node
+
+/**
+ * FlowX CLI - Main Entry Point
+ * Direct wrapper for the CLI implementation
+ */
+
+// Import the CLI implementation
+import './cli.js';

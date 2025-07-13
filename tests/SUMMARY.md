@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project successfully migrated the Claude-Flow test suite from Deno's testing framework to Node.js with Jest. The migration ensures that all tests run correctly in a Node.js environment, making the codebase more accessible and maintainable.
+This project successfully migrated the FlowX test suite from Deno's testing framework to Node.js with Jest. The migration ensures that all tests run correctly in a Node.js environment, making the codebase more accessible and maintainable.
 
 ## Key Accomplishments
 
@@ -82,6 +82,6 @@ To maintain the test suite going forward:
 
 ## Conclusion
 
-The migration project has successfully transitioned the Claude-Flow test suite from Deno to Node.js/Jest. The tests now run reliably in a Node.js environment, making it easier for developers to run tests and contribute to the project.
+The migration project has successfully transitioned the FlowX test suite from Deno to Node.js/Jest. The tests now run reliably in a Node.js environment, making it easier for developers to run tests and contribute to the project.
 
 The migration has also improved the overall quality of the test suite by standardizing on Jest best practices and leveraging the extensive Jest ecosystem. The project is now better positioned for ongoing development and maintenance.

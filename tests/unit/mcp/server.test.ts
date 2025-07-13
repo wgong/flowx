@@ -2,13 +2,15 @@
  * Unit tests for MCP Server
  */
 
-import { describe, it, beforeEach, afterEach } from 'https://deno.land/std@0.220.0/testing/bdd.ts';
-import { assertEquals, assertExists } from 'https://deno.land/std@0.220.0/assert/mod.ts';
+import { describe, it, beforeEach, afterEach, expect, jest } from '@jest/globals';
+import { MCPServer } from '../../../src/mcp/server';
+import { MCPConfig, MCPTool } from '../../../src/utils/types';
+import { Logger } from '../../../src/core/logger';
+import { EventBus } from '../../../src/core/event-bus';
 
-import { MCPServer } from '../../../src/mcp/server.ts';
-import { MCPConfig, MCPTool } from '../../../src/utils/types.ts';
-import { Logger } from '../../../src/core/logger.ts';
-import { EventBus } from '../../../src/core/event-bus.ts';
+// Helper functions for Jest
+const assertEquals = (actual: any, expected: any) => expect(actual).toEqual(expected);
+const assertExists = (value: any) => expect(value).toBeDefined();
 
 describe('MCPServer', () => {
   let server: MCPServer;
@@ -17,11 +19,10 @@ describe('MCPServer', () => {
   let config: MCPConfig;
 
   beforeEach(async () => {
-    logger = new Logger();
-    await logger.configure({
+    logger = Logger.getInstance({
       level: 'debug',
       format: 'text',
-      destination: 'console',
+      destination: 'console'
     });
 
     eventBus = EventBus.getInstance(false);

@@ -73,7 +73,7 @@ export { SessionManager, type ISessionManager } from "./session-manager.ts";
 export { LoadBalancer, type ILoadBalancer, RequestQueue } from "./load-balancer.ts";
 
 // Tool Implementations
-export { createClaudeFlowTools, type ClaudeFlowToolContext } from "./claude-flow-tools.ts";
+export { createFlowXTools, type FlowXToolContext } from "./flowx-tools.ts";
 export { createSwarmTools, type SwarmToolContext } from "./swarm-tools.ts";
 
 // Import the types and classes we need for the factory

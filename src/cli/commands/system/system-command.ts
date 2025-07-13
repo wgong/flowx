@@ -348,7 +348,7 @@ async function showSystemInfo(context: CLIContext): Promise<void> {
     console.log('─'.repeat(60));
 
     console.log(`Platform: ${systemInfo.platform} (${systemInfo.arch})`);
-    console.log(`Node.js: ${systemInfo.nodeVersion}`);
+    console.log(`Node.ts: ${systemInfo.nodeVersion}`);
     console.log(`Hostname: ${systemInfo.hostname}`);
     console.log(`Uptime: ${formatDuration(systemInfo.uptime * 1000)}`);
     console.log(`CPU Cores: ${systemInfo.cpuCount}`);
@@ -371,7 +371,7 @@ async function showSystemInfo(context: CLIContext): Promise<void> {
 
       // Memory breakdown
       const memUsage = process.memoryUsage();
-      console.log('\nNode.js Memory Usage:');
+      console.log('\nNode.ts Memory Usage:');
       console.log(`  RSS: ${formatBytes(memUsage.rss)}`);
       console.log(`  Heap Total: ${formatBytes(memUsage.heapTotal)}`);
       console.log(`  Heap Used: ${formatBytes(memUsage.heapUsed)}`);
@@ -1000,17 +1000,17 @@ async function runSecurityDiagnostics(): Promise<SystemDiagnostic[]> {
 async function runDependencyDiagnostics(): Promise<SystemDiagnostic[]> {
   const diagnostics: SystemDiagnostic[] = [];
 
-  // Node.js version check
+  // Node.ts version check
   const nodeVersion = process.version;
   const majorVersion = parseInt(nodeVersion.slice(1).split('.')[0]);
   
   diagnostics.push({
     category: 'dependencies',
-    name: 'Node.js Version',
+    name: 'Node.ts Version',
     status: majorVersion >= 18 ? 'pass' : majorVersion >= 16 ? 'warn' : 'fail',
-    message: `Node.js ${nodeVersion}`,
+    message: `Node.ts ${nodeVersion}`,
     details: { version: nodeVersion, majorVersion },
-    recommendation: majorVersion < 18 ? 'Consider upgrading to Node.js 18 or later' : undefined
+    recommendation: majorVersion < 18 ? 'Consider upgrading to Node.ts 18 or later' : undefined
   });
 
   return diagnostics;
@@ -1055,7 +1055,7 @@ async function getProcessCount(): Promise<number> {
 async function getProcessList(filter?: string): Promise<ProcessInfo[]> {
   // Mock process list
   const processes: ProcessInfo[] = [
-    { pid: process.pid, ppid: 1, name: 'claude-flow', cpu: 2.5, memory: 1024 * 1024 * 100, status: 'running', startTime: Date.now() - 3600000 },
+    { pid: process.pid, ppid: 1, name: 'flowx', cpu: 2.5, memory: 1024 * 1024 * 100, status: 'running', startTime: Date.now() - 3600000 },
     { pid: 1234, ppid: 1, name: 'node', cpu: 1.2, memory: 1024 * 1024 * 50, status: 'running', startTime: Date.now() - 7200000 },
     { pid: 5678, ppid: 1, name: 'npm', cpu: 0.8, memory: 1024 * 1024 * 30, status: 'running', startTime: Date.now() - 1800000 }
   ];

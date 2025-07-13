@@ -8,7 +8,7 @@ import { CommandParser } from './command-parser.ts';
 import { printError, printInfo } from './output-formatter.ts';
 import { getCommand } from './command-registry.ts';
 
-export const VERSION = "1.1.2";
+export const VERSION = "1.0.0";
 
 // Core interfaces
 export interface ValidationRule {
@@ -460,7 +460,7 @@ export class CLIApplication extends EventEmitter {
   }
 
   private async loadConfig(configPath?: string): Promise<Record<string, any> | undefined> {
-    const configFile = configPath || "claude-flow.config.json";
+    const configFile = configPath || "claude-flow.config.tson";
     try {
       const { readFile } = await import('node:fs/promises');
       const content = await readFile(configFile, 'utf8');

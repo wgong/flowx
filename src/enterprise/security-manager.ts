@@ -861,7 +861,7 @@ export class SecurityManager extends EventEmitter {
     try {
       // Load scans
       const scanFiles = await readdir(join(this.securityPath, 'scans'));
-      for (const file of scanFiles.filter(f => f.endsWith('.json'))) {
+      for (const file of scanFiles.filter(f => f.endsWith('.tson'))) {
         const content = await readFile(join(this.securityPath, 'scans', file), 'utf-8');
         const scan: SecurityScan = JSON.parse(content);
         this.scans.set(scan.id, scan);
@@ -869,7 +869,7 @@ export class SecurityManager extends EventEmitter {
 
       // Load policies
       const policyFiles = await readdir(join(this.securityPath, 'policies'));
-      for (const file of policyFiles.filter(f => f.endsWith('.json'))) {
+      for (const file of policyFiles.filter(f => f.endsWith('.tson'))) {
         const content = await readFile(join(this.securityPath, 'policies', file), 'utf-8');
         const policy: SecurityPolicy = JSON.parse(content);
         this.policies.set(policy.id, policy);
@@ -877,7 +877,7 @@ export class SecurityManager extends EventEmitter {
 
       // Load incidents
       const incidentFiles = await readdir(join(this.securityPath, 'incidents'));
-      for (const file of incidentFiles.filter(f => f.endsWith('.json'))) {
+      for (const file of incidentFiles.filter(f => f.endsWith('.tson'))) {
         const content = await readFile(join(this.securityPath, 'incidents', file), 'utf-8');
         const incident: SecurityIncident = JSON.parse(content);
         this.incidents.set(incident.id, incident);
@@ -1016,7 +1016,7 @@ export class SecurityManager extends EventEmitter {
             version: '3.1'
           },
           location: {
-            file: 'package-lock.json',
+            file: 'package-lock.tson',
             line: 125,
             component: 'libxml2@2.9.10'
           },
@@ -1097,7 +1097,7 @@ export class SecurityManager extends EventEmitter {
         severity: 'high' as const,
         category: 'secret' as const,
         location: {
-          file: 'config/aws.js',
+          file: 'config/aws.ts',
           line: 12,
           column: 20
         },
@@ -1153,7 +1153,7 @@ export class SecurityManager extends EventEmitter {
           category: 'vulnerability',
           cve: vuln.cve,
           location: {
-            file: 'package.json',
+            file: 'package.tson',
             component: packageName
           },
           evidence: {
@@ -1342,17 +1342,17 @@ export class SecurityManager extends EventEmitter {
   }
 
   private async saveScan(scan: SecurityScan): Promise<void> {
-    const filePath = join(this.securityPath, 'scans', `${scan.id}.json`);
+    const filePath = join(this.securityPath, 'scans', `${scan.id}.tson`);
     await writeFile(filePath, JSON.stringify(scan, null, 2));
   }
 
   private async savePolicy(policy: SecurityPolicy): Promise<void> {
-    const filePath = join(this.securityPath, 'policies', `${policy.id}.json`);
+    const filePath = join(this.securityPath, 'policies', `${policy.id}.tson`);
     await writeFile(filePath, JSON.stringify(policy, null, 2));
   }
 
   private async saveIncident(incident: SecurityIncident): Promise<void> {
-    const filePath = join(this.securityPath, 'incidents', `${incident.id}.json`);
+    const filePath = join(this.securityPath, 'incidents', `${incident.id}.tson`);
     await writeFile(filePath, JSON.stringify(incident, null, 2));
   }
 

@@ -1,8 +1,8 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { PromptManager } from '../prompt-manager.js';
-import { PromptConfigManager } from '../prompt-utils.js';
+import { PromptManager } from '../prompt-manager.ts';
+import { PromptConfigManager } from '../prompt-utils.ts';
 
 describe('Prompt Copying Integration Tests', () => {
   let tempDir: string;
@@ -24,7 +24,7 @@ describe('Prompt Copying Integration Tests', () => {
     // Initialize manager
     testManager = new PromptManager({
       basePath: tempDir,
-      configPath: '.test-config.json',
+      configPath: '.test-config.tson',
       autoDiscovery: false
     });
     
@@ -152,7 +152,7 @@ describe('Prompt Copying Integration Tests', () => {
 
   test('should handle configuration persistence', async () => {
     const configManager = new PromptConfigManager(
-      path.join(tempDir, '.test-config.json')
+      path.join(tempDir, '.test-config.tson')
     );
     
     // Save custom config
@@ -166,7 +166,7 @@ describe('Prompt Copying Integration Tests', () => {
     
     // Load config in new instance
     const newConfigManager = new PromptConfigManager(
-      path.join(tempDir, '.test-config.json')
+      path.join(tempDir, '.test-config.tson')
     );
     
     const config = await newConfigManager.loadConfig();

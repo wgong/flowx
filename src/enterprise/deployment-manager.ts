@@ -783,21 +783,21 @@ export class DeploymentManager extends EventEmitter {
     // Load environments, strategies, and pipelines from disk
     try {
       const envFiles = await readdir(join(this.deploymentsPath, 'environments'));
-      for (const file of envFiles.filter(f => f.endsWith('.json'))) {
+      for (const file of envFiles.filter(f => f.endsWith('.tson'))) {
         const content = await readFile(join(this.deploymentsPath, 'environments', file), 'utf-8');
         const env: DeploymentEnvironment = JSON.parse(content);
         this.environments.set(env.id, env);
       }
 
       const strategyFiles = await readdir(join(this.deploymentsPath, 'strategies'));
-      for (const file of strategyFiles.filter(f => f.endsWith('.json'))) {
+      for (const file of strategyFiles.filter(f => f.endsWith('.tson'))) {
         const content = await readFile(join(this.deploymentsPath, 'strategies', file), 'utf-8');
         const strategy: DeploymentStrategy = JSON.parse(content);
         this.strategies.set(strategy.id, strategy);
       }
 
       const pipelineFiles = await readdir(join(this.deploymentsPath, 'pipelines'));
-      for (const file of pipelineFiles.filter(f => f.endsWith('.json'))) {
+      for (const file of pipelineFiles.filter(f => f.endsWith('.tson'))) {
         const content = await readFile(join(this.deploymentsPath, 'pipelines', file), 'utf-8');
         const pipeline: DeploymentPipeline = JSON.parse(content);
         this.pipelines.set(pipeline.id, pipeline);
@@ -1047,17 +1047,17 @@ export class DeploymentManager extends EventEmitter {
   }
 
   private async saveEnvironment(environment: DeploymentEnvironment): Promise<void> {
-    const filePath = join(this.deploymentsPath, 'environments', `${environment.id}.json`);
+    const filePath = join(this.deploymentsPath, 'environments', `${environment.id}.tson`);
     await writeFile(filePath, JSON.stringify(environment, null, 2));
   }
 
   private async saveStrategy(strategy: DeploymentStrategy): Promise<void> {
-    const filePath = join(this.deploymentsPath, 'strategies', `${strategy.id}.json`);
+    const filePath = join(this.deploymentsPath, 'strategies', `${strategy.id}.tson`);
     await writeFile(filePath, JSON.stringify(strategy, null, 2));
   }
 
   private async saveDeployment(deployment: Deployment): Promise<void> {
-    const filePath = join(this.deploymentsPath, `${deployment.id}.json`);
+    const filePath = join(this.deploymentsPath, `${deployment.id}.tson`);
     await writeFile(filePath, JSON.stringify(deployment, null, 2));
   }
 

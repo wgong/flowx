@@ -2,6 +2,7 @@
  * Export the configManager from the actual implementation
  */
 
-const { configManager } = require('../../../src/core/config.ts');
+// Use require to import the compiled JS version instead of directly requiring the TS file
+const { configManager } = require('../../../src/core/config');
 
 module.exports = { configManager };

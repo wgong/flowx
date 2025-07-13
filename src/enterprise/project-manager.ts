@@ -317,7 +317,7 @@ export class ProjectManager extends EventEmitter {
     const archivePath = join(this.projectsPath, 'archived');
     await mkdir(archivePath, { recursive: true });
     await writeFile(
-      join(archivePath, `${projectId}.json`),
+      join(archivePath, `${projectId}.tson`),
       JSON.stringify(project, null, 2)
     );
 
@@ -624,7 +624,7 @@ export class ProjectManager extends EventEmitter {
   private async loadProjects(): Promise<void> {
     try {
       const files = await readdir(this.projectsPath);
-      const projectFiles = files.filter(f => f.endsWith('.json') && !f.startsWith('.'));
+      const projectFiles = files.filter(f => f.endsWith('.tson') && !f.startsWith('.'));
 
       for (const file of projectFiles) {
         try {
@@ -643,7 +643,7 @@ export class ProjectManager extends EventEmitter {
   }
 
   private async saveProject(project: Project): Promise<void> {
-    const filePath = join(this.projectsPath, `${project.id}.json`);
+    const filePath = join(this.projectsPath, `${project.id}.tson`);
     await writeFile(filePath, JSON.stringify(project, null, 2));
   }
 

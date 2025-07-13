@@ -207,7 +207,7 @@ class UIServer {
     this.app.use(express.static(this.config.staticPath, {
       setHeaders: (res, filePath) => {
         // Set correct MIME type for JavaScript modules
-        if (filePath.endsWith('.js')) {
+        if (filePath.endsWith('.ts')) {
           res.setHeader('Content-Type', 'application/javascript');
         } else if (filePath.endsWith('.mjs')) {
           res.setHeader('Content-Type', 'application/javascript');
@@ -470,7 +470,7 @@ class UIServer {
   private async executeCLICommand(command: string): Promise<any> {
     try {
       // Execute the CLI command using the actual CLI
-      const cliPath = path.join(process.cwd(), 'cli.js');
+      const cliPath = path.join(process.cwd(), 'cli.ts');
       const fullCommand = `node ${cliPath} ${command}`;
       
       const { stdout, stderr } = await execAsync(fullCommand, {

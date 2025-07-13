@@ -63,7 +63,7 @@ export const benchmarkCommand: CLICommand = {
     'claude-flow benchmark run --suite all',
     'claude-flow benchmark run --test memory',
     'claude-flow benchmark load --concurrent 10',
-    'claude-flow benchmark compare --baseline baseline.json',
+    'claude-flow benchmark compare --baseline baseline.tson',
     'claude-flow benchmark system --duration 60',
     'claude-flow benchmark report --format json'
   ],

@@ -1,16 +1,16 @@
 /**
- * SQL.js-based memory backend for cross-platform compatibility
+ * SQL.ts-based memory backend for cross-platform compatibility
  */
 
-import { MemoryEntry, MemoryQuery } from "../../utils/types.js";
-import { IMemoryBackend } from "./base.js";
-import { ILogger } from "../../core/logger.js";
-import { MemoryError } from "../../utils/errors.js";
+import { MemoryEntry, MemoryQuery } from "../../utils/types.ts";
+import { IMemoryBackend } from "./base.ts";
+import { ILogger } from "../../core/logger.ts";
+import { MemoryError } from "../../utils/errors.ts";
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Import sql.js with dynamic import for ES module compatibility
-// @ts-ignore - sql.js doesn't have proper TypeScript declarations
+// Import sql.ts with dynamic import for ES module compatibility
+// @ts-ignore - sql.ts doesn't have proper TypeScript declarations
 let initSqlJs: any;
 
 export class SqlJsBackend implements IMemoryBackend {
@@ -26,19 +26,19 @@ export class SqlJsBackend implements IMemoryBackend {
   }
 
   async initialize(): Promise<void> {
-    this.logger.info('Initializing SQL.js backend...', { dbPath: this.dbPath });
+    this.logger.info('Initializing SQL.ts backend...', { dbPath: this.dbPath });
 
     try {
-      // Dynamically import sql.js for ES module compatibility
+      // Dynamically import sql.ts for ES module compatibility
       if (!initSqlJs) {
-        // @ts-ignore - sql.js doesn't have proper TypeScript declarations
-        const sqlJsModule = await import('sql.js');
+        // @ts-ignore - sql.ts doesn't have proper TypeScript declarations
+        const sqlJsModule = await import('sql.ts');
         initSqlJs = sqlJsModule.default || sqlJsModule;
       }
       
-      // Initialize SQL.js
+      // Initialize SQL.ts
       this.SQL = await initSqlJs({
-        // For Node.js, we don't need to specify locateFile
+        // For Node.ts, we don't need to specify locateFile
       });
 
       // Check if database file exists
@@ -54,10 +54,10 @@ export class SqlJsBackend implements IMemoryBackend {
       // Create tables if they don't exist
       await this.createTables();
 
-      this.logger.info('SQL.js backend initialized successfully');
+      this.logger.info('SQL.ts backend initialized successfully');
     } catch (error) {
-      this.logger.error('Failed to initialize SQL.js backend', error);
-      throw new MemoryError('SQL.js backend initialization failed', { error });
+      this.logger.error('Failed to initialize SQL.ts backend', error);
+      throw new MemoryError('SQL.ts backend initialization failed', { error });
     }
   }
 
@@ -71,9 +71,9 @@ export class SqlJsBackend implements IMemoryBackend {
         this.db.close();
         this.db = null;
         
-        this.logger.info('SQL.js backend shutdown successfully');
+        this.logger.info('SQL.ts backend shutdown successfully');
       } catch (error) {
-        this.logger.error('Error during SQL.js backend shutdown', error);
+        this.logger.error('Error during SQL.ts backend shutdown', error);
         throw error;
       }
     }
@@ -81,7 +81,7 @@ export class SqlJsBackend implements IMemoryBackend {
 
   async store(entry: MemoryEntry): Promise<void> {
     if (!this.db) {
-      throw new MemoryError('SQL.js backend not initialized');
+      throw new MemoryError('SQL.ts backend not initialized');
     }
 
     try {
@@ -119,7 +119,7 @@ export class SqlJsBackend implements IMemoryBackend {
 
   async retrieve(id: string): Promise<MemoryEntry | undefined> {
     if (!this.db) {
-      throw new MemoryError('SQL.js backend not initialized');
+      throw new MemoryError('SQL.ts backend not initialized');
     }
 
     try {
@@ -142,7 +142,7 @@ export class SqlJsBackend implements IMemoryBackend {
 
   async update(id: string, entry: MemoryEntry): Promise<void> {
     if (!this.db) {
-      throw new MemoryError('SQL.js backend not initialized');
+      throw new MemoryError('SQL.ts backend not initialized');
     }
 
     try {
@@ -180,7 +180,7 @@ export class SqlJsBackend implements IMemoryBackend {
 
   async delete(id: string): Promise<void> {
     if (!this.db) {
-      throw new MemoryError('SQL.js backend not initialized');
+      throw new MemoryError('SQL.ts backend not initialized');
     }
 
     try {
@@ -200,7 +200,7 @@ export class SqlJsBackend implements IMemoryBackend {
 
   async query(query: MemoryQuery): Promise<MemoryEntry[]> {
     if (!this.db) {
-      throw new MemoryError('SQL.js backend not initialized');
+      throw new MemoryError('SQL.ts backend not initialized');
     }
 
     try {
@@ -277,7 +277,7 @@ export class SqlJsBackend implements IMemoryBackend {
 
   async getAllEntries(): Promise<MemoryEntry[]> {
     if (!this.db) {
-      throw new MemoryError('SQL.js backend not initialized');
+      throw new MemoryError('SQL.ts backend not initialized');
     }
 
     try {
@@ -346,7 +346,7 @@ export class SqlJsBackend implements IMemoryBackend {
       // Save database
       await this.saveDatabase();
       
-      this.logger.debug('SQL.js backend maintenance completed');
+      this.logger.debug('SQL.ts backend maintenance completed');
     } catch (error) {
       this.logger.error('Failed to perform maintenance', error);
     }

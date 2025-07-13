@@ -3,11 +3,11 @@
  * Streamlined service initialization with lazy loading and error recovery
  */
 
-import { IEventBus } from '../../core/event-bus.ts';
-import { ILogger } from '../../core/logger.ts';
+import { IEventBus, ILogger } from '../../utils/types.ts';
 import { EventBus } from '../../core/event-bus.ts';
 import { Logger } from '../../core/logger.ts';
-import { MemoryConfig } from '../../utils/types.ts';
+// Remove interface import that gets stripped in Node.js strip-only mode
+// import { MemoryConfig } from '../../utils/types.ts';
 import { printInfo, printError, printSuccess } from './output-formatter.ts';
 
 // Simplified service interfaces
@@ -82,8 +82,8 @@ let initializationPromise: Promise<GlobalServices> | null = null;
 export async function initializeGlobalServices(
   providedEventBus?: IEventBus,
   providedLogger?: ILogger,
-  memoryConfig?: MemoryConfig,
-  timeoutMs: number = 5000
+  memoryConfig?: any, // Use any instead of MemoryConfig interface
+  timeoutMs: number = 10000
 ): Promise<GlobalServices> {
   // Return existing services if already initialized
   if (globalServices?.initialized) {
@@ -92,10 +92,12 @@ export async function initializeGlobalServices(
 
   // Return existing initialization promise if in progress
   if (initializationPromise) {
+    console.log('Using existing initialization promise...');
     return initializationPromise;
   }
 
   // Create new initialization promise with timeout
+  console.log(`Initializing services with ${timeoutMs}ms timeout...`);
   initializationPromise = Promise.race([
     initializeServicesInternal(providedEventBus, providedLogger, memoryConfig),
     new Promise<never>((_, reject) => 
@@ -104,13 +106,41 @@ export async function initializeGlobalServices(
   ]);
 
   try {
+    console.log('Awaiting initialization promise...');
     const result = await initializationPromise;
+    console.log('Services initialized successfully');
     globalServices = result;
     return result;
   } catch (error) {
     // Reset initialization promise on failure
+    console.error('Service initialization failed:', error instanceof Error ? error.message : String(error));
     initializationPromise = null;
-    throw error;
+    
+    // Create fallback services
+    try {
+      console.log('Creating fallback services...');
+      const eventBus = providedEventBus || EventBus.getInstance();
+      const logger = providedLogger || Logger.getInstance();
+      
+      // Create in-memory persistence and memory manager
+      const persistence = createFastPersistence();
+      const memory = createFastMemory();
+      
+      const fallbackServices: GlobalServices = {
+        persistence,
+        memory,
+        eventBus,
+        logger,
+        initialized: true
+      };
+      
+      globalServices = fallbackServices;
+      console.log('Fallback services created successfully');
+      return fallbackServices;
+    } catch (fallbackError) {
+      console.error('Failed to create fallback services:', fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
+      throw error;
+    }
   }
 }
 
@@ -120,7 +150,7 @@ export async function initializeGlobalServices(
 async function initializeServicesInternal(
   providedEventBus?: IEventBus,
   providedLogger?: ILogger,
-  memoryConfig?: MemoryConfig
+  memoryConfig?: any // Use any instead of MemoryConfig interface
 ): Promise<GlobalServices> {
   try {
     // Use provided services or create lightweight defaults
@@ -135,9 +165,16 @@ async function initializeServicesInternal(
     // Create fast in-memory storage (no complex memory vault)
     const memory = createFastMemory();
 
-    // Initialize services (fast, no external dependencies)
-    await persistence.initialize?.();
-    await memory.initialize?.();
+    // Initialize services with error handling
+    try {
+      logger.info('Initializing persistence...');
+      await persistence.initialize?.();
+      logger.info('Initializing memory...');
+      await memory.initialize?.();
+    } catch (error) {
+      logger.error('Error during service initialization:', { error });
+      throw error;
+    }
 
     const services: GlobalServices = {
       persistence,

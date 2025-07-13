@@ -134,18 +134,14 @@ describe('EventBus', () => {
     eventBus.emit('event2', { data: '3' });
     
     // Get statistics
-    const stats = eventBus.getEventStats();
+    const metrics = eventBus.getMetrics();
     
-    // Should contain the events
-    expect(stats.length).toBeGreaterThanOrEqual(2);
+    // Should contain total events
+    expect(metrics.totalEvents).toBeGreaterThanOrEqual(3);
     
-    // Find each event
-    const event1Stat = stats.find(s => s.event === 'event1');
-    const event2Stat = stats.find(s => s.event === 'event2');
-    
-    // Verify counts
-    expect(event1Stat?.count).toBe(2);
-    expect(event2Stat?.count).toBe(1);
+    // Verify counts by type
+    expect(metrics.eventsByType['event1']).toBe(2);
+    expect(metrics.eventsByType['event2']).toBe(1);
   });
   
   test('should reset statistics', () => {
@@ -153,14 +149,15 @@ describe('EventBus', () => {
     eventBus.emit('event1', { data: '1' });
     eventBus.emit('event2', { data: '2' });
     
-    // Reset stats
-    eventBus.resetStats();
+    // Reset metrics
+    eventBus.resetMetrics();
     
     // Get statistics
-    const stats = eventBus.getEventStats();
+    const metrics = eventBus.getMetrics();
     
-    // Should be empty
-    expect(stats.length).toBe(0);
+    // Should be reset
+    expect(metrics.totalEvents).toBe(0);
+    expect(Object.keys(metrics.eventsByType).length).toBe(0);
   });
   
   test('should remove all listeners for an event', () => {
@@ -187,6 +184,28 @@ describe('EventBus', () => {
     // Just verify the method exists and is a function
     expect(typeof eventBus.waitFor).toBe('function');
   });
+  
+  test('should wait for events asynchronously', async () => {
+    // Set up a promise that will resolve when the event is emitted
+    const waitPromise = eventBus.waitFor('async-test-event');
+    
+    // Emit the event after a short delay
+    setTimeout(() => {
+      eventBus.emit('async-test-event', { data: 'async-data' });
+    }, 100);
+    
+    // Wait for the event and check the result
+    const result = await waitPromise;
+    expect(result).toEqual({ data: 'async-data' });
+  }, 1000); // Increase timeout for this test
+  
+  test('should timeout when waiting for events that do not occur', async () => {
+    // Set up a promise that should timeout
+    const waitPromise = eventBus.waitFor('timeout-test-event', 200);
+    
+    // Expect it to reject with a timeout error
+    await expect(waitPromise).rejects.toThrow('Timeout waiting for event');
+  }, 1000); // Increase timeout for this test
 
   test('should support filtered event listeners', () => {
     const handler = jest.fn();

@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { Logger } from '../core/logger.js';
+import { Logger } from '../core/logger.ts';
 
 export interface PromptConfig {
   sourceDirectories: string[];
@@ -31,7 +31,7 @@ export const DEFAULT_CONFIG: PromptConfig = {
     parallel: true,
     maxWorkers: 4,
     conflictResolution: 'backup',
-    includePatterns: ['*.md', '*.txt', '*.prompt', '*.prompts', '*.json'],
+    includePatterns: ['*.md', '*.txt', '*.prompt', '*.prompts', '*.tson'],
     excludePatterns: ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/build/**']
   },
   profiles: {
@@ -65,7 +65,7 @@ export class PromptConfigManager {
   private logger: Logger;
 
   constructor(configPath?: string) {
-    this.configPath = configPath || path.join(process.cwd(), '.prompt-config.json');
+    this.configPath = configPath || path.join(process.cwd(), '.prompt-config.tson');
     this.config = { ...DEFAULT_CONFIG };
     this.logger = new Logger(
       { level: 'info', format: 'text', destination: 'console' },

@@ -5,9 +5,9 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
-import { MigrationAnalysis, MigrationRisk } from './types.js';
-import { logger } from './logger.js';
-import { colors } from '../utils/colors.js';
+import { MigrationAnalysis, MigrationRisk } from './types.ts';
+import { logger } from './logger.ts';
+import { colors } from '../utils/colors.ts';
 import { glob } from 'glob';
 
 // Migration config interface (local definition)
@@ -155,8 +155,8 @@ export class MigrationAnalyzer {
     const potentialConflicts = [
       '.claude/commands/sparc.md',
       '.claude/BATCHTOOLS_GUIDE.md',
-      'memory/memory-store.json',
-      'coordination/config.json'
+      'memory/memory-store.tson',
+      'coordination/config.tson'
     ];
 
     for (const file of potentialConflicts) {

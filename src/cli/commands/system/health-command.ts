@@ -343,7 +343,7 @@ async function generateHealthReport(context: CLIContext): Promise<void> {
     };
 
     // Save report
-    const filename = `health-report-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+    const filename = `health-report-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.tson`;
     await fs.writeFile(filename, JSON.stringify(report, null, 2));
 
     printSuccess(`✅ Health report saved to: ${filename}`);
@@ -941,7 +941,7 @@ function displayHealthResults(health: SystemHealth, verbose: boolean, totalTime:
   if (verbose) {
     console.log('💻 System Information:');
     console.log(`  Platform: ${health.systemInfo.platform} ${health.systemInfo.arch}`);
-    console.log(`  Node.js: ${health.systemInfo.nodeVersion}`);
+    console.log(`  Node.ts: ${health.systemInfo.nodeVersion}`);
     console.log(`  CPU: ${health.systemInfo.cpu.cores} cores, ${health.systemInfo.cpu.model}`);
     console.log(`  Memory: ${(health.systemInfo.memory.used / 1024 / 1024 / 1024).toFixed(2)}GB / ${(health.systemInfo.memory.total / 1024 / 1024 / 1024).toFixed(2)}GB (${health.systemInfo.memory.percentage.toFixed(1)}%)`);
     console.log(`  Load Average: ${health.systemInfo.cpu.loadAverage.map(l => l.toFixed(2)).join(', ')}`);
@@ -994,7 +994,7 @@ function displaySystemResourceHealth(systemInfo: any, resourceHealth: HealthChec
   if (verbose) {
     console.log('\nSystem Information:');
     console.log(`Platform: ${systemInfo.platform} ${systemInfo.arch}`);
-    console.log(`Node.js: ${systemInfo.nodeVersion}`);
+    console.log(`Node.ts: ${systemInfo.nodeVersion}`);
     console.log(`Uptime: ${Math.floor(systemInfo.uptime / 3600)}h ${Math.floor((systemInfo.uptime % 3600) / 60)}m`);
     console.log(`CPU: ${systemInfo.cpu.cores} cores`);
     console.log(`Memory: ${systemInfo.memory.percentage.toFixed(1)}% used`);

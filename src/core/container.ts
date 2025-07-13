@@ -25,8 +25,9 @@ export class Container {
     cacheHits: 0,
     circularDependencies: 0
   };
+  private config: ContainerConfig;
 
-  constructor(private config: ContainerConfig = {}) {
+  constructor(config: ContainerConfig = {}) {
     this.config = {
       enableCircularDependencyDetection: true,
       enableMetrics: true,

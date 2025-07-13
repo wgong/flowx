@@ -43,7 +43,7 @@ export const validateCommand: CLICommand = {
     'claude-flow validate workflow workflow-123',
     'claude-flow validate system --verbose',
     'claude-flow validate agents --fix',
-    'claude-flow validate all --report validation-report.json'
+    'claude-flow validate all --report validation-report.tson'
   ],
   options: [
     {
@@ -365,7 +365,7 @@ async function validateConfigurationChecks(): Promise<ValidationResult[]> {
 
   try {
     // Check main configuration file
-    const configPath = path.join(process.cwd(), '.claude-flow', 'config.json');
+    const configPath = path.join(process.cwd(), '.claude-flow', 'config.tson');
     
     try {
       await fs.access(configPath);
@@ -396,9 +396,9 @@ async function validateConfigurationChecks(): Promise<ValidationResult[]> {
       });
     }
 
-    // Check package.json
+    // Check package.tson
     try {
-      const packagePath = path.join(process.cwd(), 'package.json');
+      const packagePath = path.join(process.cwd(), 'package.tson');
       await fs.access(packagePath);
       const packageContent = await fs.readFile(packagePath, 'utf8');
       const packageJson = JSON.parse(packageContent);
@@ -411,7 +411,7 @@ async function validateConfigurationChecks(): Promise<ValidationResult[]> {
         name: 'Package Configuration',
         category: 'configuration',
         status: 'warning',
-        message: 'package.json not found or invalid',
+        message: 'package.tson not found or invalid',
         severity: 'medium'
       });
     }
@@ -437,16 +437,16 @@ async function validateSystemChecks(): Promise<ValidationResult[]> {
   const results: ValidationResult[] = [];
 
   try {
-    // Check Node.js version
+    // Check Node.ts version
     const nodeVersion = process.version;
     const requiredVersion = 'v18.0.0';
     const isValidVersion = compareVersions(nodeVersion, requiredVersion) >= 0;
     
     results.push({
-      name: 'Node.js Version',
+      name: 'Node.ts Version',
       category: 'system',
       status: isValidVersion ? 'valid' : 'invalid',
-      message: `Node.js ${nodeVersion} ${isValidVersion ? 'meets' : 'does not meet'} minimum requirement (${requiredVersion})`,
+      message: `Node.ts ${nodeVersion} ${isValidVersion ? 'meets' : 'does not meet'} minimum requirement (${requiredVersion})`,
       details: { current: nodeVersion, required: requiredVersion },
       severity: isValidVersion ? 'low' : 'critical'
     });
@@ -864,8 +864,8 @@ function validatePackageJson(packageJson: any): ValidationResult {
     name: 'Package Configuration',
     category: 'configuration',
     status,
-    message: status === 'valid' ? 'Package.json is properly configured' : 
-             `Package.json has ${issues.length} issues`,
+    message: status === 'valid' ? 'Package.tson is properly configured' : 
+             `Package.tson has ${issues.length} issues`,
     details: { issues },
     severity: 'medium'
   };
@@ -1007,12 +1007,12 @@ async function validateAgentDirectory(agentPath: string, agentId: string): Promi
   const issues: string[] = [];
 
   try {
-    // Check for agent.js file
-    const agentScript = path.join(agentPath, 'agent.js');
+    // Check for agent.ts file
+    const agentScript = path.join(agentPath, 'agent.ts');
     try {
       await fs.access(agentScript);
     } catch {
-      issues.push('Missing agent.js file');
+      issues.push('Missing agent.ts file');
     }
 
     // Check directory permissions
@@ -1231,7 +1231,7 @@ async function autoFixIssue(result: ValidationResult): Promise<boolean> {
         
         const configDir = path.join(process.cwd(), '.claude-flow');
         await fs.mkdir(configDir, { recursive: true });
-        await fs.writeFile(path.join(configDir, 'config.json'), JSON.stringify(defaultConfig, null, 2));
+        await fs.writeFile(path.join(configDir, 'config.tson'), JSON.stringify(defaultConfig, null, 2));
         return true;
       }
       break;

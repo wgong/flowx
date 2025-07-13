@@ -11,18 +11,10 @@ const mockFileSystem = new Map<string, string>();
 
 // Mock fs/promises to track content
 jest.mock('node:fs/promises', () => ({
-  writeFile: jest.fn().mockImplementation(async (filePath: string, content: string) => {
-    mockFileSystem.set(filePath, content);
-    return Promise.resolve();
-  }),
-  readFile: jest.fn().mockImplementation(async (filePath: string, encoding?: string) => {
-    if (mockFileSystem.has(filePath)) {
-      return mockFileSystem.get(filePath);
-    }
-    return 'mock-file-content';
-  }),
-  mkdir: jest.fn().mockResolvedValue(undefined),
-  access: jest.fn().mockResolvedValue(undefined),
+  writeFile: jest.fn(),
+  readFile: jest.fn(),
+  mkdir: jest.fn(),
+  access: jest.fn(),
 }));
 
 const createSparcClaudeMd = (options: any) => {
@@ -82,6 +74,21 @@ describe('Template Generation', () => {
   beforeEach(() => {
     mockFileSystem.clear();
     jest.clearAllMocks();
+    
+    // Set up fs mock behavior
+    const fs = require('node:fs/promises');
+    fs.writeFile.mockImplementation(async (filePath: string, content: string) => {
+      mockFileSystem.set(filePath, content);
+      return Promise.resolve();
+    });
+    fs.readFile.mockImplementation(async (filePath: string, encoding?: string) => {
+      if (mockFileSystem.has(filePath)) {
+        return mockFileSystem.get(filePath);
+      }
+      return 'mock-file-content';
+    });
+    fs.mkdir.mockResolvedValue(undefined);
+    fs.access.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -106,7 +113,7 @@ describe('Template Generation', () => {
       const fileContent = await fs.readFile(filePath, 'utf-8');
       
       expect(fileContent).toContain('# Test Project');
-      expect(fileContent).toContain('A test project for Claude-Flow');
+      expect(fileContent).toContain('A test project for FlowX');
       expect(fileContent).toContain('## Version\n0.1.0');
       expect(fileContent).toContain('## Project Structure');
     });

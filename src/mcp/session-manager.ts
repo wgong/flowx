@@ -48,11 +48,22 @@ export class SessionManager implements ISessionManager {
     this.authConfig = config.auth || { enabled: false, method: 'token' };
     this.sessionTimeout = config.sessionTimeout || 3600000; // 1 hour default
     this.maxSessions = config.maxSessions || 100;
+  }
 
-    // Start session cleanup interval
-    this.cleanupInterval = setInterval(() => {
-      this.cleanupExpiredSessions();
-    }, 60000); // Clean up every minute
+  start(): void {
+    if (!this.cleanupInterval) {
+      // Start session cleanup interval
+      this.cleanupInterval = setInterval(() => {
+        this.cleanupExpiredSessions();
+      }, 60000); // Clean up every minute
+    }
+  }
+
+  stop(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
   }
 
   createSession(transport: 'stdio' | 'http' | 'websocket'): MCPSession {

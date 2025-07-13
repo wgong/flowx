@@ -267,7 +267,7 @@ describe('Migration System', () => {
       await rollbackManager.exportBackup(backup.metadata.backupId, exportPath);
       
       // Verify export
-      const manifestPath = path.join(exportPath, 'backup-manifest.json');
+      const manifestPath = path.join(exportPath, 'backup-manifest.tson');
       expect(await fs.pathExists(manifestPath)).toBe(true);
       
       // Import backup (to different project)

@@ -76,7 +76,7 @@ class SessionManager implements ISessionManager {
   ) {
     this.persistencePath = join(
       config.orchestrator.dataDir || './data',
-      'sessions.json'
+      'sessions.tson'
     );
     
     // Circuit breaker for persistence operations
@@ -283,6 +283,23 @@ class SessionManager implements ISessionManager {
 /**
  * Main orchestrator implementation with enhanced features
  */
+// Type definitions for resource tracking and deadlock detection
+interface ResourceAllocation {
+  resourceId: string;
+  agentId: string;
+  acquired: Date;
+  released?: Date;
+  exclusive: boolean;
+}
+
+interface DeadlockInfo {
+  detected: Date;
+  involvedAgents: string[];
+  involvedResources: string[];
+  cycleDescription: string;
+  resolved: boolean;
+}
+
 export class Orchestrator implements IOrchestrator {
   private initialized = false;
   private shutdownInProgress = false;
@@ -290,10 +307,19 @@ export class Orchestrator implements IOrchestrator {
   private healthCheckInterval?: NodeJS.Timeout;
   private maintenanceInterval?: NodeJS.Timeout;
   private metricsInterval?: NodeJS.Timeout;
+  private deadlockDetectionInterval?: NodeJS.Timeout;
   private agents = new Map<string, AgentProfile>();
   private taskQueue: Task[] = [];
   private taskHistory = new Map<string, Task>();
   private startTime = Date.now();
+  private taskQueueLock = false;
+  private taskQueuePendingOperations = 0;
+  
+  // Resource allocation tracking for deadlock detection
+  private resourceAllocations: ResourceAllocation[] = [];
+  private resourceWaitGraph = new Map<string, Set<string>>(); // agentId -> Set of resourceIds
+  private detectedDeadlocks: DeadlockInfo[] = [];
+  private resourceTimeouts = new Map<string, number>(); // resourceId -> timeout in ms
   
   // Metrics tracking
   private metrics = {
@@ -302,6 +328,8 @@ export class Orchestrator implements IOrchestrator {
     totalTaskDuration: 0,
     agentsSpawned: 0,
     agentsTerminated: 0,
+    deadlocksDetected: 0,
+    deadlocksResolved: 0,
   };
   
   // Circuit breakers for critical operations
@@ -526,7 +554,14 @@ export class Orchestrator implements IOrchestrator {
             throw new SystemError('Task queue is full');
           }
 
-          this.taskQueue.push(task);
+          try {
+            // Acquire lock before modifying the queue
+            await this.acquireTaskQueueLock();
+            this.taskQueue.push(task);
+          } finally {
+            this.releaseTaskQueueLock();
+          }
+          
           this.eventBus.emit(SystemEvents.TASK_CREATED, { task });
           
           // Try to assign immediately
@@ -640,6 +675,11 @@ export class Orchestrator implements IOrchestrator {
       ? this.metrics.totalTaskDuration / this.metrics.tasksCompleted
       : 0;
 
+    // Calculate additional deadlock metrics
+    const activeResourceAllocations = this.resourceAllocations.filter(
+      alloc => !alloc.released
+    ).length;
+    
     return {
       uptime: Date.now() - this.startTime,
       totalAgents: this.agents.size,
@@ -697,7 +737,7 @@ export class Orchestrator implements IOrchestrator {
       }
     });
 
-    this.eventBus.on(SystemEvents.TASK_COMPLETED, async (data: unknown) => {
+    this.eventBus.on(SystemEvents.TASK_COMPLETED, (data: unknown) => {
       const { taskId, result } = data as { taskId: string; result: unknown };
       const task = this.taskHistory.get(taskId);
       if (task) {
@@ -714,10 +754,13 @@ export class Orchestrator implements IOrchestrator {
         }
       }
       
-      await this.processTaskQueue();
+      // Process task queue asynchronously without blocking
+      this.processTaskQueue().catch(error => {
+        this.logger.error('Error processing task queue after task completion', error);
+      });
     });
 
-    this.eventBus.on(SystemEvents.TASK_FAILED, async (data: unknown) => {
+    this.eventBus.on(SystemEvents.TASK_FAILED, (data: unknown) => {
       const { taskId, error } = data as { taskId: string; error: Error };
       const task = this.taskHistory.get(taskId);
       if (task) {
@@ -729,20 +772,24 @@ export class Orchestrator implements IOrchestrator {
         this.metrics.tasksFailed++;
       }
       
-      // Retry or requeue based on configuration
-      await this.handleTaskFailure(taskId, error);
+      // Retry or requeue based on configuration - handle asynchronously without blocking
+      this.handleTaskFailure(taskId, error).catch(err => {
+        this.logger.error('Error handling task failure', err);
+      });
     });
 
     // Handle agent events
-    this.eventBus.on(SystemEvents.AGENT_ERROR, async (data: unknown) => {
+    this.eventBus.on(SystemEvents.AGENT_ERROR, (data: unknown) => {
       const { agentId, error } = data as { agentId: string; error: Error };
       this.logger.error('Agent error', { agentId, error });
       
-      // Implement agent recovery
-      await this.handleAgentError(agentId, error);
+      // Implement agent recovery asynchronously without blocking
+      this.handleAgentError(agentId, error).catch(err => {
+        this.logger.error('Error handling agent error', err);
+      });
     });
 
-    this.eventBus.on(SystemEvents.AGENT_IDLE, async (data: unknown) => {
+    this.eventBus.on(SystemEvents.AGENT_IDLE, (data: unknown) => {
       const { agentId } = data as { agentId: string };
       // Update session status
       const sessions = this.sessionManager.getActiveSessions().filter(
@@ -750,8 +797,10 @@ export class Orchestrator implements IOrchestrator {
       );
       sessions.forEach(s => s.status = 'idle');
       
-      // Try to assign queued tasks
-      await this.processTaskQueue();
+      // Try to assign queued tasks asynchronously without blocking
+      this.processTaskQueue().catch(error => {
+        this.logger.error('Error processing task queue after agent idle', error);
+      });
     });
 
     // Handle system events
@@ -795,6 +844,11 @@ export class Orchestrator implements IOrchestrator {
     this.maintenanceInterval = setInterval(async () => {
       await this.performMaintenance();
     }, this.config.orchestrator.maintenanceInterval || 300000); // 5 minutes default
+    
+    // Start deadlock detection interval
+    this.deadlockDetectionInterval = setInterval(() => {
+      this.detectDeadlocks();
+    }, 10000); // Check for deadlocks every 10 seconds
   }
 
   private startMetricsCollection(): void {
@@ -820,6 +874,9 @@ export class Orchestrator implements IOrchestrator {
     }
     if (this.metricsInterval) {
       clearInterval(this.metricsInterval);
+    }
+    if (this.deadlockDetectionInterval) {
+      clearInterval(this.deadlockDetectionInterval);
     }
   }
 
@@ -858,43 +915,81 @@ export class Orchestrator implements IOrchestrator {
     }
   }
 
+  /**
+   * Acquires a lock on the task queue to prevent concurrent access
+   * @returns A promise that resolves when the lock is acquired
+   */
+  private async acquireTaskQueueLock(): Promise<void> {
+    this.taskQueuePendingOperations++;
+    
+    // Wait for lock to be available
+    while (this.taskQueueLock) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    
+    // Acquire lock
+    this.taskQueueLock = true;
+  }
+
+  /**
+   * Releases the lock on the task queue
+   */
+  private releaseTaskQueueLock(): void {
+    this.taskQueueLock = false;
+    this.taskQueuePendingOperations--;
+  }
+
+  /**
+   * Process the task queue and assign tasks to available agents
+   * Uses mutex locking to prevent race conditions during task assignment
+   */
   private async processTaskQueue(): Promise<void> {
     if (this.taskQueue.length === 0) {
       return;
     }
 
-    const availableAgents = await this.getAvailableAgents();
-    
-    while (this.taskQueue.length > 0 && availableAgents.length > 0) {
-      const task = this.taskQueue.shift()!;
-      const agent = this.selectAgentForTask(task, availableAgents);
+    try {
+      // Acquire lock on task queue
+      await this.acquireTaskQueueLock();
       
-      if (agent) {
-        task.assignedAgent = agent.id;
-        task.status = 'assigned';
+      const availableAgents = await this.getAvailableAgents();
+      
+      while (this.taskQueue.length > 0 && availableAgents.length > 0) {
+        const task = this.taskQueue.shift()!;
+        const agent = this.selectAgentForTask(task, availableAgents);
         
-        try {
-          await this.coordinationManager.assignTask(task, agent.id);
+        if (agent) {
+          task.assignedAgent = agent.id;
+          task.status = 'assigned';
           
-          this.eventBus.emit(SystemEvents.TASK_ASSIGNED, {
-            taskId: task.id,
-            agentId: agent.id,
-          });
-          
-          // Remove agent from available list
-          const index = availableAgents.indexOf(agent);
-          availableAgents.splice(index, 1);
-        } catch (error) {
-          // Put task back in queue
+          try {
+            await this.coordinationManager.assignTask(task, agent.id);
+            
+            this.eventBus.emit(SystemEvents.TASK_ASSIGNED, {
+              taskId: task.id,
+              agentId: agent.id,
+            });
+            
+            // Remove agent from available list
+            const index = availableAgents.indexOf(agent);
+            availableAgents.splice(index, 1);
+          } catch (error) {
+            // Put task back in queue
+            this.taskQueue.unshift(task);
+            this.logger.error('Failed to assign task', { taskId: task.id, error });
+            break;
+          }
+        } else {
+          // No suitable agent, put task back
           this.taskQueue.unshift(task);
-          this.logger.error('Failed to assign task', { taskId: task.id, error });
           break;
         }
-      } else {
-        // No suitable agent, put task back
-        this.taskQueue.unshift(task);
-        break;
       }
+    } catch (error) {
+      this.logger.error('Error processing task queue', error);
+    } finally {
+      // Always release the lock
+      this.releaseTaskQueueLock();
     }
   }
 
@@ -1103,8 +1198,15 @@ export class Orchestrator implements IOrchestrator {
       delete task.assignedAgent;
       
       // Add back to queue with delay
-      setTimeout(() => {
-        this.taskQueue.push(task);
+      setTimeout(async () => {
+        try {
+          // Acquire lock before modifying the queue
+          await this.acquireTaskQueueLock();
+          this.taskQueue.push(task);
+        } finally {
+          this.releaseTaskQueueLock();
+        }
+        
         this.processTaskQueue();
       }, Math.pow(2, retryCount) * 1000); // Exponential backoff
       
@@ -1211,15 +1313,275 @@ export class Orchestrator implements IOrchestrator {
     });
   }
 
+  /**
+   * Tracks resource acquisition by agents to detect potential deadlocks
+   * @param resourceId The ID of the resource being acquired
+   * @param agentId The agent acquiring the resource
+   * @param exclusive Whether the resource is acquired exclusively or can be shared
+   */
+  async acquireResource(resourceId: string, agentId: string, exclusive: boolean = true): Promise<boolean> {
+    this.logger.debug('Resource acquisition attempt', { resourceId, agentId, exclusive });
+    
+    // Check if resource is already allocated exclusively
+    const existingAllocations = this.resourceAllocations.filter(
+      alloc => alloc.resourceId === resourceId && !alloc.released
+    );
+    
+    if (existingAllocations.length > 0) {
+      // If any exclusive allocation exists, or requesting exclusive access
+      if (exclusive || existingAllocations.some(alloc => alloc.exclusive)) {
+        // Add to wait graph for deadlock detection
+        if (!this.resourceWaitGraph.has(agentId)) {
+          this.resourceWaitGraph.set(agentId, new Set<string>());
+        }
+        this.resourceWaitGraph.get(agentId)!.add(resourceId);
+        
+        // Return false to indicate resource is not available
+        return false;
+      }
+    }
+    
+    // Resource is available - allocate it
+    this.resourceAllocations.push({
+      resourceId,
+      agentId,
+      acquired: new Date(),
+      exclusive
+    });
+    
+    // Remove from wait graph if agent was waiting
+    if (this.resourceWaitGraph.has(agentId)) {
+      this.resourceWaitGraph.get(agentId)!.delete(resourceId);
+      if (this.resourceWaitGraph.get(agentId)!.size === 0) {
+        this.resourceWaitGraph.delete(agentId);
+      }
+    }
+    
+    this.logger.debug('Resource acquired', { resourceId, agentId, exclusive });
+    return true;
+  }
+  
+  /**
+   * Releases a resource previously acquired by an agent
+   * @param resourceId The ID of the resource being released
+   * @param agentId The agent releasing the resource
+   */
+  releaseResource(resourceId: string, agentId: string): void {
+    // Find the allocation
+    const allocationIndex = this.resourceAllocations.findIndex(
+      alloc => alloc.resourceId === resourceId && 
+              alloc.agentId === agentId && 
+              !alloc.released
+    );
+    
+    if (allocationIndex >= 0) {
+      // Mark as released
+      this.resourceAllocations[allocationIndex].released = new Date();
+      
+      this.logger.debug('Resource released', { resourceId, agentId });
+      
+      // Clean up old allocations periodically
+      if (this.resourceAllocations.length > 1000) {
+        this.cleanupResourceAllocations();
+      }
+    }
+  }
+
+  /**
+   * Clean up old resource allocation records to prevent memory growth
+   */
+  private cleanupResourceAllocations(): void {
+    const now = Date.now();
+    const cutoffTime = now - 3600000; // 1 hour
+    
+    this.resourceAllocations = this.resourceAllocations.filter(alloc => {
+      // Keep unreleased allocations
+      if (!alloc.released) return true;
+      
+      // Keep recent allocations
+      return alloc.released.getTime() > cutoffTime;
+    });
+  }
+
+  /**
+   * Detects potential deadlocks using a wait-for graph
+   */
+  private detectDeadlocks(): void {
+    this.logger.debug('Running deadlock detection');
+    
+    // Build agent dependency graph (who is waiting for whom)
+    const agentDependencyGraph = new Map<string, Set<string>>();
+    
+    // For each agent waiting for resources
+    for (const [waitingAgentId, waitingResources] of this.resourceWaitGraph.entries()) {
+      // Add an entry for this agent
+      if (!agentDependencyGraph.has(waitingAgentId)) {
+        agentDependencyGraph.set(waitingAgentId, new Set<string>());
+      }
+      
+      // For each resource this agent is waiting for
+      for (const resourceId of waitingResources) {
+        // Find agents holding this resource
+        const holdingAgents = this.resourceAllocations
+          .filter(alloc => alloc.resourceId === resourceId && !alloc.released)
+          .map(alloc => alloc.agentId);
+        
+        // Add dependencies from waiting agent to holding agents
+        for (const holdingAgentId of holdingAgents) {
+          if (holdingAgentId !== waitingAgentId) {
+            agentDependencyGraph.get(waitingAgentId)!.add(holdingAgentId);
+          }
+        }
+      }
+    }
+    
+    // Check for cycles in the dependency graph (deadlocks)
+    const deadlockCycles = this.detectCycles(agentDependencyGraph);
+    
+    // Handle detected deadlocks
+    for (const cycle of deadlockCycles) {
+      if (cycle.length > 1) {
+        this.metrics.deadlocksDetected++;
+        
+        // Get involved resources
+        const involvedResources = new Set<string>();
+        for (const agentId of cycle) {
+          const waitingResources = this.resourceWaitGraph.get(agentId) || new Set();
+          waitingResources.forEach(r => involvedResources.add(r));
+        }
+        
+        const deadlockInfo: DeadlockInfo = {
+          detected: new Date(),
+          involvedAgents: cycle,
+          involvedResources: Array.from(involvedResources),
+          cycleDescription: `Deadlock cycle: ${cycle.join(' → ')} → ${cycle[0]}`,
+          resolved: false
+        };
+        
+        this.detectedDeadlocks.push(deadlockInfo);
+        
+        this.logger.warn('Deadlock detected', deadlockInfo);
+        
+        // Emit event for monitoring
+        this.eventBus.emit(SystemEvents.DEADLOCK_DETECTED, deadlockInfo);
+        
+        // Resolve deadlock
+        this.resolveDeadlock(cycle, Array.from(involvedResources))
+          .then(() => {
+            deadlockInfo.resolved = true;
+            this.metrics.deadlocksResolved++;
+          })
+          .catch(error => {
+            this.logger.error('Failed to resolve deadlock', { deadlock: deadlockInfo, error });
+          });
+      }
+    }
+  }
+
+  /**
+   * Detect cycles in a directed graph (used for deadlock detection)
+   * @param graph A directed graph represented as a Map of node -> Set of nodes it depends on
+   * @returns Array of cycles (each cycle is an array of node IDs)
+   */
+  private detectCycles(graph: Map<string, Set<string>>): string[][] {
+    const cycles: string[][] = [];
+    const visited = new Set<string>();
+    const recursionStack = new Set<string>();
+    const path: string[] = [];
+    
+    // DFS function to detect cycles
+    const dfs = (nodeId: string) => {
+      if (recursionStack.has(nodeId)) {
+        // Found a cycle
+        const cycleStart = path.indexOf(nodeId);
+        cycles.push(path.slice(cycleStart).concat([nodeId]));
+        return;
+      }
+      
+      if (visited.has(nodeId)) {
+        return;
+      }
+      
+      visited.add(nodeId);
+      recursionStack.add(nodeId);
+      path.push(nodeId);
+      
+      // Visit all neighbors
+      const neighbors = graph.get(nodeId) || new Set<string>();
+      for (const neighbor of neighbors) {
+        dfs(neighbor);
+      }
+      
+      // Remove from recursion stack and path
+      recursionStack.delete(nodeId);
+      path.pop();
+    };
+    
+    // Run DFS from each node
+    for (const nodeId of graph.keys()) {
+      if (!visited.has(nodeId)) {
+        path.length = 0; // Clear path
+        dfs(nodeId);
+      }
+    }
+    
+    return cycles;
+  }
+
+  /**
+   * Resolves a deadlock by selectively canceling tasks
+   */
   private async resolveDeadlock(agents: string[], resources: string[]): Promise<void> {
     this.logger.warn('Resolving deadlock', { agents, resources });
 
-    // Simple deadlock resolution: cancel lowest priority agent's tasks
+    // Advanced deadlock resolution strategies:
+    // 1. Try resource timeout first
+    const timedOutResources = resources.filter(r => {
+      const allocations = this.resourceAllocations.filter(
+        a => a.resourceId === r && !a.released
+      );
+      
+      if (allocations.length === 0) return false;
+      
+      const oldestAllocation = allocations.sort(
+        (a, b) => a.acquired.getTime() - b.acquired.getTime()
+      )[0];
+      
+      const timeout = this.resourceTimeouts.get(r) || 300000; // 5 min default
+      return (Date.now() - oldestAllocation.acquired.getTime()) > timeout;
+    });
+    
+    if (timedOutResources.length > 0) {
+      // Release the timed out resources
+      for (const resourceId of timedOutResources) {
+        const allocations = this.resourceAllocations.filter(
+          a => a.resourceId === resourceId && !a.released
+        );
+        
+        for (const allocation of allocations) {
+          this.releaseResource(resourceId, allocation.agentId);
+          this.logger.info('Resource forcibly released due to timeout', { 
+            resourceId, 
+            agentId: allocation.agentId,
+            heldFor: Date.now() - allocation.acquired.getTime()
+          });
+        }
+      }
+      
+      this.logger.info('Deadlock resolved by releasing timed-out resources', { 
+        timedOutResources 
+      });
+      
+      return;
+    }
+    
+    // 2. If no timed-out resources, fall back to priority-based cancellation
     const agentProfiles = agents
       .map(id => this.agents.get(id))
       .filter(Boolean) as AgentProfile[];
     
     if (agentProfiles.length === 0) {
+      this.logger.warn('Could not resolve deadlock - no valid agents', { agents });
       return;
     }
 

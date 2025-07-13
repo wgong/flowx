@@ -8,6 +8,43 @@ import { IEventBus } from "../core/event-bus.ts";
 import { AgentId, TaskId } from "../swarm/types.ts";
 import { generateId } from "../utils/helpers.ts";
 
+// Add missing type definitions at the top
+export interface ResourceQuota {
+  id: string;
+  resourceId: string;
+  agentId: string;
+  limits: ResourceLimits;
+  used: ResourceLimits;
+  period: 'hourly' | 'daily' | 'weekly' | 'monthly';
+  resetTime: Date;
+}
+
+export interface ResourceMetrics {
+  resourceId: string;
+  timestamp: Date;
+  utilization: number;
+  efficiency: number;
+  throughput: number;
+  latency: number;
+  errors: number;
+  cost: number;
+}
+
+export interface ResourceWatcher {
+  id: string;
+  resourceId: string;
+  agentId: string;
+  events: string[];
+  callback: (event: ResourceEvent) => void;
+}
+
+export interface ResourceEvent {
+  type: string;
+  resourceId: string;
+  timestamp: Date;
+  data: any;
+}
+
 export interface ResourceManagerConfig {
   enableResourcePooling: boolean;
   enableResourceMonitoring: boolean;
@@ -309,71 +346,39 @@ export type BillingModel = 'hourly' | 'per-usage' | 'reserved' | 'spot' | 'hybri
  * Comprehensive resource management with allocation, monitoring, and optimization
  */
 export class ResourceManager extends EventEmitter {
-  private logger: ILogger;
-  private eventBus: IEventBus;
-  private config: ResourceManagerConfig;
-
-  // Resource tracking
   private resources = new Map<string, Resource>();
-  private pools = new Map<string, ResourcePool>();
   private reservations = new Map<string, ResourceReservation>();
   private allocations = new Map<string, ResourceAllocation>();
-
-  // Monitoring and optimization
+  private usage = new Map<string, ResourceUsage>();
+  private quotas = new Map<string, ResourceQuota>();
+  private pools = new Map<string, ResourcePool>();
+  private metrics = new ResourceManagerMetrics();
+  private dependencies = new Map<string, Set<string>>();
+  private watchers = new Map<string, Set<ResourceWatcher>>();
+  private cleanupInterval?: NodeJS.Timeout;
+  private config: ResourceManagerConfig;
+  private logger: ILogger;
+  private eventBus: EventEmitter;
+  private optimizer: ResourceOptimizer;
+  private monitoringInterval?: NodeJS.Timeout;
+  private scalingInterval?: NodeJS.Timeout;
   private usageHistory = new Map<string, ResourceUsage[]>();
   private predictions = new Map<string, ResourcePrediction>();
-  private optimizer: ResourceOptimizer;
 
-  // Scheduling and cleanup
-  private monitoringInterval?: NodeJS.Timeout;
-  private cleanupInterval?: NodeJS.Timeout;
-  private scalingInterval?: NodeJS.Timeout;
-
-  // Performance tracking
-  private metrics: ResourceManagerMetrics;
-
-  constructor(
-    config: Partial<ResourceManagerConfig>,
-    logger: ILogger,
-    eventBus: IEventBus
-  ) {
+  constructor(config: ResourceManagerConfig, logger: ILogger) {
     super();
+    this.config = config;
     this.logger = logger;
-    this.eventBus = eventBus;
+    this.eventBus = new EventEmitter();
+    this.optimizer = new ResourceOptimizer(config, logger);
+    this.startCleanupProcess();
+  }
 
-    this.config = {
-      enableResourcePooling: true,
-      enableResourceMonitoring: true,
-      enableAutoScaling: true,
-      enableQoS: true,
-      monitoringInterval: 30000,
-      cleanupInterval: 300000,
-      defaultLimits: {
-        cpu: 4.0,
-        memory: 8 * 1024 * 1024 * 1024, // 8GB
-        disk: 100 * 1024 * 1024 * 1024, // 100GB
-        network: 1024 * 1024 * 1024, // 1Gbps
-        custom: {}
-      },
-      reservationTimeout: 300000, // 5 minutes
-      allocationStrategy: 'best-fit',
-      priorityWeights: {
-        critical: 1.0,
-        high: 0.8,
-        normal: 0.6,
-        low: 0.4,
-        background: 0.2
-      },
-      enablePredictiveAllocation: true,
-      enableResourceSharing: true,
-      debugMode: false,
-      ...config
-    };
-
-    this.optimizer = new ResourceOptimizer(this.config, this.logger);
-    this.metrics = new ResourceManagerMetrics();
-
-    this.setupEventHandlers();
+  private startCleanupProcess(): void {
+    // Implementation for cleanup process
+    this.cleanupInterval = setInterval(() => {
+      this.performCleanup();
+    }, this.config.cleanupInterval);
   }
 
   private setupEventHandlers(): void {
@@ -1857,9 +1862,7 @@ class ResourceManagerMetrics {
       allocationsCreated: this.allocationsCreated,
       allocationsReleased: this.allocationsReleased,
       reservationsFailed: this.reservationsFailed,
-      qosViolations: this.qosViolations,
-      successRate: this.allocationsCreated > 0 ? 
-        ((this.allocationsCreated - this.reservationsFailed) / this.allocationsCreated) * 100 : 100
+      qosViolations: this.qosViolations
     };
   }
 }

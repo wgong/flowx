@@ -1,6 +1,6 @@
 /**
  * Agent Process Manager
- * Spawns and manages real Node.js processes for each agent
+ * Spawns and manages real Node.ts processes for each agent
  */
 
 import { EventEmitter } from 'node:events';
@@ -150,17 +150,29 @@ export class AgentProcessManager extends EventEmitter {
       const workDir = config.workingDirectory || join(process.cwd(), 'agents', config.id);
       await mkdir(workDir, { recursive: true });
 
-      // Create agent script file (removed config parameter)
-      const agentScript = this.generateAgentScript();
-      const scriptPath = join(workDir, 'agent.js');
-      await writeFile(scriptPath, agentScript);
+      // Create agent script file with better error handling
+      try {
+        const agentScript = this.generateAgentScript();
+        const scriptPath = join(workDir, 'agent.ts');
+        await writeFile(scriptPath, agentScript);
+        this.logger.info('Agent script created successfully', { scriptPath });
+      } catch (writeError) {
+        this.logger.error('Failed to create agent script', { workDir, error: writeError });
+        throw new Error(`Failed to create agent script: ${writeError instanceof Error ? writeError.message : String(writeError)}`);
+      }
 
       // Create Claude client for this agent
-      const claudeClient = createClaudeClient(this.logger, config.claudeConfig);
-      agentData.claudeClient = claudeClient;
+      try {
+        const claudeClient = createClaudeClient(this.logger, config.claudeConfig);
+        agentData.claudeClient = claudeClient;
+        this.logger.info('Claude client created successfully');
+      } catch (clientError) {
+        this.logger.error('Failed to create Claude client', { error: clientError });
+        // Continue without Claude client - will use fallback
+      }
 
       // Spawn the process (use relative path since we set cwd)
-      const childProcess = this.spawnAgentProcess(config, 'agent.js', workDir);
+      const childProcess = this.spawnAgentProcess(config, 'agent.ts', workDir);
       agentData.process = childProcess;
 
       agentInfo.pid = childProcess.pid;
@@ -410,6 +422,7 @@ export class AgentProcessManager extends EventEmitter {
   // === PRIVATE METHODS ===
 
   private spawnAgentProcess(config: AgentProcessConfig, scriptPath: string, workDir: string): ChildProcess {
+    this.logger.info('Spawning agent process', { agentId: config.id, scriptPath, workDir });
     const env = {
       ...process.env,
       AGENT_ID: config.id,
@@ -423,7 +436,21 @@ export class AgentProcessManager extends EventEmitter {
       nodeArgs.push(`--max-old-space-size=${config.maxMemory}`);
     }
 
-    const childProcess = spawn('node', [...nodeArgs, scriptPath], {
+    // Check for node executable
+    let nodeExecutable = 'node';
+    try {
+      const { execSync } = require('child_process');
+      const whichResult = execSync('which node', { encoding: 'utf8' }).toString().trim();
+      if (whichResult) {
+        nodeExecutable = whichResult;
+      }
+    } catch (error) {
+      this.logger.warn('Failed to find node executable, using default', { error });
+    }
+    
+    this.logger.info(`Spawning agent with ${nodeExecutable}`, { args: [...nodeArgs, scriptPath] });
+    
+    const childProcess = spawn(nodeExecutable, [...nodeArgs, scriptPath], {
       cwd: workDir,
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -650,7 +677,7 @@ export class AgentProcessManager extends EventEmitter {
 /**
  * Agent Process Template - FIXED VERSION
  * This template is used to generate individual agent processes
- * Uses ES modules syntax for compatibility with package.json "type": "module"
+ * Uses ES modules syntax for compatibility with package.tson "type": "module"
  */
 
 import { EventEmitter } from 'node:events';
@@ -754,7 +781,7 @@ class Agent extends EventEmitter {
       'testing': {
         message: 'Tests completed',
         files: [
-          { path: 'test.js', content: 'console.log("All tests passed!");' }
+          { path: 'test.ts', content: 'console.log("All tests passed!");' }
         ]
       }
     };
@@ -830,9 +857,29 @@ const agent = new Agent();
   }
 
   private generateAgentScript(): string {
-    // For now, return the template
-    // In the future, this would be customized based on agent type and specialization
-    return this.processTemplate;
+    // Add diagnostic code to the template to help with debugging
+    let template = this.processTemplate;
+    
+    // Add extra diagnostics
+    template = template.replace(
+      'console.log(\'Agent starting:\',', 
+      'console.log(\'Agent starting with diagnostics:\','
+    );
+    
+    template = template.replace(
+      'this.setupCommunication();', 
+      `this.setupCommunication();
+      // Print diagnostic info
+      console.log('Agent environment:', process.env);
+      console.log('Agent cwd:', process.cwd());
+      try {
+        console.log('Agent files:', require('fs').readdirSync(process.cwd()));
+      } catch (e) {
+        console.log('Failed to read directory:', e);  
+      }`
+    );
+    
+    return template;
   }
 }
 

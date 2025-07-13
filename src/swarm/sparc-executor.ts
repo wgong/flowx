@@ -572,7 +572,7 @@ export class SparcTaskExecutor {
       },
       'javascript-rest-api': {
         directories: ['src', 'tests', 'docs', 'config', 'public'],
-        files: ['package.json', 'tsconfig.json', 'jest.config.js', '.gitignore', 'Dockerfile']
+        files: ['package.tson', 'tsconfig.tson', 'jest.config.ts', '.gitignore', 'Dockerfile']
       }
     };
     
@@ -782,7 +782,7 @@ class TestAPI:
         """Test health check endpoint"""
         response = client.get('/health')
         assert response.status_code == 200
-        assert response.json['status'] == 'healthy'
+        assert response.tson['status'] == 'healthy'
     
     def test_create_user_endpoint(self, client):
         """Test POST /users endpoint"""
@@ -793,13 +793,13 @@ class TestAPI:
         }
         response = client.post('/api/users', json=user_data)
         assert response.status_code == 201
-        assert response.json['username'] == "testuser"
+        assert response.tson['username'] == "testuser"
     
     def test_get_users_endpoint(self, client):
         """Test GET /users endpoint"""
         response = client.get('/api/users')
         assert response.status_code == 200
-        assert isinstance(response.json, list)
+        assert isinstance(response.tson, list)
 `
       };
     }
@@ -1194,7 +1194,7 @@ volumes:
     }
     
     return {
-      'package.json': 'Package configuration',
+      'package.tson': 'Package configuration',
       '.gitignore': 'Git ignore file'
     };
   }

@@ -744,7 +744,7 @@ async function executeBatchMode(context: CLIContext): Promise<void> {
     };
     
     // Save batch results
-    const batchResultsPath = path.join(batchOutputDir, 'batch-results.json');
+    const batchResultsPath = path.join(batchOutputDir, 'batch-results.tson');
     await fs.writeFile(batchResultsPath, JSON.stringify(batchResults, null, 2));
     
     printSuccess(`🎉 SPARC batch execution completed in ${batchResults.duration}ms`);

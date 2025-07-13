@@ -962,7 +962,7 @@ export class AnalyticsManager extends EventEmitter {
     try {
       // Load dashboards
       const dashboardFiles = await readdir(join(this.analyticsPath, 'dashboards'));
-      for (const file of dashboardFiles.filter(f => f.endsWith('.json'))) {
+      for (const file of dashboardFiles.filter(f => f.endsWith('.tson'))) {
         const content = await readFile(join(this.analyticsPath, 'dashboards', file), 'utf-8');
         const dashboard: AnalyticsDashboard = JSON.parse(content);
         this.dashboards.set(dashboard.id, dashboard);
@@ -970,7 +970,7 @@ export class AnalyticsManager extends EventEmitter {
 
       // Load insights
       const insightFiles = await readdir(join(this.analyticsPath, 'insights'));
-      for (const file of insightFiles.filter(f => f.endsWith('.json'))) {
+      for (const file of insightFiles.filter(f => f.endsWith('.tson'))) {
         const content = await readFile(join(this.analyticsPath, 'insights', file), 'utf-8');
         const insight: AnalyticsInsight = JSON.parse(content);
         this.insights.set(insight.id, insight);
@@ -978,7 +978,7 @@ export class AnalyticsManager extends EventEmitter {
 
       // Load models
       const modelFiles = await readdir(join(this.analyticsPath, 'models'));
-      for (const file of modelFiles.filter(f => f.endsWith('.json'))) {
+      for (const file of modelFiles.filter(f => f.endsWith('.tson'))) {
         const content = await readFile(join(this.analyticsPath, 'models', file), 'utf-8');
         const model: PredictiveModel = JSON.parse(content);
         this.models.set(model.id, model);
@@ -1188,7 +1188,7 @@ export class AnalyticsManager extends EventEmitter {
 
   private async persistMetric(metric: AnalyticsMetric): Promise<void> {
     const date = metric.timestamp.toISOString().split('T')[0];
-    const filePath = join(this.analyticsPath, 'metrics', `${date}.json`);
+    const filePath = join(this.analyticsPath, 'metrics', `${date}.tson`);
     
     try {
       let existingData: AnalyticsMetric[] = [];
@@ -1478,17 +1478,17 @@ export class AnalyticsManager extends EventEmitter {
   }
 
   private async saveDashboard(dashboard: AnalyticsDashboard): Promise<void> {
-    const filePath = join(this.analyticsPath, 'dashboards', `${dashboard.id}.json`);
+    const filePath = join(this.analyticsPath, 'dashboards', `${dashboard.id}.tson`);
     await writeFile(filePath, JSON.stringify(dashboard, null, 2));
   }
 
   private async saveInsight(insight: AnalyticsInsight): Promise<void> {
-    const filePath = join(this.analyticsPath, 'insights', `${insight.id}.json`);
+    const filePath = join(this.analyticsPath, 'insights', `${insight.id}.tson`);
     await writeFile(filePath, JSON.stringify(insight, null, 2));
   }
 
   private async saveModel(model: PredictiveModel): Promise<void> {
-    const filePath = join(this.analyticsPath, 'models', `${model.id}.json`);
+    const filePath = join(this.analyticsPath, 'models', `${model.id}.tson`);
     await writeFile(filePath, JSON.stringify(model, null, 2));
   }
 }

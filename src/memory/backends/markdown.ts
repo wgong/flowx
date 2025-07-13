@@ -4,10 +4,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { IMemoryBackend } from "./base.js";
-import { MemoryEntry, MemoryQuery } from "../../utils/types.js";
-import { ILogger } from "../../core/logger.js";
-import { MemoryBackendError } from "../../utils/errors.js";
+import { IMemoryBackend } from "./base.ts";
+import { MemoryEntry, MemoryQuery } from "../../utils/types.ts";
+import { ILogger } from "../../core/logger.ts";
+import { MemoryBackendError } from "../../utils/errors.ts";
 
 /**
  * Markdown-based memory backend
@@ -20,7 +20,7 @@ export class MarkdownBackend implements IMemoryBackend {
     private baseDir: string,
     private logger: ILogger,
   ) {
-    this.indexPath = path.join(this.baseDir, 'index.json');
+    this.indexPath = path.join(this.baseDir, 'index.tson');
   }
 
   async initialize(): Promise<void> {

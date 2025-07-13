@@ -14,12 +14,12 @@ export const statusCommand: CLICommand = {
   name: 'status',
   description: 'Show comprehensive system status',
   category: 'System',
-  usage: 'claude-flow status [OPTIONS]',
+  usage: 'flowx status [OPTIONS]',
   examples: [
-    'claude-flow status',
-    'claude-flow status --detailed',
-    'claude-flow status --services',
-    'claude-flow status --agents'
+    'flowx status',
+    'flowx status --detailed',
+    'flowx status --services',
+    'flowx status --agents'
   ],
   options: [
     {
@@ -75,7 +75,7 @@ export const statusCommand: CLICommand = {
       
       const status = await getSystemStatus(options.detailed);
       
-      if (options.json) {
+      if (options.tson) {
         console.log(JSON.stringify(status, null, 2));
         return;
       }
@@ -197,10 +197,10 @@ async function getSystemStatus(detailed: boolean = false): Promise<SystemStatus>
 async function getServiceStatuses(): Promise<ServiceStatus[]> {
   const services: ServiceStatus[] = [];
   
-  // Check for actual Claude Flow processes
-  const claudeFlowProcesses = await findClaudeFlowProcesses();
+  // Check for actual FlowX processes
+  const flowxProcesses = await findFlowXProcesses();
   
-  for (const proc of claudeFlowProcesses) {
+  for (const proc of flowxProcesses) {
     services.push({
       name: proc.name,
       status: 'running',
@@ -221,10 +221,10 @@ async function getServiceStatuses(): Promise<ServiceStatus[]> {
   return services;
 }
 
-async function findClaudeFlowProcesses(): Promise<ProcessStatus[]> {
+async function findFlowXProcesses(): Promise<ProcessStatus[]> {
   try {
-    // Use ps to find Node.js processes related to claude-flow
-    const psOutput = execSync('ps aux | grep -E "(claude-flow|node.*cli\\.js)" | grep -v grep', { encoding: 'utf8' });
+    // Use ps to find Node.ts processes related to flowx
+    const psOutput = execSync('ps aux | grep -E "(flowx|node.*cli\\.ts)" | grep -v grep', { encoding: 'utf8' });
     const lines = psOutput.trim().split('\n').filter(line => line.length > 0);
     
     const processes: ProcessStatus[] = [];
@@ -238,13 +238,13 @@ async function findClaudeFlowProcesses(): Promise<ProcessStatus[]> {
         const command = parts.slice(10).join(' ');
         
         // Determine process name
-        let name = 'claude-flow';
+        let name = 'flowx';
         if (command.includes('agent-')) {
-          name = 'claude-flow-agent';
+          name = 'flowx-agent';
         } else if (command.includes('swarm')) {
-          name = 'claude-flow-swarm';
+          name = 'flowx-swarm';
         } else if (command.includes('mcp')) {
-          name = 'claude-flow-mcp';
+          name = 'flowx-mcp';
         }
         
         processes.push({
@@ -269,7 +269,7 @@ async function findClaudeFlowProcesses(): Promise<ProcessStatus[]> {
 async function checkMCPServer(): Promise<ServiceStatus | null> {
   try {
     // Check if MCP config exists
-    const mcpConfigPath = './mcp_config/mcp.json';
+    const mcpConfigPath = './mcp_config/mcp.tson';
     if (!existsSync(mcpConfigPath)) {
       return null;
     }
@@ -300,7 +300,7 @@ async function checkMCPServer(): Promise<ServiceStatus | null> {
 }
 
 async function getProcessStatuses(): Promise<ProcessStatus[]> {
-  return await findClaudeFlowProcesses();
+  return await findFlowXProcesses();
 }
 
 async function getResourceStatus(): Promise<ResourceStatus> {
@@ -521,7 +521,7 @@ async function getSwarmStatuses(): Promise<SwarmStatus[]> {
 }
 
 async function displaySystemStatus(status: SystemStatus, options: any): Promise<void> {
-  console.log(successBold('\n🚀 Claude Flow System Status\n'));
+  console.log(successBold('\n🚀 FlowX System Status\n'));
   
   // Health overview
   const healthColor = status.health.overall === 'healthy' ? successBold : 

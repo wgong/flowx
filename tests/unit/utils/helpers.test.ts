@@ -96,7 +96,7 @@ describe('Helpers', () => {
       const result = await retry(fn);
       
       assertEquals(result, 'success');
-      assertEquals(fn.calls.length, 1);
+      assertEquals(jest.mocked(fn).mock.calls.length, 1);
     });
 
     it('should retry on failure and eventually succeed', async () => {
@@ -150,9 +150,9 @@ describe('Helpers', () => {
         { maxAttempts: 2, initialDelay: 10, onRetry }
       );
       
-      assertEquals(onRetry.calls.length, 1);
-      assertEquals(onRetry.calls[0].args[0], 1); // attempt number
-      assertEquals(onRetry.calls[0].args[1].message, 'Retry'); // error
+      assertEquals(jest.mocked(onRetry).mock.calls.length, 1);
+      assertEquals(jest.mocked(onRetry).mock.calls[0][0], 1); // attempt number
+      assertEquals((jest.mocked(onRetry).mock.calls[0][1] as Error).message, 'Retry'); // error
     });
 
     it('should use exponential backoff', async () => {
@@ -196,12 +196,12 @@ describe('Helpers', () => {
       debouncedFn();
       
       // Should not call yet
-      assertEquals(fn.calls.length, 0);
+      assertEquals(jest.mocked(fn).mock.calls.length, 0);
       
       await delay(15); // Wait for debounce
       
       // Should call once
-      assertEquals(fn.calls.length, 1);
+      assertEquals(jest.mocked(fn).mock.calls.length, 1);
     });
 
     it('should reset timer on subsequent calls', async () => {
@@ -214,12 +214,12 @@ describe('Helpers', () => {
       await delay(10);
       
       // Should not call yet (timer was reset)
-      assertEquals(fn.calls.length, 0);
+      assertEquals(jest.mocked(fn).mock.calls.length, 0);
       
       await delay(25); // Wait for final debounce
       
       // Should call now
-      assertEquals(fn.calls.length, 1);
+      assertEquals(jest.mocked(fn).mock.calls.length, 1);
     });
   });
 
@@ -233,12 +233,12 @@ describe('Helpers', () => {
       throttledFn();
       
       // Should call immediately once
-      assertEquals(fn.calls.length, 1);
+      assertEquals(jest.mocked(fn).mock.calls.length, 1);
       
       await delay(15); // Wait for throttle
       
       // Should call the last queued call
-      assertEquals(fn.calls.length, 2);
+      assertEquals(jest.mocked(fn).mock.calls.length, 2);
     });
   });
 
@@ -290,7 +290,7 @@ describe('Helpers', () => {
     });
 
     it('should clone Maps', () => {
-      const original = new Map([['a', 1], ['b', { c: 2 }]]);
+      const original = new Map<string, any>([['a', 1], ['b', { c: 2 }]]);
       const cloned = deepClone(original);
       
       assertEquals(cloned.get('a'), 1);
@@ -361,8 +361,8 @@ describe('Helpers', () => {
       emitter.on('test', handler);
       emitter.emit('test', { message: 'hello' });
       
-      assertEquals(handler.calls.length, 1);
-      assertEquals(handler.calls[0].args[0], { message: 'hello' });
+      assertEquals(jest.mocked(handler).mock.calls.length, 1);
+      assertEquals(jest.mocked(handler).mock.calls[0][0], { message: 'hello' });
     });
 
     it('should handle multiple listeners', () => {
@@ -373,8 +373,8 @@ describe('Helpers', () => {
       emitter.on('test', handler2);
       emitter.emit('test', { message: 'hello' });
       
-      assertEquals(handler1.calls.length, 1);
-      assertEquals(handler2.calls.length, 1);
+      assertEquals(jest.mocked(handler1).mock.calls.length, 1);
+      assertEquals(jest.mocked(handler2).mock.calls.length, 1);
     });
 
     it('should support once listeners', () => {
@@ -384,7 +384,7 @@ describe('Helpers', () => {
       emitter.emit('test', { message: 'hello' });
       emitter.emit('test', { message: 'world' });
       
-      assertEquals(handler.calls.length, 1);
+      assertEquals(jest.mocked(handler).mock.calls.length, 1);
     });
 
     it('should remove listeners', () => {
@@ -396,7 +396,7 @@ describe('Helpers', () => {
       emitter.off('test', handler);
       emitter.emit('test', { message: 'world' });
       
-      assertEquals(handler.calls.length, 1);
+      assertEquals(jest.mocked(handler).mock.calls.length, 1);
     });
 
     it('should remove all listeners', () => {
@@ -409,8 +409,8 @@ describe('Helpers', () => {
       emitter.removeAllListeners('test');
       emitter.emit('test', { message: 'hello' });
       
-      assertEquals(handler1.calls.length, 0);
-      assertEquals(handler2.calls.length, 0);
+      assertEquals(jest.mocked(handler1).mock.calls.length, 0);
+      assertEquals(jest.mocked(handler2).mock.calls.length, 0);
     });
   });
 

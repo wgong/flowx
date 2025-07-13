@@ -48,9 +48,11 @@ export class ToolRegistry extends EventEmitter {
   private metrics = new Map<string, ToolMetrics>();
   private categories = new Set<string>();
   private tags = new Set<string>();
+  private logger: ILogger;
 
-  constructor(private logger: ILogger) {
+  constructor(logger: ILogger) {
     super();
+    this.logger = logger;
   }
 
   /**

@@ -573,7 +573,7 @@ async function showLogStats(context: CLIContext): Promise<void> {
 
 async function exportLogs(context: CLIContext): Promise<void> {
   const { args, options } = context;
-  const outputFile = args[0] || `claude-flow-logs-${Date.now()}.json`;
+  const outputFile = args[0] || `claude-flow-logs-${Date.now()}.tson`;
   
   try {
     const logs = await getLogEntries(options);

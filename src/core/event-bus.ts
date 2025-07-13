@@ -3,7 +3,7 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { generateId } from "../utils/helpers.js";
+import { generateId } from "../utils/helpers.ts";
 
 export interface IEventBus {
   emit(event: string, data?: any): boolean;
@@ -31,7 +31,8 @@ export interface EventMetrics {
 export class TypedEventBus extends EventEmitter implements IEventBus {
   private metrics: EventMetrics;
   private eventHistory: Array<{ event: string; timestamp: Date; data?: any }> = [];
-  private maxHistorySize = 1000;
+  private maxHistorySize = 100; // Reduced from 1000 to prevent memory growth
+  private historyRetentionMs = 3600000; // 1 hour retention
 
   constructor() {
     super();
@@ -55,8 +56,10 @@ export class TypedEventBus extends EventEmitter implements IEventBus {
       this.metrics.eventsByType[event.toString()] = (this.metrics.eventsByType[event.toString()] || 0) + 1;
       this.metrics.lastEventTime = new Date();
       
-      // Add to history
-      this.addToHistory(event.toString(), args);
+      // Add to history - only store first argument which is typically the event payload
+      // This avoids storing large arrays of arguments that contribute to memory leaks
+      const payload = args.length > 0 ? args[0] : undefined;
+      this.addToHistory(event.toString(), payload);
       
       // Emit the event
       const result = super.emit(event, ...args);
@@ -85,7 +88,11 @@ export class TypedEventBus extends EventEmitter implements IEventBus {
    * Get recent event history
    */
   getEventHistory(limit: number = 50): Array<{ event: string; timestamp: Date; data?: any }> {
-    return this.eventHistory.slice(-limit);
+    // Clean history first to avoid returning expired events
+    this.cleanEventHistory();
+    
+    // Apply the requested limit
+    return this.eventHistory.slice(-Math.min(limit, this.eventHistory.length));
   }
 
   /**
@@ -93,6 +100,22 @@ export class TypedEventBus extends EventEmitter implements IEventBus {
    */
   clearHistory(): void {
     this.eventHistory = [];
+  }
+  
+  /**
+   * Configure event history settings
+   */
+  configureHistory(options: { maxSize?: number; retentionMs?: number }): void {
+    if (options.maxSize !== undefined && options.maxSize >= 0) {
+      this.maxHistorySize = options.maxSize;
+    }
+    
+    if (options.retentionMs !== undefined && options.retentionMs >= 0) {
+      this.historyRetentionMs = options.retentionMs;
+    }
+    
+    // Apply new settings to existing history
+    this.cleanEventHistory();
   }
 
   /**
@@ -108,17 +131,55 @@ export class TypedEventBus extends EventEmitter implements IEventBus {
     };
   }
 
+  /**
+   * Add an event to history with memory leak prevention:
+   * 1. Limits total history size
+   * 2. Uses weak references for data when possible
+   * 3. Cleans up old events periodically
+   * 4. Doesn't store large payloads directly
+   */
   private addToHistory(event: string, data?: any): void {
+    // Don't store large data objects directly - store a summary or reference
+    let processedData = data;
+    
+    if (data && typeof data === 'object') {
+      // For large objects, only keep a summary
+      const dataSize = JSON.stringify(data).length;
+      if (dataSize > 1000) {
+        // For large data, just keep keys and type info
+        processedData = {
+          __summary: true,
+          __type: data.constructor ? data.constructor.name : typeof data,
+          __keys: Object.keys(data),
+          __size: dataSize
+        };
+      }
+    }
+    
     this.eventHistory.push({
       event,
       timestamp: new Date(),
-      data
+      data: processedData
     });
     
-    // Maintain history size limit
+    // Clean old events regularly based on both size limit and age
+    this.cleanEventHistory();
+  }
+  
+  /**
+   * Clean event history to prevent memory leaks
+   */
+  private cleanEventHistory(): void {
+    // Apply size limit
     if (this.eventHistory.length > this.maxHistorySize) {
-      this.eventHistory.shift();
+      this.eventHistory = this.eventHistory.slice(-this.maxHistorySize);
     }
+    
+    // Apply age limit
+    const cutoffTime = Date.now() - this.historyRetentionMs;
+    this.eventHistory = this.eventHistory.filter(
+      entry => entry.timestamp.getTime() >= cutoffTime
+    );
   }
 
   private updateAverageProcessingTime(newTime: number): void {
@@ -137,9 +198,57 @@ export class TypedEventBus extends EventEmitter implements IEventBus {
 export class EventBus implements IEventBus {
   private static instance: EventBus;
   private typedBus: TypedEventBus;
+  // Scheduled cleanup to prevent memory leaks
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
   private constructor() {
     this.typedBus = new TypedEventBus();
+    // Only start cleanup interval in production/non-test environments
+    if (process.env.NODE_ENV !== 'test') {
+      this.startCleanupInterval();
+    }
+  }
+
+  /**
+   * Starts the cleanup interval
+   */
+  private startCleanupInterval(): void {
+    if (!this.cleanupInterval) {
+      this.cleanupInterval = setInterval(() => {
+        this.typedBus.getEventHistory(0); // This triggers cleanEventHistory()
+      }, 600000); // 10 minutes
+    }
+  }
+
+  /**
+   * Stops the cleanup interval
+   */
+  private stopCleanupInterval(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+  }
+
+  /**
+   * Destroys the EventBus instance and cleans up resources
+   */
+  destroy(): void {
+    this.stopCleanupInterval();
+    this.removeAllListeners();
+    this.typedBus.removeAllListeners();
+    this.typedBus.clearHistory();
+    this.typedBus.resetMetrics();
+  }
+
+  /**
+   * Resets the singleton instance (for testing)
+   */
+  static reset(): void {
+    if (EventBus.instance) {
+      EventBus.instance.destroy();
+      EventBus.instance = null as any;
+    }
   }
 
   /**
@@ -213,12 +322,52 @@ export class EventBus implements IEventBus {
   clearHistory(): void {
     this.typedBus.clearHistory();
   }
+  
+  /**
+   * Configure event history settings
+   */
+  configureHistory(options: { maxSize?: number; retentionMs?: number }): void {
+    this.typedBus.configureHistory(options);
+  }
 
   /**
    * Reset metrics
    */
   resetMetrics(): void {
     this.typedBus.resetMetrics();
+  }
+
+  /**
+   * Wait for a specific event to be emitted
+   */
+  waitFor(event: string, timeout?: number): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const timeoutId = timeout ? setTimeout(() => {
+        this.off(event, handler);
+        reject(new Error(`Timeout waiting for event: ${event}`));
+      }, timeout) : null;
+
+      const handler = (data: any) => {
+        if (timeoutId) clearTimeout(timeoutId);
+        resolve(data);
+      };
+
+      this.once(event, handler);
+    });
+  }
+
+  /**
+   * Add a filtered event listener
+   */
+  onFiltered(event: string, filter: (data: any) => boolean, listener: (data: any) => void): this {
+    const filteredListener = (data: any) => {
+      if (filter(data)) {
+        listener(data);
+      }
+    };
+    
+    this.on(event, filteredListener);
+    return this;
   }
 }
 

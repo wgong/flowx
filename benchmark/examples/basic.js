@@ -2,43 +2,18 @@
  * Basic example of using the benchmark system
  */
 
-// Try to import the TypeScript benchmark system, then fallback to simplified version
-let benchmarkSystem;
-try {
-  // Try to import the TypeScript benchmark system
-  benchmarkSystem = await import('../src/index.ts');
-} catch (e) {
-  console.error('TypeScript benchmark system not available, trying simplified version:', e.message);
-  try {
-    benchmarkSystem = await import('../simple-benchmark.js');
-  } catch (e2) {
-    console.error('Simplified benchmark system also not available:', e2.message);
-    process.exit(1);
-  }
-}
+import { runBenchmark } from '../dist/api.js';
+import chalk from 'chalk';
 
-// Get colors if available
-let colors;
-try {
-  const colorsMod = await import('chalk');
-  colors = colorsMod.default;
-} catch (e) {
-  // Basic fallback if chalk is not available
-  colors = {
-    blue: (text) => `\x1b[34m${text}\x1b[0m`,
-    green: (text) => `\x1b[32m${text}\x1b[0m`,
-    cyan: (text) => `\x1b[36m${text}\x1b[0m`,
-    yellow: (text) => `\x1b[33m${text}\x1b[0m`,
-    red: (text) => `\x1b[31m${text}\x1b[0m`,
-  };
-}
+// Use chalk for colorful output
+const colors = chalk;
 
 async function runBasicExample() {
   console.log(colors.blue('Running basic benchmark example...'));
   
   try {
     // Run benchmark with basic options
-    const result = await benchmarkSystem.runBenchmark({
+    const result = await runBenchmark({
       objective: 'Basic example benchmark',
       strategy: 'development',
       outputFormats: ['json'],

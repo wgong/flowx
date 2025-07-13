@@ -272,7 +272,7 @@ async function createBackup(context: CLIContext): Promise<void> {
     manifest.metadata.fileCount = manifest.files.length;
 
     // Write manifest
-    const manifestPath = join(backupPath, 'manifest.json');
+    const manifestPath = join(backupPath, 'manifest.tson');
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 
     // Verify backup if requested
@@ -572,13 +572,13 @@ async function backupDatabase(backupPath: string, manifest: BackupManifest): Pro
     // Export database to SQL file using getStats instead of exportToSQL
     const stats = await persistence.getStats();
     const sqlExport = JSON.stringify(stats, null, 2);
-    const sqlPath = join(dbPath, 'database.json');
+    const sqlPath = join(dbPath, 'database.tson');
     writeFileSync(sqlPath, sqlExport);
 
     // Add to manifest
     const fileStats = statSync(sqlPath);
     manifest.files.push({
-      path: 'database/database.json',
+      path: 'database/database.tson',
       size: fileStats.size,
       checksum: calculateChecksum(sqlPath)
     });
@@ -595,10 +595,10 @@ async function backupConfiguration(backupPath: string, manifest: BackupManifest)
 
     // Backup main config files
     const configFiles = [
-      'claude-flow.json',
+      'claude-flow.tson',
       'claude-flow.yaml',
-      '.claude-flow.json',
-      'config.json'
+      '.claude-flow.tson',
+      'config.tson'
     ];
 
     for (const configFile of configFiles) {
@@ -634,12 +634,12 @@ async function backupAgents(backupPath: string, manifest: BackupManifest): Promi
     // Export agents data using getStats instead of getAllAgents
     const stats = await persistence.getStats();
     const agentsData = JSON.stringify(stats, null, 2);
-    const agentsFile = join(agentsPath, 'agents.json');
+    const agentsFile = join(agentsPath, 'agents.tson');
     writeFileSync(agentsFile, agentsData);
 
     const fileStats = statSync(agentsFile);
     manifest.files.push({
-      path: 'agents/agents.json',
+      path: 'agents/agents.tson',
       size: fileStats.size,
       checksum: calculateChecksum(agentsFile)
     });
@@ -696,12 +696,12 @@ async function backupMemory(backupPath: string, manifest: BackupManifest): Promi
     // Export memory data using query instead of getAllMemories
     const memories = await memoryManager.query({ limit: 10000 });
     const memoryData = JSON.stringify(memories, null, 2);
-    const memoryFile = join(memoryPath, 'memories.json');
+    const memoryFile = join(memoryPath, 'memories.tson');
     writeFileSync(memoryFile, memoryData);
 
     const stats = statSync(memoryFile);
     manifest.files.push({
-      path: 'memory/memories.json',
+      path: 'memory/memories.tson',
       size: stats.size,
       checksum: calculateChecksum(memoryFile)
     });
@@ -721,7 +721,7 @@ async function getBackupList(backupDir: string, typeFilter?: string, limit?: num
   const entries = readdirSync(backupDir);
   for (const entry of entries) {
     const entryPath = join(backupDir, entry);
-    const manifestPath = join(entryPath, 'manifest.json');
+    const manifestPath = join(entryPath, 'manifest.tson');
     
     if (statSync(entryPath).isDirectory() && existsSync(manifestPath)) {
       try {

@@ -385,7 +385,7 @@ export class CoordinationManager implements ICoordinationManager {
       return;
     }
 
-    this.logger.debug('Performing coordination manager maintenance');
+    this.logger.info('Performing coordination manager maintenance');
 
     try {
       await Promise.all([
@@ -396,6 +396,8 @@ export class CoordinationManager implements ICoordinationManager {
       
       // Clean up old conflicts
       this.conflictResolver.cleanupOldConflicts(24 * 60 * 60 * 1000); // 24 hours
+      
+      this.logger.info('Coordination manager maintenance completed');
     } catch (error) {
       this.logger.error('Error during coordination manager maintenance', error);
     }

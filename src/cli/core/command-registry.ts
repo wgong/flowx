@@ -40,6 +40,9 @@ import { swarmCommand } from '../commands/swarm/swarm-management-command.ts';
 // Memory Commands
 import { memoryCommand } from '../commands/memory/memory-management-command.ts';
 
+// Hive-Mind Commands
+import { hiveMindCommand } from '../commands/hive-mind/hive-mind-command.ts';
+
 /**
  * Command Registry
  * Maps command names to their implementations
@@ -78,7 +81,10 @@ export const commandRegistry = new Map<string, CLICommand>([
   ['swarm', swarmCommand],
 
   // Memory Commands
-  ['memory', memoryCommand]
+  ['memory', memoryCommand],
+
+  // Hive-Mind Commands
+  ['hive-mind', hiveMindCommand]
 ]);
 
 // Command aliases

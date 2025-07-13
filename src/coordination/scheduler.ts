@@ -35,14 +35,22 @@ export class TaskScheduler {
   async initialize(): Promise<void> {
     this.logger.info('Initializing task scheduler');
     
-    // Set up periodic cleanup
-    this.cleanupInterval = setInterval(() => {
-      this.cleanupCompletedTasks();
-    }, 60000) as unknown as number; // Every minute
+    // Only start cleanup interval in production/non-test environments
+    if (process.env.NODE_ENV !== 'test') {
+      this.cleanupInterval = setInterval(() => {
+        this.cleanupCompletedTasks();
+      }, 60000) as unknown as number; // Every minute
+    }
   }
 
   async shutdown(): Promise<void> {
     this.logger.info('Shutting down task scheduler');
+    
+    // Clear cleanup interval
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
     
     // Cancel all active tasks
     const taskIds = Array.from(this.tasks.keys());
@@ -203,10 +211,9 @@ export class TaskScheduler {
     // Emit cancellation event
     this.eventBus.emit(SystemEvents.TASK_CANCELLED, { taskId, reason });
 
-    // Remove from active tasks
-    this.tasks.delete(taskId);
-    this.agentTasks.get(scheduled.agentId)?.delete(taskId);
-
+    // Keep task in agentTasks for status tracking
+    // The cleanup process will handle removal later
+    
     // Cancel dependent tasks
     await this.cancelDependentTasks(taskId, 'Parent task cancelled');
   }
@@ -223,7 +230,7 @@ export class TaskScheduler {
     });
 
     const promises = Array.from(taskIds).map(
-      taskId => this.cancelTask(taskId, 'Agent terminated'),
+      taskId => this.cancelTask(taskId, 'Agent cancelled')
     );
 
     await Promise.all(promises);
@@ -249,7 +256,7 @@ export class TaskScheduler {
         scheduled.attempts = 0;
         
         // Re-emit task created event for reassignment
-        this.eventBus.emit(SystemEvents.TASK_CREATED, { 
+        this.eventBus.emit(SystemEvents.TASK_CREATED, {
           task: scheduled.task,
         });
       }
@@ -257,7 +264,20 @@ export class TaskScheduler {
   }
 
   getAgentTaskCount(agentId: string): number {
-    return this.agentTasks.get(agentId)?.size || 0;
+    const taskIds = this.agentTasks.get(agentId);
+    if (!taskIds) {
+      return 0;
+    }
+
+    // Count only non-cancelled tasks
+    let count = 0;
+    for (const taskId of taskIds) {
+      const scheduled = this.tasks.get(taskId);
+      if (scheduled && scheduled.task.status !== 'cancelled') {
+        count++;
+      }
+    }
+    return count;
   }
 
   async getHealthStatus(): Promise<{ 

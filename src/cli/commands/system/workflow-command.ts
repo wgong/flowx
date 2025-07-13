@@ -66,7 +66,7 @@ export const workflowCommand: CLICommand = {
   category: 'Workflow',
   usage: 'claude-flow workflow <subcommand> [OPTIONS]',
   examples: [
-    'claude-flow workflow create --name "CI/CD Pipeline" --file pipeline.json',
+    'claude-flow workflow create --name "CI/CD Pipeline" --file pipeline.tson',
     'claude-flow workflow list --status active',
     'claude-flow workflow run workflow-123',
     'claude-flow workflow status execution-456',
@@ -281,7 +281,7 @@ async function createWorkflow(context: CLIContext): Promise<void> {
     // Load from file if specified
     if (options.file) {
       const content = await fs.readFile(options.file, 'utf8');
-      if (options.file.endsWith('.json')) {
+      if (options.file.endsWith('.tson')) {
         workflowDef = JSON.parse(content);
       } else if (options.file.endsWith('.yml') || options.file.endsWith('.yaml')) {
         // YAML parsing using js-yaml

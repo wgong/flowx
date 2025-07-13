@@ -5,6 +5,7 @@ import { generateId } from "../utils/helpers.ts";
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { Buffer } from 'node:buffer';
+import { SystemError } from '../utils/errors.ts';
 
 export interface BackgroundTask {
   id: string;
@@ -119,41 +120,96 @@ export class BackgroundExecutor extends EventEmitter {
     this.emit('executor:stopped');
   }
 
+  /**
+   * Validates a command to prevent command injection attacks
+   * @param command The command to validate
+   * @param args Command arguments to validate
+   * @throws SystemError if the command is disallowed or dangerous
+   */
+  private validateCommand(command: string, args: string[] = []): void {
+    // Allowlist of safe commands
+    const allowedCommands = [
+      'claude', 'node', 'npm', 'python', 'python3', 'pip',
+      'git', 'bash', 'sh', 'zsh', 'dotnet', 'java', 'javac', 'cargo',
+      'rustc', 'go', 'gradle', 'mvn', 'make', 'cmake', 'docker'
+    ];
+    
+    // Check if the command is in the allowlist
+    const commandName = path.basename(command);
+    if (!allowedCommands.includes(commandName)) {
+      throw new SystemError(`Command not allowed: ${commandName}. Only allowlisted commands can be executed.`);
+    }
+    
+    // Validate arguments (check for shell special chars and common injection patterns)
+    const dangerousPatterns = [
+      /^\s*&/, // Leading ampersand
+      /;\s*$/, // Trailing semicolon
+      /\|\s*[a-z]/, // Pipe to another command
+      /`/, // Backticks
+      /\$\(/, // Command substitution $()
+      /\s*\|\|\s*/, // Double pipe
+      /\s*&&\s*/, // Double ampersand
+      /\s*>\s*/, // Output redirection
+      /\s*<\s*/, // Input redirection
+    ];
+    
+    for (const arg of args) {
+      // Skip args that start with - (flags)
+      if (arg.startsWith('-')) continue;
+      
+      // Check for dangerous patterns
+      for (const pattern of dangerousPatterns) {
+        if (pattern.test(arg)) {
+          throw new SystemError(`Potentially unsafe argument detected: ${arg}`);
+        }
+      }
+    }
+  }
+
   async submitTask(
     type: BackgroundTask['type'],
     command: string,
     args: string[] = [],
     options: BackgroundTask['options'] = {}
   ): Promise<string> {
-    const taskId = generateId('bgtask');
-    const task: BackgroundTask = {
-      id: taskId,
-      type,
-      command,
-      args,
-      options: {
-        timeout: this.config.defaultTimeout,
-        retries: this.config.maxRetries,
-        ...options
-      },
-      status: 'pending',
-      retryCount: 0
-    };
+    try {
+      // Validate command and arguments
+      this.validateCommand(command, args);
+      
+      const taskId = generateId('bgtask');
+      const task: BackgroundTask = {
+        id: taskId,
+        type,
+        command,
+        args,
+        options: {
+          timeout: this.config.defaultTimeout,
+          retries: this.config.maxRetries,
+          ...options
+        },
+        status: 'pending',
+        retryCount: 0
+      };
 
-    this.tasks.set(taskId, task);
-    this.queue.push(taskId);
+      this.tasks.set(taskId, task);
+      this.queue.push(taskId);
 
-    if (this.config.enablePersistence) {
-      await this.saveTaskState(task);
+      if (this.config.enablePersistence) {
+        await this.saveTaskState(task);
+      }
+
+      this.logger.info(`Submitted background task: ${taskId} - ${command}`);
+      this.emit('task:submitted', task);
+
+      // Process immediately if possible
+      this.processQueue();
+
+      return taskId;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to submit task: ${errorMessage}`, { command, args });
+      throw error;
     }
-
-    this.logger.info(`Submitted background task: ${taskId} - ${command}`);
-    this.emit('task:submitted', task);
-
-    // Process immediately if possible
-    this.processQueue();
-
-    return taskId;
   }
 
   async submitClaudeTask(
@@ -167,22 +223,42 @@ export class BackgroundExecutor extends EventEmitter {
       maxTokens?: number;
     }> = {}
   ): Promise<string> {
-    // Build claude command arguments
+    // Validate prompt content
+    if (!prompt || typeof prompt !== 'string') {
+      throw new SystemError('Invalid prompt: must be a non-empty string');
+    }
+    
+    // Validate tools
+    const validToolPattern = /^[a-zA-Z0-9_\-:]+$/;
+    for (const tool of tools) {
+      if (!validToolPattern.test(tool)) {
+        throw new SystemError(`Invalid tool name: ${tool}. Tool names must contain only alphanumeric characters, underscores, hyphens, and colons.`);
+      }
+    }
+    
+    // Build claude command arguments - sanitize all inputs
     const args = ['-p', prompt];
     
     if (tools.length > 0) {
       args.push('--allowedTools', tools.join(','));
     }
 
-    if (options.model) {
+    if (options.model && validToolPattern.test(options.model)) {
       args.push('--model', options.model);
+    } else if (options.model) {
+      throw new SystemError(`Invalid model name: ${options.model}`);
     }
 
-    if (options.maxTokens) {
+    if (options.maxTokens && Number.isInteger(options.maxTokens) && options.maxTokens > 0) {
       args.push('--max-tokens', options.maxTokens.toString());
+    } else if (options.maxTokens !== undefined) {
+      throw new SystemError(`Invalid maxTokens: ${options.maxTokens}. Must be a positive integer.`);
     }
 
-    args.push('--dangerously-skip-permissions');
+    // Even with validation, use with caution
+    if (process.env.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS === 'true') {
+      args.push('--dangerously-skip-permissions');
+    }
 
     return this.submitTask('claude-spawn', 'claude', args, {
       ...options,
@@ -213,6 +289,19 @@ export class BackgroundExecutor extends EventEmitter {
 
   private async executeTask(task: BackgroundTask): Promise<void> {
     try {
+      // Revalidate command and args before execution for extra security
+      try {
+        this.validateCommand(task.command, task.args);
+      } catch (validationError) {
+        task.status = 'failed';
+        const errorMessage = validationError instanceof Error ? validationError.message : String(validationError);
+        task.error = `Command validation failed: ${errorMessage}`;
+        task.endTime = new Date();
+        this.logger.error(`Task validation failed ${task.id}:`, validationError);
+        this.emit('task:failed', task);
+        return;
+      }
+      
       task.status = 'running';
       task.startTime = new Date();
 
@@ -224,12 +313,14 @@ export class BackgroundExecutor extends EventEmitter {
         await fs.mkdir(logDir, { recursive: true });
       }
 
-      // Spawn process
+      // Use shell: false for security and specify full path when possible
+      // This prevents shell injection attacks
       const childProcess = spawn(task.command, task.args, {
         cwd: task.options?.cwd,
         env: { ...process.env, ...task.options?.env },
         detached: task.options?.detached,
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: false // Explicitly disable shell for security
       });
 
       task.pid = childProcess.pid;
@@ -361,7 +452,7 @@ export class BackgroundExecutor extends EventEmitter {
     if (!this.config.enablePersistence) return;
 
     try {
-      const taskFile = path.join(this.config.logPath, task.id, 'task.json');
+      const taskFile = path.join(this.config.logPath, task.id, 'task.tson');
       await fs.writeFile(taskFile, JSON.stringify(task, null, 2));
     } catch (error) {
       this.logger.error(`Failed to save task state for ${task.id}:`, error);

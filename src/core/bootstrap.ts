@@ -3,13 +3,13 @@
  * Orchestrates the initialization of all architectural components
  */
 
-import { Application, ApplicationModule, ApplicationConfig } from './application.js';
-import { Container } from './container.js';
-import { PluginManager } from './plugin-system.js';
-import { createValidator } from './validation.js';
-import { CLIApplication } from '../cli/core/application.js';
-import { ILogger } from './logger.js';
-import { IEventBus, EventBus } from './event-bus.js';
+import { Application, ApplicationModule, ApplicationConfig } from './application.ts';
+import { Container } from './container.ts';
+import { PluginManager } from './plugin-system.ts';
+import { createValidator } from './validation.ts';
+import { CLIApplication } from '../cli/core/application.ts';
+import { ILogger } from './logger.ts';
+import { IEventBus, EventBus } from './event-bus.ts';
 
 export interface BootstrapConfig extends ApplicationConfig {
   modules?: string[];
@@ -30,8 +30,10 @@ export class Bootstrap {
   private container: Container;
   private pluginManager?: PluginManager;
   private cliApp?: CLIApplication;
+  private config: BootstrapConfig;
 
-  constructor(private config: BootstrapConfig) {
+  constructor(config: BootstrapConfig) {
+    this.config = config;
     this.container = new Container({
       enableCircularDependencyDetection: true,
       enableMetrics: true,
@@ -105,7 +107,7 @@ export class Bootstrap {
   private async registerCoreServices(): Promise<void> {
     // Register logger
     this.container.singleton('logger', async () => {
-      const { Logger } = await import('./logger.js');
+      const { Logger } = await import('./logger.ts');
       return new Logger({
         level: this.config.environment === 'development' ? 'debug' : 'info',
         format: 'json',
@@ -155,7 +157,7 @@ export class Bootstrap {
         
         // Register monitoring services
         container.singleton('monitor', async () => {
-          const { RealTimeMonitor } = await import('../monitoring/real-time-monitor.js');
+          const { RealTimeMonitor } = await import('../monitoring/real-time-monitor.ts');
           const config = await container.resolve('config') as BootstrapConfig;
           const logger = await container.resolve<ILogger>('logger');
           const eventBus = await container.resolve<IEventBus>('eventBus');
@@ -204,7 +206,7 @@ export class Bootstrap {
         
         // Register MCP services
         container.singleton('mcpServer', async () => {
-          const { MCPServer } = await import('../mcp/server.js');
+          const { MCPServer } = await import('../mcp/server.ts');
           const config = await container.resolve('config') as BootstrapConfig;
           const logger = await container.resolve<ILogger>('logger');
           const eventBus = await container.resolve<IEventBus>('eventBus');

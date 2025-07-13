@@ -108,46 +108,48 @@ export interface MemoryQuery {
 }
 
 // Event-related types
-export enum SystemEvents {
+export const SystemEvents = {
   // Agent events
-  AGENT_SPAWNED = 'agent:spawned',
-  AGENT_TERMINATED = 'agent:terminated',
-  AGENT_ERROR = 'agent:error',
-  AGENT_IDLE = 'agent:idle',
-  AGENT_ACTIVE = 'agent:active',
+  AGENT_SPAWNED: 'agent:spawned',
+  AGENT_TERMINATED: 'agent:terminated',
+  AGENT_ERROR: 'agent:error',
+  AGENT_IDLE: 'agent:idle',
+  AGENT_ACTIVE: 'agent:active',
 
   // Task events
-  TASK_CREATED = 'task:created',
-  TASK_ASSIGNED = 'task:assigned',
-  TASK_STARTED = 'task:started',
-  TASK_COMPLETED = 'task:completed',
-  TASK_FAILED = 'task:failed',
-  TASK_CANCELLED = 'task:cancelled',
+  TASK_CREATED: 'task:created',
+  TASK_ASSIGNED: 'task:assigned',
+  TASK_STARTED: 'task:started',
+  TASK_COMPLETED: 'task:completed',
+  TASK_FAILED: 'task:failed',
+  TASK_CANCELLED: 'task:cancelled',
 
   // Memory events
-  MEMORY_CREATED = 'memory:created',
-  MEMORY_UPDATED = 'memory:updated',
-  MEMORY_DELETED = 'memory:deleted',
-  MEMORY_SYNCED = 'memory:synced',
+  MEMORY_CREATED: 'memory:created',
+  MEMORY_UPDATED: 'memory:updated',
+  MEMORY_DELETED: 'memory:deleted',
+  MEMORY_SYNCED: 'memory:synced',
 
   // System events
-  SYSTEM_READY = 'system:ready',
-  SYSTEM_SHUTDOWN = 'system:shutdown',
-  SYSTEM_ERROR = 'system:error',
-  SYSTEM_HEALTHCHECK = 'system:healthcheck',
+  SYSTEM_READY: 'system:ready',
+  SYSTEM_SHUTDOWN: 'system:shutdown',
+  SYSTEM_ERROR: 'system:error',
+  SYSTEM_HEALTHCHECK: 'system:healthcheck',
 
   // Component recovery events
-  COMPONENT_RECOVERED = 'component:recovered',
-  COMPONENT_RECOVERY_FAILED = 'component:recovery_failed',
-  COMPONENT_RECOVERY_ERROR = 'component:recovery_error',
+  COMPONENT_RECOVERED: 'component:recovered',
+  COMPONENT_RECOVERY_FAILED: 'component:recovery_failed',
+  COMPONENT_RECOVERY_ERROR: 'component:recovery_error',
 
   // Coordination events
-  RESOURCE_ACQUIRED = 'resource:acquired',
-  RESOURCE_RELEASED = 'resource:released',
-  DEADLOCK_DETECTED = 'deadlock:detected',
-  MESSAGE_SENT = 'message:sent',
-  MESSAGE_RECEIVED = 'message:received',
-}
+  RESOURCE_ACQUIRED: 'resource:acquired',
+  RESOURCE_RELEASED: 'resource:released',
+  DEADLOCK_DETECTED: 'deadlock:detected',
+  MESSAGE_SENT: 'message:sent',
+  MESSAGE_RECEIVED: 'message:received',
+} as const;
+
+export type SystemEvents = typeof SystemEvents[keyof typeof SystemEvents];
 
 export interface EventMap extends Record<string, unknown> {
   [SystemEvents.AGENT_SPAWNED]: { agentId: string; profile: AgentProfile; sessionId: string };

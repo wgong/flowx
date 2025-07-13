@@ -42,6 +42,7 @@ export class AuthManager implements IAuthManager {
     createdAt: Date;
     expiresAt: Date;
   }>();
+  private cleanupInterval?: NodeJS.Timeout;
 
   constructor(
     private config: MCPAuthConfig,
@@ -49,10 +50,18 @@ export class AuthManager implements IAuthManager {
   ) {
     // Start token cleanup timer
     if (config.enabled) {
-      setInterval(() => {
+      this.cleanupInterval = setInterval(() => {
         this.cleanupExpiredTokens();
       }, 300000); // Clean up every 5 minutes
     }
+  }
+
+  destroy(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
+    this.revokedTokens.clear();
+    this.tokenStore.clear();
   }
 
   async authenticate(credentials: unknown): Promise<AuthResult> {

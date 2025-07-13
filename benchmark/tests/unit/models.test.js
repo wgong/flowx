@@ -14,7 +14,7 @@ const {
   PerformanceMetrics,
   ResourceUsage,
   BenchmarkMetrics
-} = require('../../dist/swarm_benchmark/core/models');
+} = require('../../dist/swarm_benchmark/core/models.js');
 
 describe('Benchmark Models', () => {
   describe('BenchmarkConfig', () => {

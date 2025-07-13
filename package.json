@@ -4,7 +4,8 @@
   "description": "Advanced AI agent orchestration system - FlowX",
   "main": "cli.js",
   "bin": {
-    "flowx": "./cli.js"
+    "flowx": "./cli.js",
+    "claude-flow": "./cli.js"
   },
   "scripts": {
     "dev": "tsx src/cli/main.ts",
@@ -32,7 +33,10 @@
     "prepare-publish": "node scripts/build/prepare-publish.js",
     "benchmark": "node benchmark/bin/benchmark-cli.js run \"Benchmark simple task\"",
     "benchmark:test": "node benchmark/bin/benchmark-cli.js test",
-    "benchmark:example": "node benchmark/examples/basic.js"
+    "benchmark:example": "node benchmark/examples/basic.js",
+    "hive": "node start-hive.js",
+    "hive:demo": "node hive-demo.js",
+    "hive:status": "node dist/cli/commands/system/status-command.js --include-hive"
   },
   "keywords": [
     "flowx",
@@ -77,6 +81,8 @@
   ],
   "dependencies": {
     "@anthropic-ai/claude-code": "^1.0.35",
+    "@tensorflow/tfjs": "^4.22.0",
+    "@tensorflow/tfjs-node": "^4.22.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/react": "^19.1.8",
     "@types/socket.io": "^3.0.1",
@@ -90,7 +96,6 @@
     "helmet": "^7.1.0",
     "ink": "^6.0.1",
     "ink-big-text": "^2.0.0",
-    "ink-box": "^1.0.0",
     "ink-gradient": "^3.0.0",
     "ink-select-input": "^6.2.0",
     "ink-spinner": "^5.0.0",
@@ -134,6 +139,7 @@
     "jest": "^30.0.4",
     "jest-environment-node": "^30.0.4",
     "jest-fast-check": "^2.0.0",
+    "jest-junit": "^16.0.0",
     "js-yaml": "^4.1.0",
     "microtime": "^3.1.1",
     "mongoose": "^8.16.3",
@@ -160,55 +166,5 @@
       "--experimental-specifier-resolution=node"
     ]
   },
-  "type": "module",
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "transform": {
-      "^.+\\.(ts|tsx)$": "ts-jest",
-      "^.+\\.(js|jsx)$": [
-        "babel-jest",
-        {
-          "configFile": "./babel.config.json"
-        }
-      ]
-    },
-    "moduleNameMapper": {
-      "^(\\.{1,2}/.*)\\.js$": "$1"
-    },
-    "extensionsToTreatAsEsm": [
-      ".ts",
-      ".tsx",
-      ".jsx"
-    ],
-    "collectCoverageFrom": [
-      "src/**/*.{js,ts}",
-      "!src/**/*.d.ts",
-      "!src/**/*.test.{js,ts}",
-      "!src/**/*.spec.{js,ts}",
-      "!src/**/__tests__/**",
-      "!src/**/__mocks__/**",
-      "!src/**/*.config.{js,ts}"
-    ],
-    "coverageDirectory": "./test-results/coverage",
-    "coverageReporters": [
-      "text",
-      "lcov",
-      "html",
-      "json-summary"
-    ],
-    "coverageThreshold": {
-      "global": {
-        "branches": 90,
-        "functions": 95,
-        "lines": 90,
-        "statements": 90
-      }
-    },
-    "globals": {
-      "ts-jest": {
-        "useESM": true
-      }
-    }
-  }
+  "type": "module"
 }

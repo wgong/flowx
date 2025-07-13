@@ -3,8 +3,8 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { ILogger } from "../core/logger.js";
-import { IEventBus } from "../core/event-bus.js";
+import { ILogger } from "../core/logger.ts";
+import { IEventBus } from "../core/event-bus.ts";
 import { 
   SwarmMemory, 
   MemoryPartition, 
@@ -14,8 +14,8 @@ import {
   ConsistencyLevel,
   MemoryPermissions,
   AgentId
-} from "../swarm/types.js";
-import { generateId } from "../utils/helpers.js";
+} from "../swarm/types.ts";
+import { generateId } from "../utils/helpers.ts";
 
 export interface DistributedMemoryConfig {
   namespace: string;

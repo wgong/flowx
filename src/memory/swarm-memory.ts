@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
-import { Logger } from "../core/logger.js";
-import { generateId } from "../utils/helpers.js";
+import { Logger } from "../core/logger.ts";
+import { generateId } from "../utils/helpers.ts";
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
@@ -398,7 +398,7 @@ export class SwarmMemoryManager extends EventEmitter {
   private async loadMemoryState(): Promise<void> {
     try {
       // Load entries
-      const entriesFile = path.join(this.config.persistencePath, 'entries.json');
+      const entriesFile = path.join(this.config.persistencePath, 'entries.tson');
       try {
         const entriesData = await fs.readFile(entriesFile, 'utf-8');
         const entriesArray = JSON.parse(entriesData);
@@ -422,7 +422,7 @@ export class SwarmMemoryManager extends EventEmitter {
       }
 
       // Load knowledge bases
-      const kbFile = path.join(this.config.persistencePath, 'knowledge-bases.json');
+      const kbFile = path.join(this.config.persistencePath, 'knowledge-bases.tson');
       try {
         const kbData = await fs.readFile(kbFile, 'utf-8');
         const kbArray = JSON.parse(kbData);
@@ -450,12 +450,12 @@ export class SwarmMemoryManager extends EventEmitter {
     try {
       // Save entries
       const entriesArray = Array.from(this.entries.values());
-      const entriesFile = path.join(this.config.persistencePath, 'entries.json');
+      const entriesFile = path.join(this.config.persistencePath, 'entries.tson');
       await fs.writeFile(entriesFile, JSON.stringify(entriesArray, null, 2));
 
       // Save knowledge bases
       const kbArray = Array.from(this.knowledgeBases.values());
-      const kbFile = path.join(this.config.persistencePath, 'knowledge-bases.json');
+      const kbFile = path.join(this.config.persistencePath, 'knowledge-bases.tson');
       await fs.writeFile(kbFile, JSON.stringify(kbArray, null, 2));
 
       this.logger.debug('Memory state saved');

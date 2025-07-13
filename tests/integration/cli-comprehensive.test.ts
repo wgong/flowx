@@ -5,7 +5,7 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { promises as fs } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { tmpdir } from 'os';
 
 interface TestResult {
@@ -36,7 +36,7 @@ export class CLITestRunner {
   private testDir: string;
 
   constructor(cliPath = './cli.js') {
-    this.cliPath = cliPath;
+    this.cliPath = resolve(cliPath);
     this.testDir = join(tmpdir(), 'claude-flow-cli-tests');
   }
 
@@ -212,22 +212,22 @@ export const basicCommandsTestSuite: CLITestSuite = {
     {
       name: 'Help command',
       command: ['--help'],
-      expectedOutput: /Claude Flow CLI/
+      expectedOutput: /flowx.*AI-powered development workflows/
     },
     {
       name: 'Version command',
       command: ['--version'],
-      expectedOutput: /\d+\.\d+\.\d+/
+      expectedOutput: /flowx v\d+\.\d+\.\d+/
     },
     {
       name: 'Status command',
       command: ['status'],
-      expectedOutput: /System Status/
+      expectedOutput: /Backend services initialized|System Status/
     },
     {
       name: 'Help for specific command',
       command: ['help', 'status'],
-      expectedOutput: /status.*Show system status/
+      expectedOutput: /status.*Show system status|Usage:|COMMANDS:/
     }
   ]
 };

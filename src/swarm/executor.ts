@@ -730,7 +730,7 @@ export class TaskExecutor extends EventEmitter {
 
     try {
       // Look for common output files
-      const outputFiles = ['output.json', 'result.json', 'response.json'];
+      const outputFiles = ['output.tson', 'result.tson', 'response.tson'];
       
       for (const fileName of outputFiles) {
         const filePath = path.join(workingDir, fileName);

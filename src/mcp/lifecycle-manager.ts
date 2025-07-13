@@ -9,14 +9,16 @@ import { MCPConfig, MCPSession, MCPMetrics, HealthStatus } from "../utils/types.
 import { MCPError } from "../utils/errors.ts";
 import { IMCPServer } from "./server.ts";
 
-export enum LifecycleState {
-  STOPPED = 'stopped',
-  STARTING = 'starting',
-  RUNNING = 'running',
-  STOPPING = 'stopping',
-  RESTARTING = 'restarting',
-  ERROR = 'error',
-}
+export const LifecycleState = {
+  STOPPED: 'stopped',
+  STARTING: 'starting',
+  RUNNING: 'running',
+  STOPPING: 'stopping',
+  RESTARTING: 'restarting',
+  ERROR: 'error',
+} as const;
+
+export type LifecycleState = typeof LifecycleState[keyof typeof LifecycleState];
 
 export interface LifecycleEvent {
   timestamp: Date;

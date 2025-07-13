@@ -501,13 +501,13 @@ export const agentCommand: CLICommand = {
   name: 'agent',
   description: 'Manage AI agents with real backend integration',
   category: 'Agents',
-  usage: 'claude-flow agent <subcommand> [OPTIONS]',
+  usage: 'FlowX agent <subcommand> [OPTIONS]',
   examples: [
-    'claude-flow agent list',
-    'claude-flow agent spawn researcher --name "Research Bot"',
-    'claude-flow agent status agent-001',
-    'claude-flow agent stop agent-001',
-    'claude-flow agent logs agent-001'
+    'FlowX agent list',
+    'FlowX agent spawn researcher --name "Research Bot"',
+    'FlowX agent status agent-001',
+    'FlowX agent stop agent-001',
+    'FlowX agent logs agent-001'
   ],
   subcommands: [
     {
@@ -623,6 +623,98 @@ export const agentCommand: CLICommand = {
           name: 'verbose',
           short: 'v',
           description: 'Show detailed information',
+          type: 'boolean'
+        }
+      ]
+    },
+    {
+      name: 'create',
+      description: 'Create and start a new agent (alias for spawn)',
+      handler: async (context: CLIContext) => {
+        // Transform create syntax to spawn syntax
+        // create test-agent --type researcher -> spawn researcher --name test-agent
+        const { args, options } = context;
+        const agentName = args[0];
+        const agentType = options.type;
+        
+        if (!agentType) {
+          printError('Agent type is required. Use --type option.');
+          printInfo('Example: claude-flow agent create my-agent --type researcher');
+          return;
+        }
+        
+        // Create new context with transformed arguments
+        const newContext = {
+          ...context,
+          args: [agentType],
+          options: {
+            ...options,
+            name: agentName || options.name
+          }
+        };
+        
+        return await spawnAgent(newContext);
+      },
+      arguments: [
+        {
+          name: 'name',
+          description: 'Agent name',
+          required: true
+        }
+      ],
+      options: [
+        {
+          name: 'type',
+          short: 't',
+          description: 'Agent type',
+          type: 'string',
+          required: true
+        },
+        {
+          name: 'specialization',
+          short: 's',
+          description: 'Agent specialization',
+          type: 'string'
+        },
+        {
+          name: 'capabilities',
+          description: 'Comma-separated list of capabilities',
+          type: 'string'
+        },
+        {
+          name: 'memory',
+          short: 'm',
+          description: 'Maximum memory in MB',
+          type: 'string'
+        },
+        {
+          name: 'max-tasks',
+          description: 'Maximum concurrent tasks',
+          type: 'string'
+        },
+        {
+          name: 'timeout',
+          description: 'Task timeout in milliseconds',
+          type: 'string'
+        },
+        {
+          name: 'work-dir',
+          description: 'Working directory for agent',
+          type: 'string'
+        },
+        {
+          name: 'model',
+          description: 'Claude model to use',
+          type: 'string'
+        },
+        {
+          name: 'temperature',
+          description: 'Claude temperature setting',
+          type: 'string'
+        },
+        {
+          name: 'debug',
+          description: 'Enable debug mode',
           type: 'boolean'
         }
       ]

@@ -644,7 +644,7 @@ async function runSeeders(context: CLIContext): Promise<void> {
 async function createMigrationBackup(context: CLIContext): Promise<void> {
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupFile = `migration-backup-${timestamp}.json`;
+    const backupFile = `migration-backup-${timestamp}.tson`;
     
     const backupData = {
       timestamp: new Date(),

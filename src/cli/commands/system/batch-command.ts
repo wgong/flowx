@@ -90,7 +90,7 @@ export const batchCommand: CLICommand = {
     }
 
     printError('No batch operation specified');
-    printInfo('Use "node cli.js batch --help" for available operations');
+    printInfo('Use "node cli.ts batch --help" for available operations');
   }
 };
 
@@ -172,7 +172,7 @@ async function createProject(projectName: string, options: any, config: any): Pr
   const sparcFlag = config.sparc || options.sparc ? '--sparc' : '';
   const swarmFlag = config.swarm || options.swarm ? '--swarm' : '';
   
-  const command = `node cli.js init ${projectName} --template ${template} ${forceFlag} ${sparcFlag} ${swarmFlag}`.trim();
+  const command = `node cli.ts init ${projectName} --template ${template} ${forceFlag} ${sparcFlag} ${swarmFlag}`.trim();
   
   execSync(command, { stdio: 'pipe' });
 }
@@ -223,7 +223,7 @@ async function execSparcMode(mode: string, task: string, options: any): Promise<
   const dryRunFlag = options['dry-run'] ? '--dry-run' : '';
   const namespaceFlag = options.namespace ? `--namespace ${options.namespace}` : '';
   
-  const command = `node cli.js sparc ${mode} "${task}" ${dryRunFlag} ${namespaceFlag}`.trim();
+  const command = `node cli.ts sparc ${mode} "${task}" ${dryRunFlag} ${namespaceFlag}`.trim();
   
   execSync(command, { stdio: 'pipe' });
 }
@@ -268,19 +268,19 @@ async function execSwarmOperation(operation: string, swarmName: string, options:
   let command = '';
   switch (operation) {
     case 'create':
-      command = `node cli.js swarm create ${swarmName} ${agentsFlag} ${objectiveFlag}`;
+      command = `node cli.ts swarm create ${swarmName} ${agentsFlag} ${objectiveFlag}`;
       break;
     case 'start':
-      command = `node cli.js swarm start ${swarmName}`;
+      command = `node cli.ts swarm start ${swarmName}`;
       break;
     case 'stop':
-      command = `node cli.js swarm stop ${swarmName}`;
+      command = `node cli.ts swarm stop ${swarmName}`;
       break;
     case 'status':
-      command = `node cli.js swarm status ${swarmName}`;
+      command = `node cli.ts swarm status ${swarmName}`;
       break;
     default:
-      command = `node cli.js swarm ${operation} ${swarmName}`;
+      command = `node cli.ts swarm ${operation} ${swarmName}`;
   }
   
   execSync(command.trim(), { stdio: 'pipe' });
@@ -310,7 +310,7 @@ async function manageBatchConfig(context: CLIContext): Promise<void> {
 async function createBatchConfig(context: CLIContext): Promise<void> {
   const { args } = context;
   
-  const configFile = args[1] || 'batch-config.json';
+  const configFile = args[1] || 'batch-config.tson';
   
   const defaultConfig = {
     name: 'Default Batch Configuration',
@@ -348,7 +348,7 @@ async function createBatchConfig(context: CLIContext): Promise<void> {
 async function validateBatchConfig(context: CLIContext): Promise<void> {
   const { args } = context;
   
-  const configFile = args[1] || 'batch-config.json';
+  const configFile = args[1] || 'batch-config.tson';
   
   if (!existsSync(configFile)) {
     printError(`Configuration file not found: ${configFile}`);
@@ -382,9 +382,9 @@ async function listBatchConfigs(context: CLIContext): Promise<void> {
   printInfo('📋 Available Batch Configurations');
   
   const configs = [
-    { name: 'batch-config-simple.json', description: 'Basic project setup' },
-    { name: 'batch-config-advanced.json', description: 'Advanced features enabled' },
-    { name: 'batch-config-enterprise.json', description: 'Enterprise-grade setup' }
+    { name: 'batch-config-simple.tson', description: 'Basic project setup' },
+    { name: 'batch-config-advanced.tson', description: 'Advanced features enabled' },
+    { name: 'batch-config-enterprise.tson', description: 'Enterprise-grade setup' }
   ];
   
   console.log('\nConfiguration Files:');
@@ -427,7 +427,7 @@ async function listBatchTemplates(context: CLIContext): Promise<void> {
   });
   
   console.log('\nUsage:');
-  console.log('  node cli.js batch init --template microservices --projects "api,web,mobile"');
+  console.log('  node cli.ts batch init --template microservices --projects "api,web,mobile"');
 }
 
 async function showBatchHelp(context: CLIContext): Promise<void> {
@@ -442,11 +442,11 @@ async function showBatchHelp(context: CLIContext): Promise<void> {
   console.log('  templates   List available batch templates');
   
   console.log(infoBold('\nEXAMPLES:'));
-  console.log('  node cli.js batch init --projects "api,web,mobile" --template fullstack');
-  console.log('  node cli.js batch sparc architect "Design system" --modes "architect,code"');
-  console.log('  node cli.js batch swarm create --swarms "dev-team,qa-team" --parallel');
-  console.log('  node cli.js batch config create my-batch-config.json');
-  console.log('  node cli.js batch status');
+  console.log('  node cli.ts batch init --projects "api,web,mobile" --template fullstack');
+  console.log('  node cli.ts batch sparc architect "Design system" --modes "architect,code"');
+  console.log('  node cli.ts batch swarm create --swarms "dev-team,qa-team" --parallel');
+  console.log('  node cli.ts batch config create my-batch-config.tson');
+  console.log('  node cli.ts batch status');
   
   console.log(infoBold('\nOPTIONS:'));
   console.log('  --projects    Comma-separated list of project names');

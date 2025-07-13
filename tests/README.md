@@ -1,8 +1,8 @@
-# Claude-Flow Testing Framework
+# Flow Testing Framework
 
 ## Overview
 
-This document provides a comprehensive guide to the Claude-Flow testing framework. It covers the architecture, test categories, usage patterns, and migration from Deno to Node.js/Jest.
+This document provides a comprehensive guide to the FlowX testing framework. It covers the architecture, test categories, usage patterns, and migration from Deno to Node.js/Jest.
 
 ## Table of Contents
 
@@ -20,7 +20,7 @@ This document provides a comprehensive guide to the Claude-Flow testing framewor
 
 ## Testing Architecture
 
-The Claude-Flow testing framework is built on Jest and follows a multi-layered approach:
+The FlowX testing framework is built on Jest and follows a multi-layered approach:
 
 ```
 tests/

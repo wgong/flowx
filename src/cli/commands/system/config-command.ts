@@ -418,14 +418,14 @@ async function resetConfig(context: CLIContext): Promise<void> {
 async function exportConfig(context: CLIContext): Promise<void> {
   const { args, options } = context;
   
-  const outputFile = args[0] || `claude-flow-config-${Date.now()}.json`;
+  const outputFile = args[0] || `claude-flow-config-${Date.now()}.tson`;
   
   try {
     const config = await loadConfig(options);
     
     if (options.format === 'yaml') {
       const yamlContent = configToYaml(config);
-      await fs.writeFile(outputFile.replace('.json', '.yml'), yamlContent);
+      await fs.writeFile(outputFile.replace('.tson', '.yml'), yamlContent);
     } else {
       await fs.writeFile(outputFile, JSON.stringify(config, null, 2));
     }
@@ -441,7 +441,7 @@ async function importConfig(context: CLIContext): Promise<void> {
   const { args, options } = context;
   
   if (args.length === 0) {
-    printError('Configuration file is required. Example: claude-flow config import config.json');
+    printError('Configuration file is required. Example: claude-flow config import config.tson');
     return;
   }
   
@@ -537,7 +537,7 @@ async function backupConfig(context: CLIContext): Promise<void> {
   try {
     const config = await loadConfig(options);
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupFile = `claude-flow-config-backup-${timestamp}.json`;
+    const backupFile = `claude-flow-config-backup-${timestamp}.tson`;
     
     await fs.writeFile(backupFile, JSON.stringify(config, null, 2));
     
@@ -552,7 +552,7 @@ async function restoreConfig(context: CLIContext): Promise<void> {
   const { args, options } = context;
   
   if (args.length === 0) {
-    printError('Backup file is required. Example: claude-flow config restore backup.json');
+    printError('Backup file is required. Example: claude-flow config restore backup.tson');
     return;
   }
   
@@ -656,11 +656,11 @@ async function saveConfig(config: ConfigSchema, options: any): Promise<void> {
 
 function getConfigPath(options: any): string {
   if (options.global) {
-    return path.join(homedir(), '.claude-flow', 'config.json');
+    return path.join(homedir(), '.claude-flow', 'config.tson');
   }
   
   const profile = options.profile || 'default';
-  return path.join(process.cwd(), '.claude-flow', `config-${profile}.json`);
+  return path.join(process.cwd(), '.claude-flow', `config-${profile}.tson`);
 }
 
 function getNestedValue(obj: any, key: string): any {
@@ -882,8 +882,8 @@ async function listProfiles(options: any): Promise<void> {
     const files = await fs.readdir(configDir).catch(() => []);
     
     const profiles = files
-      .filter(file => file.startsWith('config-') && file.endsWith('.json'))
-      .map(file => file.replace('config-', '').replace('.json', ''));
+      .filter(file => file.startsWith('config-') && file.endsWith('.tson'))
+      .map(file => file.replace('config-', '').replace('.tson', ''));
     
     if (profiles.length === 0) {
       printInfo('No configuration profiles found');
@@ -922,7 +922,7 @@ async function deleteProfile(profileName: string, options: any): Promise<void> {
   }
   
   try {
-    const configPath = path.join(process.cwd(), '.claude-flow', `config-${profileName}.json`);
+    const configPath = path.join(process.cwd(), '.claude-flow', `config-${profileName}.tson`);
     await fs.unlink(configPath);
     
     printSuccess(`✓ Profile '${profileName}' deleted`);

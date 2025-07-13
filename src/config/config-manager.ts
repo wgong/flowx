@@ -1,5 +1,5 @@
 /**
- * Node.js-compatible Configuration management for Claude-Flow
+ * Node.ts-compatible Configuration management for Claude-Flow
  */
 
 import { promises as fs } from 'node:fs';
@@ -100,7 +100,7 @@ export class ConfigError extends Error {
 }
 
 /**
- * Configuration manager for Node.js
+ * Configuration manager for Node.ts
  */
 export class ConfigManager {
   private static instance: ConfigManager;
@@ -126,7 +126,7 @@ export class ConfigManager {
   /**
    * Initialize configuration from file or create default
    */
-  async init(configPath = 'claude-flow.config.json'): Promise<void> {
+  async init(configPath = 'claude-flow.config.tson'): Promise<void> {
     try {
       await this.load(configPath);
       console.log(`✅ Configuration loaded from: ${configPath}`);

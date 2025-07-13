@@ -5,10 +5,10 @@
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
-import { IMemoryBackend } from "./base.js";
-import { MemoryEntry, MemoryQuery } from "../../utils/types.js";
-import { ILogger } from "../../core/logger.js";
-import { MemoryBackendError } from "../../utils/errors.js";
+import { IMemoryBackend } from "./base.ts";
+import { MemoryEntry, MemoryQuery } from "../../utils/types.ts";
+import { ILogger } from "../../core/logger.ts";
+import { MemoryBackendError } from "../../utils/errors.ts";
 
 /**
  * SQLite-based memory backend

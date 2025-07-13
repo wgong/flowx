@@ -673,7 +673,7 @@ class ServiceManager {
       const fs = await import('node:fs/promises');
       const path = await import('node:path');
       
-      const mcpConfigPath = path.join(process.cwd(), 'mcp_config', 'mcp.json');
+      const mcpConfigPath = path.join(process.cwd(), 'mcp_config', 'mcp.tson');
       
       try {
         await fs.access(mcpConfigPath);

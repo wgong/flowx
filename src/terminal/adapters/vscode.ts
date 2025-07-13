@@ -43,13 +43,19 @@ class VSCodeTerminalWrapper implements Terminal {
   private commandMarker: string;
   private outputDeferred = createDeferred<string>();
   private isDisposed = false;
+  private vscodeApi: VSCodeAPI;
+  private shellType: string;
+  private logger: ILogger;
 
   constructor(
-    private vscodeApi: VSCodeAPI,
-    private shellType: string,
-    private logger: ILogger,
+    vscodeApi: VSCodeAPI,
+    shellType: string,
+    logger: ILogger,
   ) {
     this.id = generateId('vscode-term');
+    this.vscodeApi = vscodeApi;
+    this.shellType = shellType;
+    this.logger = logger;
     this.commandMarker = `__CLAUDE_FLOW_${this.id}__`;
   }
 
@@ -232,8 +238,10 @@ export class VSCodeAdapter implements ITerminalAdapter {
   private vscodeApi?: VSCodeAPI;
   private shellType: string;
   private terminalCloseListener?: { dispose(): void };
+  private logger: ILogger;
 
-  constructor(private logger: ILogger) {
+  constructor(logger: ILogger) {
+    this.logger = logger;
     this.shellType = this.detectShell();
   }
 

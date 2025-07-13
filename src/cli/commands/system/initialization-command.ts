@@ -19,7 +19,7 @@ export const initCommand: CLICommand = {
     'claude-flow init my-project --template basic',
     'claude-flow init --interactive',
     'claude-flow init --sparc --advanced',
-    'claude-flow init --batch --config batch-config.json'
+    'claude-flow init --batch --config batch-config.tson'
   ],
   arguments: [
     {
@@ -270,12 +270,12 @@ async function createProjectStructure(projectPath: string, config: Initializatio
 }
 
 async function createBasicFiles(projectPath: string, config: InitializationConfig): Promise<void> {
-  // Package.json
+  // Package.tson
   const packageJson = {
     name: config.projectName,
     version: '1.0.0',
     description: 'Claude Flow project',
-    main: 'src/index.js',
+    main: 'src/index.ts',
     scripts: {
       start: 'claude-flow start',
       dev: 'claude-flow start --dev',
@@ -299,7 +299,7 @@ async function createBasicFiles(projectPath: string, config: InitializationConfi
   };
 
   await writeFile(
-    join(projectPath, 'package.json'),
+    join(projectPath, 'package.tson'),
     JSON.stringify(packageJson, null, 2)
   );
 
@@ -364,7 +364,7 @@ build/
   };
 
   await writeFile(
-    join(projectPath, 'tsconfig.json'),
+    join(projectPath, 'tsconfig.tson'),
     JSON.stringify(tsconfig, null, 2)
   );
 }
@@ -405,7 +405,7 @@ async function initializeSparc(projectPath: string, config: InitializationConfig
   };
 
   await writeFile(
-    join(projectPath, 'sparc/sparc.config.json'),
+    join(projectPath, 'sparc/sparc.config.tson'),
     JSON.stringify(sparcConfig, null, 2)
   );
 
@@ -456,7 +456,7 @@ async function initializeSwarm(projectPath: string, config: InitializationConfig
   };
 
   await writeFile(
-    join(projectPath, 'swarms/swarm.config.json'),
+    join(projectPath, 'swarms/swarm.config.tson'),
     JSON.stringify(swarmConfig, null, 2)
   );
 
@@ -477,7 +477,7 @@ export class ExampleAgent {
 }
 `;
 
-  await writeFile(join(projectPath, 'agents/example-agent.js'), agentTemplate);
+  await writeFile(join(projectPath, 'agents/example-agent.ts'), agentTemplate);
 }
 
 async function initializeAdvancedFeatures(projectPath: string, config: InitializationConfig): Promise<void> {
@@ -505,7 +505,7 @@ export default {
 };
 `;
 
-  await writeFile(join(projectPath, 'plugins/custom/index.js'), pluginTemplate);
+  await writeFile(join(projectPath, 'plugins/custom/index.ts'), pluginTemplate);
 
   // Monitoring configuration
   const monitoringConfig = {
@@ -522,7 +522,7 @@ export default {
   };
 
   await writeFile(
-    join(projectPath, 'config/monitoring.json'),
+    join(projectPath, 'config/monitoring.tson'),
     JSON.stringify(monitoringConfig, null, 2)
   );
 }
@@ -554,19 +554,19 @@ async function createConfigurationFiles(projectPath: string, config: Initializat
   if (config.sparc) {
     claudeFlowConfig.sparc = {
       enabled: true,
-      configPath: './sparc/sparc.config.json'
+      configPath: './sparc/sparc.config.tson'
     };
   }
 
   if (config.swarm) {
     claudeFlowConfig.swarm = {
       enabled: true,
-      configPath: './swarms/swarm.config.json'
+      configPath: './swarms/swarm.config.tson'
     };
   }
 
   await writeFile(
-    join(projectPath, 'claude-flow.config.json'),
+    join(projectPath, 'claude-flow.config.tson'),
     JSON.stringify(claudeFlowConfig, null, 2)
   );
 
@@ -653,11 +653,11 @@ async function validateInitialization(projectPath: string): Promise<void> {
   printInfo('Validating initialization...');
 
   const requiredFiles = [
-    'package.json',
-    'claude-flow.config.json',
+    'package.tson',
+    'claude-flow.config.tson',
     'README.md',
     '.gitignore',
-    'tsconfig.json'
+    'tsconfig.tson'
   ];
 
   for (const file of requiredFiles) {

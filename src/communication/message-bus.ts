@@ -12,6 +12,36 @@ import {
   CommunicationStrategy 
 } from "../swarm/types.ts";
 import { generateId } from "../utils/helpers.ts";
+import { SystemError } from '../utils/errors.ts';
+
+// Custom error classes for message bus operations
+class MessageBusError extends SystemError {
+  constructor(message: string, metadata?: Record<string, any>) {
+    super(message, metadata);
+    this.name = 'MessageBusError';
+  }
+}
+
+class MessageValidationError extends MessageBusError {
+  constructor(message: string, metadata?: Record<string, any>) {
+    super(message, metadata);
+    this.name = 'MessageValidationError';
+  }
+}
+
+class DeliveryError extends MessageBusError {
+  constructor(message: string, metadata?: Record<string, any>) {
+    super(message, metadata);
+    this.name = 'DeliveryError';
+  }
+}
+
+class ResourceError extends MessageBusError {
+  constructor(message: string, metadata?: Record<string, any>) {
+    super(message, metadata);
+    this.name = 'ResourceError';
+  }
+}
 
 export interface MessageBusConfig {
   strategy: CommunicationStrategy;
@@ -345,6 +375,17 @@ export class MessageBus extends EventEmitter {
 
   // === MESSAGE OPERATIONS ===
 
+  /**
+   * Sends a message to one or more receivers
+   * @param type The message type
+   * @param content The message content
+   * @param sender The sender agent ID
+   * @param receivers The receiver agent ID(s)
+   * @param options Additional message options
+   * @returns The generated message ID
+   * @throws MessageValidationError if the message is invalid
+   * @throws DeliveryError if the message cannot be delivered
+   */
   async sendMessage(
     type: string,
     content: any,
@@ -359,58 +400,141 @@ export class MessageBus extends EventEmitter {
       channel?: string | undefined;
     } = {}
   ): Promise<string> {
-    const messageId = generateId('msg');
-    const now = new Date();
-    
-    const receiversArray = Array.isArray(receivers) ? receivers : [receivers];
-    
-    const message: Message = {
-      id: messageId,
-      type,
-      sender,
-      receivers: receiversArray,
-      content: await this.processContent(content),
-      metadata: {
-        correlationId: options.correlationId,
-        replyTo: options.replyTo,
-        ttl: options.ttl,
-        compressed: this.config.compressionEnabled,
-        encrypted: this.config.encryptionEnabled,
-        size: this.calculateSize(content),
-        contentType: this.detectContentType(content),
-        encoding: 'utf-8',
-        route: [sender.id]
-      },
-      timestamp: now,
-      expiresAt: options.ttl ? new Date(now.getTime() + options.ttl) : undefined,
-      priority: options.priority || 'normal',
-      reliability: options.reliability || 'best-effort'
-    };
+    try {
+      // Input validation
+      if (!type) {
+        throw new MessageValidationError('Message type is required');
+      }
+      
+      if (!sender || !sender.id) {
+        throw new MessageValidationError('Valid sender is required');
+      }
+      
+      if (!receivers) {
+        throw new MessageValidationError('Receivers are required');
+      }
+      
+      const messageId = generateId('msg');
+      const now = new Date();
+      
+      const receiversArray = Array.isArray(receivers) ? receivers : [receivers];
+      
+      // Validate receivers
+      const invalidReceivers = receiversArray.filter(r => !r || !r.id);
+      if (invalidReceivers.length > 0) {
+        throw new MessageValidationError(
+          'Invalid receivers detected', 
+          { invalidCount: invalidReceivers.length }
+        );
+      }
+      
+      // Process content first to get accurate size
+      let processedContent;
+      try {
+        processedContent = await this.processContent(content);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        throw new MessageValidationError(
+          `Failed to process message content: ${errorMessage}`,
+          { cause: error }
+        );
+      }
+      const contentSize = this.calculateSize(content);
+      
+      // Check size limit early
+      if (contentSize > this.config.maxMessageSize) {
+        throw new MessageValidationError(
+          `Message size ${contentSize} exceeds limit ${this.config.maxMessageSize}`
+        );
+      }
+      
+      const message: Message = {
+        id: messageId,
+        type,
+        sender,
+        receivers: receiversArray,
+        content: processedContent,
+        metadata: {
+          correlationId: options.correlationId,
+          replyTo: options.replyTo,
+          ttl: options.ttl,
+          compressed: this.config.compressionEnabled,
+          encrypted: this.config.encryptionEnabled,
+          size: contentSize,
+          contentType: this.detectContentType(content),
+          encoding: 'utf-8',
+          route: [sender.id]
+        },
+        timestamp: now,
+        expiresAt: options.ttl ? new Date(now.getTime() + options.ttl) : undefined,
+        priority: options.priority || 'normal',
+        reliability: options.reliability || 'best-effort'
+      };
 
-    // Validate message
-    this.validateMessage(message);
+      // Full message validation
+      this.validateMessage(message);
 
-    // Store message if persistence is enabled
-    if (this.config.enablePersistence) {
-      this.messageStore.set(messageId, message);
+      // Store message if persistence is enabled
+      if (this.config.enablePersistence) {
+        this.messageStore.set(messageId, message);
+      }
+
+      try {
+        // Route and deliver message with timeout protection
+        const deliveryTimeout = options.ttl || 30000; // 30 seconds default
+        const deliveryPromise = this.routeMessage(message, options.channel);
+        const timeoutPromise = new Promise<void>((_, reject) => {
+          setTimeout(() => reject(new DeliveryError('Message delivery timeout')), deliveryTimeout);
+        });
+        
+        await Promise.race([deliveryPromise, timeoutPromise]);
+      } catch (error) {
+        // Handle delivery failure
+        this.logger.error('Message delivery failed', { 
+          messageId, 
+          error: error instanceof Error ? error.message : String(error) 
+        });
+        
+        if (message.reliability !== 'best-effort') {
+          // Only throw for reliable delivery modes
+          throw new DeliveryError(
+            `Failed to deliver message: ${error instanceof Error ? error.message : String(error)}`, 
+            { messageId }
+          );
+        }
+      }
+
+      this.metrics.recordMessageSent(message);
+
+      this.logger.debug('Message sent', {
+        messageId,
+        type,
+        sender: sender.id,
+        receivers: receiversArray.map(r => r.id),
+        size: message.metadata.size
+      });
+
+      this.emit('message:sent', { message });
+
+      return messageId;
+    } catch (error) {
+      // Ensure all errors are properly logged and typed
+      if (!(error instanceof MessageBusError)) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        error = new MessageBusError(
+          `Unexpected error during message send: ${errorMessage}`,
+          { cause: error }
+        );
+      }
+      this.logger.error('Message send error', { 
+        type, 
+        sender: sender?.id,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      
+      throw error;
     }
-
-    // Route and deliver message
-    await this.routeMessage(message, options.channel);
-
-    this.metrics.recordMessageSent(message);
-
-    this.logger.debug('Message sent', {
-      messageId,
-      type,
-      sender: sender.id,
-      receivers: receiversArray.map(r => r.id),
-      size: message.metadata.size
-    });
-
-    this.emit('message:sent', { message });
-
-    return messageId;
   }
 
   async broadcastMessage(
@@ -760,47 +884,219 @@ export class MessageBus extends EventEmitter {
 
   // === ROUTING AND DELIVERY ===
 
+  /**
+   * Routes a message according to configured routing rules
+   * @param message The message to route
+   * @param preferredChannel Optional preferred channel for routing
+   * @throws DeliveryError if routing fails
+   */
   private async routeMessage(message: Message, preferredChannel?: string): Promise<void> {
-    // Apply routing rules
-    const route = await this.router.calculateRoute(message, preferredChannel);
-    
-    // Update message route
-    message.metadata.route = [...(message.metadata.route || []), ...route.hops];
+    try {
+      // Apply routing rules with error handling
+      let route;
+      try {
+        route = await this.router.calculateRoute(message, preferredChannel);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        throw new DeliveryError(
+          `Route calculation failed: ${errorMessage}`,
+          { messageId: message.id, preferredChannel }
+        );
+      }
+      // Update message route with full history for traceability
+      message.metadata.route = [...(message.metadata.route || []), ...route.hops];
 
-    // Deliver to targets
-    for (const target of route.targets) {
-      await this.deliverMessage(message, target);
+      // Track delivery attempts and failures
+      let deliveryAttempts = 0;
+      let deliveryFailures = 0;
+      const deliveryErrors: Record<string, string> = {};
+
+      // Deliver to all targets with individual error handling
+      const deliveryPromises = route.targets.map(async (target) => {
+        try {
+          deliveryAttempts++;
+          await this.deliverMessage(message, target);
+        } catch (error) {
+          deliveryFailures++;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          deliveryErrors[target.id] = errorMessage;
+          
+          // Log individual delivery failure
+          this.logger.warn(`Failed to deliver message to target ${target.id}`, { 
+            messageId: message.id, 
+            targetType: target.type,
+            error: error instanceof Error ? error.message : String(error)
+          });
+          
+          // For exactly-once delivery, propagate the error
+          if (message.reliability === 'exactly-once') {
+            throw error;
+          }
+          // For at-least-once, let the retry system handle it
+        }
+      });
+
+      // Wait for all deliveries to complete
+      await Promise.all(deliveryPromises);
+      
+      // If all deliveries failed, throw an error
+      if (deliveryFailures > 0 && deliveryFailures === deliveryAttempts) {
+        throw new DeliveryError(
+          `Failed to deliver message to any target`, 
+          { messageId: message.id, errors: deliveryErrors }
+        );
+      }
+      
+      // Partial delivery - log a warning
+      if (deliveryFailures > 0) {
+        this.logger.warn('Partial message delivery', { 
+          messageId: message.id,
+          attempts: deliveryAttempts,
+          failures: deliveryFailures, 
+          errors: deliveryErrors
+        });
+      }
+    } catch (error) {
+      // Ensure we always return typed errors
+      if (!(error instanceof DeliveryError)) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        error = new DeliveryError(
+          `Message routing error: ${errorMessage}`, 
+          { messageId: message.id }
+        );
+      }
+      this.logger.error('Message routing failed', {
+        messageId: message.id,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      
+      throw error;
     }
   }
 
+  /**
+   * Delivers a message to a specific target with enhanced error handling
+   * @param message The message to deliver
+   * @param target The delivery target
+   * @throws DeliveryError if delivery fails and should not be retried
+   */
   private async deliverMessage(message: Message, target: DeliveryTarget): Promise<void> {
+    const deliveryTimeout = message.metadata.ttl ? 
+      Math.min(message.metadata.ttl, 30000) : 30000; // Max 30s timeout
+    
     try {
-      await this.deliveryManager.deliver(message, target);
+      // Use timeout to prevent hanging deliveries
+      const deliveryPromise = this.deliveryManager.deliver(message, target);
+      const timeoutPromise = new Promise<void>((_, reject) => {
+        setTimeout(() => reject(new DeliveryError('Delivery timeout')), deliveryTimeout);
+      });
+      
+      await Promise.race([deliveryPromise, timeoutPromise]);
       this.metrics.recordDeliverySuccess(message);
       
+      this.logger.debug('Message delivered successfully', {
+        messageId: message.id,
+        targetId: target.id,
+        targetType: target.type
+      });
     } catch (error) {
       this.metrics.recordDeliveryFailure(message);
       
+      // Enhance error with delivery context
+      const deliveryError = new DeliveryError(
+        `Delivery to ${target.type}:${target.id} failed: ${error instanceof Error ? error.message : String(error)}`,
+        {
+          messageId: message.id,
+          targetId: target.id,
+          targetType: target.type,
+          originalError: error instanceof Error ? error.message : String(error)
+        }
+      );
+      
+      this.logger.error('Message delivery failed', {
+        messageId: message.id,
+        target: target.id,
+        type: target.type,
+        error: deliveryError.message
+      });
+      
       // Handle delivery failure based on reliability level
       if (message.reliability !== 'best-effort') {
-        await this.retryManager.scheduleRetry(message, target, error);
+        try {
+          await this.retryManager.scheduleRetry(message, target, deliveryError);
+        } catch (retryError) {
+          this.logger.error('Failed to schedule retry', { 
+            messageId: message.id, 
+            error: retryError instanceof Error ? retryError.message : String(retryError) 
+          });
+          // Let the error propagate up for handling at higher level
+          throw deliveryError;
+        }
+      } else {
+        // For best-effort, log but don't throw
+        this.logger.debug('Best-effort delivery failed, no retry scheduled', { 
+          messageId: message.id, 
+          targetId: target.id 
+        });
+      }
+      
+      // Only propagate errors for exactly-once reliability
+      if (message.reliability === 'exactly-once') {
+        throw deliveryError;
       }
     }
   }
 
   // === UTILITY METHODS ===
 
+  /**
+   * Validates a message before processing
+   * @throws MessageValidationError if the message is invalid
+   */
   private validateMessage(message: Message): void {
+    // Track validation issues for comprehensive error reporting
+    const validationErrors: string[] = [];
+    
+    // Check message size
     if (message.metadata.size > this.config.maxMessageSize) {
-      throw new Error(`Message size ${message.metadata.size} exceeds limit ${this.config.maxMessageSize}`);
+      validationErrors.push(
+        `Message size ${message.metadata.size} exceeds limit ${this.config.maxMessageSize}`
+      );
     }
 
+    // Check expiration
     if (message.expiresAt && message.expiresAt <= new Date()) {
-      throw new Error('Message has already expired');
+      validationErrors.push('Message has already expired');
     }
 
-    if (message.receivers.length === 0) {
-      throw new Error('Message must have at least one receiver');
+    // Check receivers
+    if (!message.receivers || message.receivers.length === 0) {
+      validationErrors.push('Message must have at least one receiver');
+    } else {
+      // Validate each receiver ID
+      const invalidReceivers = message.receivers.filter(r => !r || !r.id);
+      if (invalidReceivers.length > 0) {
+        validationErrors.push('Message contains invalid receivers');
+      }
+    }
+    
+    // Check sender
+    if (!message.sender || !message.sender.id) {
+      validationErrors.push('Message must have a valid sender');
+    }
+    
+    // Check message type
+    if (!message.type || typeof message.type !== 'string') {
+      validationErrors.push('Message must have a valid type');
+    }
+    
+    // If any validation errors, throw a comprehensive error
+    if (validationErrors.length > 0) {
+      throw new MessageValidationError(
+        `Message validation failed: ${validationErrors.join('; ')}`, 
+        { messageId: message.id }
+      );
     }
   }
 
@@ -1332,13 +1628,13 @@ export class MessageBus extends EventEmitter {
       await fs.mkdir(persistenceDir, { recursive: true });
       
       // Write persistence data to file
-      const filename = `messages-${Date.now()}.json`;
+      const filename = `messages-${Date.now()}.tson`;
       const filepath = path.join(persistenceDir, filename);
       await fs.writeFile(filepath, JSON.stringify(persistenceData, null, 2));
       
       // Clean up old persistence files (keep last 10)
       const files = await fs.readdir(persistenceDir);
-      const messageFiles = files.filter(f => f.startsWith('messages-') && f.endsWith('.json'))
+      const messageFiles = files.filter(f => f.startsWith('messages-') && f.endsWith('.tson'))
         .sort().reverse();
       
       if (messageFiles.length > 10) {
@@ -1461,69 +1757,1251 @@ interface RouteResult {
 }
 
 class MessageRouter {
-  constructor(private config: MessageBusConfig, private logger: ILogger) {}
+  private config: MessageBusConfig;
+  private logger: ILogger;
+  private routingRules: Map<string, RoutingRule>;
+  private topicSubscriptions: Map<string, TopicSubscription[]>;
+  private channels: Map<string, MessageChannel>;
+  private queues: Map<string, MessageQueue>;
+  // Cache for frequently used routes
+  private routeCache: Map<string, {route: RouteResult, timestamp: number}>;
+  private readonly CACHE_TTL_MS = 60000; // 1 minute cache expiration
+
+  constructor(config: MessageBusConfig, logger: ILogger) {
+    this.config = config;
+    this.logger = logger;
+    this.routingRules = new Map<string, RoutingRule>();
+    this.topicSubscriptions = new Map<string, TopicSubscription[]>();
+    this.channels = new Map<string, MessageChannel>();
+    this.queues = new Map<string, MessageQueue>();
+    this.routeCache = new Map();
+  }
 
   async initialize(): Promise<void> {
-    this.logger.debug('Message router initialized');
+    this.logger.debug('Message router initializing...');
+    // Load any persisted routing rules
+    await this.loadRoutingRules();
+    this.logger.info('Message router initialized', { 
+      ruleCount: this.routingRules.size,
+      subscriptionCount: Array.from(this.topicSubscriptions.values()).reduce((sum, subs) => sum + subs.length, 0)
+    });
   }
 
   async shutdown(): Promise<void> {
-    this.logger.debug('Message router shutdown');
+    this.logger.debug('Message router shutting down...');
+    // Persist routing rules if needed
+    await this.persistRoutingRules();
+    // Clear caches and state
+    this.routeCache.clear();
+    this.logger.info('Message router shutdown');
   }
 
+  /**
+   * Calculate the optimal route for a message based on message attributes,
+   * network topology, and routing rules.
+   */
   async calculateRoute(message: Message, preferredChannel?: string): Promise<RouteResult> {
+    // Check cache first for identical routing scenarios
+    const cacheKey = this.generateRouteCacheKey(message, preferredChannel);
+    const cachedRoute = this.routeCache.get(cacheKey);
+    
+    if (cachedRoute && Date.now() - cachedRoute.timestamp < this.CACHE_TTL_MS) {
+      return cachedRoute.route;
+    }
+
+    // Start with direct routing to receivers
     const targets: DeliveryTarget[] = [];
     const hops: string[] = [];
+    let routeCost = 0;
 
-    // Simple routing - direct to receivers
+    // Phase 1: Apply routing rules based on message content and type
+    const applicableRules = this.getApplicableRules(message);
+    
+    if (applicableRules.length > 0) {
+      // Sort rules by priority (highest first)
+      applicableRules.sort((a, b) => b.priority - a.priority);
+      
+      // Apply the highest priority rule
+      const topRule = applicableRules[0];
+      
+      if (topRule.enabled) {
+        const routeResult = await this.applyRoutingRule(message, topRule);
+        if (routeResult) {
+          // Cache the result for future use
+          this.routeCache.set(cacheKey, { 
+            route: routeResult, 
+            timestamp: Date.now() 
+          });
+          return routeResult;
+        }
+      }
+    }
+
+    // Phase 2: Route based on message type and destination
+    
+    // Handle topic-based routing for pub/sub patterns
+    if (message.type.startsWith('topic.')) {
+      const topicName = message.type.substring(6); // Remove 'topic.' prefix
+      const subscribers = this.topicSubscriptions.get(topicName) || [];
+      
+      for (const subscription of subscribers) {
+        // Skip if subscription is for the sender itself
+        if (subscription.subscriber.id === message.sender.id) {
+          continue;
+        }
+        
+        // Apply subscriber filter if one exists
+        if (subscription.filter && !this.matchesFilter(message, subscription.filter)) {
+          continue;
+        }
+        
+        targets.push({
+          type: 'agent',
+          id: subscription.subscriber.id
+        });
+        
+        hops.push(`topic:${topicName}`);
+        hops.push(subscription.subscriber.id);
+        
+        // Add cost based on QoS level
+        routeCost += (subscription.qos + 1) * 5;
+      }
+      
+      // If we have targets from topic subscriptions, return those
+      if (targets.length > 0) {
+        const result: RouteResult = { targets, hops, cost: routeCost };
+        this.routeCache.set(cacheKey, { route: result, timestamp: Date.now() });
+        return result;
+      }
+    }
+    
+    // Phase 3: Channel-based routing
+    if (preferredChannel) {
+      const channel = this.channels.get(preferredChannel);
+      
+      if (channel) {
+        // For broadcast channels, deliver to all participants except sender
+        if (channel.type === 'broadcast' || channel.type === 'multicast') {
+          for (const participant of channel.participants) {
+            if (participant.id !== message.sender.id) {
+              targets.push({
+                type: 'agent',
+                id: participant.id
+              });
+            }
+          }
+          
+          hops.push(`channel:${preferredChannel}`);
+          routeCost += targets.length * 2;
+          
+          const result: RouteResult = { targets, hops, cost: routeCost };
+          this.routeCache.set(cacheKey, { route: result, timestamp: Date.now() });
+          return result;
+        }
+        
+        // For topic channels, create multiple delivery targets
+        if (channel.type === 'topic') {
+          // Implementation for topic channels
+          // This would include checking topic subscribers in the channel
+        }
+      }
+    }
+
+    // Phase 4: Direct routing (fallback)
     for (const receiver of message.receivers) {
       targets.push({
         type: 'agent',
         id: receiver.id
       });
-      hops.push(receiver.id);
+      hops.push(`direct:${receiver.id}`);
+      // Direct routing has higher cost than optimized routes
+      routeCost += 10;
     }
 
-    return {
-      targets,
-      hops,
-      cost: targets.length
-    };
+    // If no targets found, check if message should be queued
+    if (targets.length === 0 && message.reliability !== 'best-effort') {
+      // Try to find an appropriate queue based on message type
+      const queueName = `queue.${message.type.replace(/\./g, '-')}`;
+      const queue = this.findOrCreateQueue(queueName);
+      
+      if (queue) {
+        targets.push({
+          type: 'queue',
+          id: queue.id
+        });
+        
+        hops.push(`queue:${queue.id}`);
+        routeCost += 5;
+      }
+    }
+
+    // Cache and return the final route
+    const result: RouteResult = { targets, hops, cost: routeCost };
+    this.routeCache.set(cacheKey, { route: result, timestamp: Date.now() });
+    return result;
+  }
+  
+  /**
+   * Register a routing rule for messages
+   */
+  registerRoutingRule(rule: RoutingRule): void {
+    this.routingRules.set(rule.id, rule);
+    // Invalidate cache for rules
+    this.routeCache.clear();
+    this.logger.info('Registered routing rule', { ruleId: rule.id, name: rule.name });
+  }
+  
+  /**
+   * Add a channel to the router
+   */
+  addChannel(channel: MessageChannel): void {
+    this.channels.set(channel.id, channel);
+    this.logger.debug('Added channel to router', { channelId: channel.id, channelName: channel.name });
+  }
+  
+  /**
+   * Add a queue to the router
+   */
+  addQueue(queue: MessageQueue): void {
+    this.queues.set(queue.id, queue);
+    this.logger.debug('Added queue to router', { queueId: queue.id, queueName: queue.name });
+  }
+  
+  /**
+   * Register a topic subscription
+   */
+  addTopicSubscription(subscription: TopicSubscription): void {
+    if (!this.topicSubscriptions.has(subscription.topic)) {
+      this.topicSubscriptions.set(subscription.topic, []);
+    }
+    
+    this.topicSubscriptions.get(subscription.topic)!.push(subscription);
+    this.logger.debug('Added topic subscription', { 
+      topic: subscription.topic,
+      subscriberId: subscription.subscriber.id
+    });
+    
+    // Invalidate any cached routes for this topic
+    for (const [key, value] of this.routeCache.entries()) {
+      if (key.includes(`topic.${subscription.topic}`)) {
+        this.routeCache.delete(key);
+      }
+    }
+  }
+  
+  /**
+   * Remove a topic subscription
+   */
+  removeTopicSubscription(subscriptionId: string): void {
+    for (const [topic, subscriptions] of this.topicSubscriptions.entries()) {
+      const index = subscriptions.findIndex(sub => sub.id === subscriptionId);
+      
+      if (index >= 0) {
+        const subscription = subscriptions[index];
+        subscriptions.splice(index, 1);
+        
+        // Remove empty topic entries
+        if (subscriptions.length === 0) {
+          this.topicSubscriptions.delete(topic);
+        }
+        
+        this.logger.debug('Removed topic subscription', { 
+          topic,
+          subscriberId: subscription.subscriber.id
+        });
+        
+        // Invalidate cached routes
+        for (const [key, value] of this.routeCache.entries()) {
+          if (key.includes(`topic.${topic}`)) {
+            this.routeCache.delete(key);
+          }
+        }
+        
+        return;
+      }
+    }
+  }
+  
+  /**
+   * Find or create a queue for a message type
+   */
+  private findOrCreateQueue(queueName: string): MessageQueue | undefined {
+    // Look for existing queue with this name
+    for (const [id, queue] of this.queues.entries()) {
+      if (queue.name === queueName) {
+        return queue;
+      }
+    }
+    
+    // In production, we'd create a queue automatically here
+    return undefined;
+  }
+  
+  /**
+   * Get routing rules applicable to this message
+   */
+  private getApplicableRules(message: Message): RoutingRule[] {
+    return Array.from(this.routingRules.values())
+      .filter(rule => this.ruleAppliesToMessage(rule, message));
+  }
+  
+  /**
+   * Check if a rule applies to a message
+   */
+  private ruleAppliesToMessage(rule: RoutingRule, message: Message): boolean {
+    // A rule applies if all its conditions match
+    return rule.conditions.every(condition => {
+      const value = this.getFieldValue(message, condition.field);
+      return this.evaluateCondition(value, condition.operator, condition.value);
+    });
+  }
+  
+  /**
+   * Apply a routing rule to a message
+   */
+  private async applyRoutingRule(message: Message, rule: RoutingRule): Promise<RouteResult | undefined> {
+    const targets: DeliveryTarget[] = [];
+    const hops: string[] = [];
+    let cost = 0;
+    
+    // Apply each action in the rule
+    for (const action of rule.actions) {
+      switch (action.type) {
+        case 'forward':
+          if (action.target) {
+            const [targetType, targetId] = action.target.split(':');
+            
+            targets.push({
+              type: targetType as 'agent' | 'channel' | 'queue' | 'topic',
+              id: targetId
+            });
+            
+            hops.push(`rule:${rule.id}:${action.type}:${action.target}`);
+            cost += 5;
+          }
+          break;
+          
+        case 'duplicate':
+          if (action.target) {
+            const [targetType, targetId] = action.target.split(':');
+            
+            targets.push({
+              type: targetType as 'agent' | 'channel' | 'queue' | 'topic',
+              id: targetId
+            });
+            
+            hops.push(`rule:${rule.id}:${action.type}:${action.target}`);
+            cost += 8; // Duplication is more expensive
+          }
+          break;
+          
+        // Other action types would be implemented here
+      }
+    }
+    
+    if (targets.length > 0) {
+      return { targets, hops, cost };
+    }
+    
+    return undefined;
+  }
+  
+  /**
+   * Get a field value from an object using dot notation
+   */
+  private getFieldValue(obj: any, field: string): any {
+    const parts = field.split('.');
+    let value: any = obj;
+    
+    for (const part of parts) {
+      value = value?.[part];
+    }
+    
+    return value;
+  }
+  
+  /**
+   * Check if a message matches a filter
+   */
+  private matchesFilter(message: Message, filter: MessageFilter): boolean {
+    if (!filter.enabled) {
+      return true; // Disabled filters always match
+    }
+    
+    return filter.conditions.every(condition => {
+      const value = this.getFieldValue(message, condition.field);
+      return this.evaluateCondition(value, condition.operator, condition.value);
+    });
+  }
+  
+  /**
+   * Evaluate a filter condition
+   */
+  private evaluateCondition(fieldValue: any, operator: string, compareValue: any): boolean {
+    switch (operator) {
+      case 'eq': return fieldValue === compareValue;
+      case 'ne': return fieldValue !== compareValue;
+      case 'gt': return fieldValue > compareValue;
+      case 'lt': return fieldValue < compareValue;
+      case 'contains': return String(fieldValue).includes(String(compareValue));
+      case 'matches': return new RegExp(compareValue).test(String(fieldValue));
+      case 'in': return Array.isArray(compareValue) && compareValue.includes(fieldValue);
+      default: return false;
+    }
+  }
+  
+  /**
+   * Generate a cache key for route lookup
+   */
+  private generateRouteCacheKey(message: Message, preferredChannel?: string): string {
+    return `${message.type}:${message.sender.id}:${message.receivers.map(r => r.id).join(',')}:${preferredChannel || ''}`;
+  }
+  
+  /**
+   * Load routing rules from persistence
+   */
+  private async loadRoutingRules(): Promise<void> {
+    // In a real implementation, this would load from a database or config file
+    try {
+      // For now, add some default routing rules
+      this.registerRoutingRule({
+        id: 'system-broadcast',
+        name: 'System Broadcast',
+        enabled: true,
+        priority: 100,
+        conditions: [{
+          field: 'type',
+          operator: 'eq',
+          value: 'system.broadcast'
+        }],
+        actions: [{
+          type: 'forward',
+          target: 'channel:system-broadcast',
+          config: {}
+        }]
+      });
+      
+      // Rule for error events
+      this.registerRoutingRule({
+        id: 'error-handling',
+        name: 'Error Events',
+        enabled: true,
+        priority: 90,
+        conditions: [{
+          field: 'type',
+          operator: 'contains',
+          value: 'error'
+        }],
+        actions: [{
+          type: 'forward',
+          target: 'channel:error-events',
+          config: {}
+        }]
+      });
+      
+    } catch (error) {
+      this.logger.error('Failed to load routing rules', error);
+    }
+  }
+  
+  /**
+   * Persist routing rules if needed
+   */
+  private async persistRoutingRules(): Promise<void> {
+    // In a real implementation, this would save to a database or config file
+    // No-op for now
   }
 }
 
+interface DeliveryOptions {
+  timeout?: number;
+  retry?: boolean;
+  acknowledgment?: boolean;
+  encryption?: boolean;
+}
+
+interface DeliveryAttempt {
+  messageId: string;
+  targetId: string;
+  timestamp: Date;
+  success: boolean;
+  latency: number;
+  error?: string;
+}
+
 class DeliveryManager extends EventEmitter {
-  constructor(private config: MessageBusConfig, private logger: ILogger) {
+  private config: MessageBusConfig;
+  private logger: ILogger;
+  private agentConnections: Map<string, AgentConnection>;
+  private channelDeliveryHandlers: Map<string, ChannelDeliveryHandler>;
+  private queueDeliveryHandlers: Map<string, QueueDeliveryHandler>;
+  private deliveryStatistics: {
+    attempts: number;
+    successes: number;
+    failures: number;
+    totalLatency: number;
+    maxLatency: number;
+  };
+  private deliveryHistory: DeliveryAttempt[] = [];
+  private readonly MAX_HISTORY_SIZE = 1000;
+
+  constructor(config: MessageBusConfig, logger: ILogger) {
     super();
+    this.config = config;
+    this.logger = logger;
+    this.agentConnections = new Map();
+    this.channelDeliveryHandlers = new Map();
+    this.queueDeliveryHandlers = new Map();
+    this.deliveryStatistics = {
+      attempts: 0,
+      successes: 0,
+      failures: 0,
+      totalLatency: 0,
+      maxLatency: 0
+    };
   }
 
   async initialize(): Promise<void> {
-    this.logger.debug('Delivery manager initialized');
+    this.logger.debug('Initializing delivery manager...');
+    
+    // Set up channel delivery handlers
+    this.setupDefaultChannelHandlers();
+    
+    // Set up queue delivery handlers
+    this.setupDefaultQueueHandlers();
+    
+    this.logger.info('Delivery manager initialized');
   }
 
   async shutdown(): Promise<void> {
-    this.logger.debug('Delivery manager shutdown');
+    this.logger.debug('Shutting down delivery manager...');
+    
+    // Close all active connections
+    for (const [agentId, connection] of this.agentConnections.entries()) {
+      try {
+        await connection.close();
+        this.logger.debug('Closed agent connection', { agentId });
+      } catch (error) {
+        this.logger.warn('Failed to close agent connection', { agentId, error });
+      }
+    }
+    
+    this.logger.info('Delivery manager shutdown complete');
   }
 
-  async deliver(message: Message, target: DeliveryTarget): Promise<void> {
-    // Simulate delivery
-    this.logger.debug('Delivering message', {
-      messageId: message.id,
-      target: target.id,
-      type: target.type
-    });
+  /**
+   * Deliver a message to a target
+   * @param message The message to deliver
+   * @param target The target to deliver to
+   * @param options Delivery options
+   * @returns Promise that resolves when delivery is complete
+   * @throws DeliveryError if delivery fails
+   */
+  async deliver(
+    message: Message,
+    target: DeliveryTarget,
+    options: DeliveryOptions = {}
+  ): Promise<void> {
+    const startTime = Date.now();
+    this.deliveryStatistics.attempts++;
+    let success = false;
+    let error: Error | undefined;
+    
+    try {
+      this.logger.debug('Delivering message', {
+        messageId: message.id,
+        targetId: target.id,
+        targetType: target.type
+      });
+      
+      // Apply delivery options
+      const deliveryTimeout = options.timeout || this.config.acknowledgmentTimeout;
+      const encryptMessage = options.encryption ?? this.config.encryptionEnabled;
+      
+      // Encrypt if needed
+      let deliveryContent = message.content;
+      if (encryptMessage) {
+        deliveryContent = await this.encryptForDelivery(message.content, target);
+      }
+      
+      // Choose delivery strategy based on target type
+      switch (target.type) {
+        case 'agent':
+          await this.deliverToAgent(message, target.id, deliveryContent, deliveryTimeout);
+          break;
+          
+        case 'channel':
+          await this.deliverToChannel(message, target.id, deliveryContent, deliveryTimeout);
+          break;
+          
+        case 'queue':
+          await this.deliverToQueue(message, target.id, deliveryContent);
+          break;
+          
+        case 'topic':
+          await this.deliverToTopic(message, target.id, deliveryContent);
+          break;
+          
+        default:
+          throw new DeliveryError(
+            `Unsupported delivery target type: ${target.type}`,
+            { messageId: message.id, targetId: target.id }
+          );
+      }
+      
+      // Record delivery success
+      success = true;
+      const latency = Date.now() - startTime;
+      
+      // Update statistics
+      this.deliveryStatistics.successes++;
+      this.deliveryStatistics.totalLatency += latency;
+      this.deliveryStatistics.maxLatency = Math.max(this.deliveryStatistics.maxLatency, latency);
+      
+      // Add to history
+      this.recordDeliveryAttempt({
+        messageId: message.id,
+        targetId: target.id,
+        timestamp: new Date(),
+        success: true,
+        latency
+      });
+      
+      // Emit success event
+      this.emit('delivery:success', { 
+        message, 
+        target,
+        latency
+      });
+    } catch (err) {
+      // Handle delivery failure
+      error = err instanceof Error ? err : new Error(String(err));
+      
+      // Update statistics
+      this.deliveryStatistics.failures++;
+      
+      // Add to history
+      this.recordDeliveryAttempt({
+        messageId: message.id,
+        targetId: target.id,
+        timestamp: new Date(),
+        success: false,
+        latency: Date.now() - startTime,
+        error: error.message
+      });
+      
+      // Emit failure event
+      this.emit('delivery:failure', { 
+        message, 
+        target, 
+        error,
+        attempt: this.deliveryStatistics.attempts
+      });
+      
+      // Rethrow as DeliveryError
+      if (!(error instanceof DeliveryError)) {
+        error = new DeliveryError(
+          `Failed to deliver message to ${target.type}:${target.id}: ${error.message}`,
+          { messageId: message.id, targetId: target.id, cause: error }
+        );
+      }
+      
+      throw error;
+    }
+  }
 
-    // Emit delivery success
-    this.emit('delivery:success', { message, target });
+  /**
+   * Delivers a message to an agent
+   */
+  private async deliverToAgent(
+    message: Message,
+    agentId: string,
+    content: any,
+    timeout: number
+  ): Promise<void> {
+    // Get or create agent connection
+    let connection = this.agentConnections.get(agentId);
+    
+    if (!connection) {
+      // Create a new connection to the agent
+      connection = await this.createAgentConnection(agentId);
+      this.agentConnections.set(agentId, connection);
+    }
+    
+    // Check if agent is connected
+    if (!connection.isConnected()) {
+      try {
+        await connection.connect();
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        throw new DeliveryError(
+          `Failed to connect to agent ${agentId}: ${errorMessage}`, 
+          { agentId, cause: error }
+        );
+      }
+    }
+    
+    // Deliver with timeout
+    try {
+      // Create delivery promise
+      const deliveryPromise = connection.sendMessage({
+        id: message.id,
+        type: message.type,
+        sender: message.sender,
+        content,
+        timestamp: message.timestamp
+      });
+      
+      // Create timeout promise
+      const timeoutPromise = new Promise<void>((_, reject) => {
+        setTimeout(() => reject(new Error('Delivery timeout')), timeout);
+      });
+      
+      // Race delivery against timeout
+      await Promise.race([deliveryPromise, timeoutPromise]);
+    } catch (error) {
+      // Handle connection issues
+      if (connection.shouldReconnect(error as Error)) {
+        this.logger.debug('Agent connection issue, marking for reconnect', { agentId });
+        connection.markForReconnect();
+      }
+      
+      throw new DeliveryError(
+        `Failed to deliver message to agent ${agentId}: ${error instanceof Error ? error.message : String(error)}`,
+        { agentId, cause: error }
+      );
+    }
+  }
+
+  /**
+   * Delivers a message to a channel
+   */
+  private async deliverToChannel(
+    message: Message,
+    channelId: string,
+    content: any,
+    timeout: number
+  ): Promise<void> {
+    // Get channel delivery handler
+    const handler = this.channelDeliveryHandlers.get(channelId);
+    
+    if (!handler) {
+      throw new DeliveryError(
+        `No delivery handler for channel ${channelId}`,
+        { channelId }
+      );
+    }
+    
+    // Deliver with timeout
+    try {
+      // Create delivery promise
+      const deliveryPromise = handler.deliverToChannel(message, content);
+      
+      // Create timeout promise
+      const timeoutPromise = new Promise<void>((_, reject) => {
+        setTimeout(() => reject(new Error('Channel delivery timeout')), timeout);
+      });
+      
+      // Race delivery against timeout
+      await Promise.race([deliveryPromise, timeoutPromise]);
+    } catch (error) {
+      throw new DeliveryError(
+        `Failed to deliver message to channel ${channelId}: ${error instanceof Error ? error.message : String(error)}`,
+        { channelId, cause: error }
+      );
+    }
+  }
+
+  /**
+   * Delivers a message to a queue
+   */
+  private async deliverToQueue(
+    message: Message,
+    queueId: string,
+    content: any
+  ): Promise<void> {
+    // Get queue delivery handler
+    const handler = this.queueDeliveryHandlers.get(queueId);
+    
+    if (!handler) {
+      throw new DeliveryError(
+        `No delivery handler for queue ${queueId}`,
+        { queueId }
+      );
+    }
+    
+    try {
+      await handler.enqueueMessage(message, content);
+    } catch (error) {
+      throw new DeliveryError(
+        `Failed to deliver message to queue ${queueId}: ${error instanceof Error ? error.message : String(error)}`,
+        { queueId, cause: error }
+      );
+    }
+  }
+
+  /**
+   * Delivers a message to a topic
+   */
+  private async deliverToTopic(
+    message: Message,
+    topicId: string,
+    content: any
+  ): Promise<void> {
+    // In a real implementation, this would use a pub-sub system
+    // For now, we'll implement it as a specialized channel
+    try {
+      // Convert topic delivery to channel delivery
+      const channelId = `topic-${topicId}`;
+      
+      // Create handler if it doesn't exist
+      if (!this.channelDeliveryHandlers.has(channelId)) {
+        this.createTopicChannelHandler(topicId);
+      }
+      
+      await this.deliverToChannel(message, channelId, content, this.config.acknowledgmentTimeout);
+    } catch (error) {
+      throw new DeliveryError(
+        `Failed to deliver message to topic ${topicId}: ${error instanceof Error ? error.message : String(error)}`,
+        { topicId, cause: error }
+      );
+    }
+  }
+
+  /**
+   * Create a connection to an agent
+   */
+  private async createAgentConnection(agentId: string): Promise<AgentConnection> {
+    try {
+      // In a real implementation, this would establish a connection to the agent
+      // based on the agent's connection information
+      
+      // For now, create a simple in-memory connection
+      const connection = new InMemoryAgentConnection(agentId, this.logger);
+      
+      // Add connection event listeners
+      connection.on('connected', () => {
+        this.logger.debug('Agent connected', { agentId });
+        this.emit('agent:connected', { agentId });
+      });
+      
+      connection.on('disconnected', () => {
+        this.logger.debug('Agent disconnected', { agentId });
+        this.emit('agent:disconnected', { agentId });
+      });
+      
+      connection.on('message', (message) => {
+        this.logger.debug('Message from agent', { agentId, messageId: message.id });
+        this.emit('agent:message', { agentId, message });
+      });
+      
+      // Connect immediately
+      await connection.connect();
+      
+      return connection;
+    } catch (error) {
+      throw new DeliveryError(
+        `Failed to create connection to agent ${agentId}: ${error instanceof Error ? error.message : String(error)}`,
+        { agentId, cause: error }
+      );
+    }
+  }
+
+  /**
+   * Set up default channel delivery handlers
+   */
+  private setupDefaultChannelHandlers(): void {
+    // Create handlers for default channels
+    this.createChannelHandler('system-broadcast', 'broadcast');
+    this.createChannelHandler('agent-coordination', 'multicast');
+    this.createChannelHandler('task-distribution', 'topic');
+    this.createChannelHandler('error-events', 'broadcast');
+  }
+
+  /**
+   * Create a channel handler
+   */
+  private createChannelHandler(channelId: string, type: string): void {
+    const handler = new InMemoryChannelHandler(channelId, type, this.logger);
+    this.channelDeliveryHandlers.set(channelId, handler);
+    this.logger.debug('Created channel handler', { channelId, type });
+  }
+
+  /**
+   * Create a topic channel handler
+   */
+  private createTopicChannelHandler(topicId: string): void {
+    const channelId = `topic-${topicId}`;
+    const handler = new InMemoryChannelHandler(channelId, 'topic', this.logger);
+    this.channelDeliveryHandlers.set(channelId, handler);
+    this.logger.debug('Created topic channel handler', { topicId, channelId });
+  }
+
+  /**
+   * Set up default queue delivery handlers
+   */
+  private setupDefaultQueueHandlers(): void {
+    // Create handlers for default queues
+    this.createQueueHandler('system-dlq', 'fifo');
+    this.createQueueHandler('task-queue', 'priority');
+    this.createQueueHandler('event-queue', 'fifo');
+  }
+
+  /**
+   * Create a queue handler
+   */
+  private createQueueHandler(queueId: string, type: string): void {
+    const handler = new InMemoryQueueHandler(queueId, type, this.logger);
+    this.queueDeliveryHandlers.set(queueId, handler);
+    this.logger.debug('Created queue handler', { queueId, type });
+  }
+
+  /**
+   * Encrypt message content for delivery
+   */
+  private async encryptForDelivery(content: any, target: DeliveryTarget): Promise<any> {
+    try {
+      // In a real implementation, this would use encryption based on target's keys
+      // For now, we just mark it as encrypted
+      return {
+        __encrypted: true,
+        __timestamp: Date.now(),
+        __target: target.id,
+        __type: target.type,
+        data: typeof content === 'string' ? content : JSON.stringify(content)
+      };
+    } catch (error) {
+      this.logger.warn('Failed to encrypt content for delivery', {
+        targetId: target.id,
+        error
+      });
+      // Return original content on encryption failure
+      return content;
+    }
+  }
+
+  /**
+   * Record a delivery attempt
+   */
+  private recordDeliveryAttempt(attempt: DeliveryAttempt): void {
+    this.deliveryHistory.push(attempt);
+    
+    // Trim history if needed
+    if (this.deliveryHistory.length > this.MAX_HISTORY_SIZE) {
+      this.deliveryHistory = this.deliveryHistory.slice(-this.MAX_HISTORY_SIZE);
+    }
+  }
+
+  /**
+   * Get delivery statistics
+   */
+  getDeliveryStatistics() {
+    const totalDeliveries = this.deliveryStatistics.successes + this.deliveryStatistics.failures;
+    const avgLatency = totalDeliveries > 0 ?
+      this.deliveryStatistics.totalLatency / totalDeliveries : 0;
+    
+    return {
+      ...this.deliveryStatistics,
+      avgLatency,
+      successRate: totalDeliveries > 0 ?
+        (this.deliveryStatistics.successes / totalDeliveries) * 100 : 100
+    };
+  }
+
+  /**
+   * Get recent delivery history
+   */
+  getDeliveryHistory(limit: number = 50): DeliveryAttempt[] {
+    return this.deliveryHistory.slice(-limit);
+  }
+}
+
+/**
+ * Connection to an agent for message delivery
+ */
+interface AgentConnection extends EventEmitter {
+  connect(): Promise<void>;
+  close(): Promise<void>;
+  isConnected(): boolean;
+  sendMessage(message: any): Promise<void>;
+  shouldReconnect(error: Error): boolean;
+  markForReconnect(): void;
+}
+
+/**
+ * In-memory implementation of agent connection
+ * In a real system, this would communicate with actual agents
+ */
+class InMemoryAgentConnection extends EventEmitter implements AgentConnection {
+  private connected = false;
+  private shouldReconnectFlag = false;
+  private connectionAttempts = 0;
+  
+  constructor(
+    private agentId: string,
+    private logger: ILogger
+  ) {
+    super();
+  }
+  
+  async connect(): Promise<void> {
+    if (this.connected) {
+      return;
+    }
+    
+    this.connectionAttempts++;
+    
+    try {
+      // Simulate connection establishment
+      this.connected = true;
+      this.shouldReconnectFlag = false;
+      this.emit('connected', { agentId: this.agentId });
+      this.logger.debug('Agent connected', { agentId: this.agentId });
+    } catch (error) {
+      this.connected = false;
+      throw new Error(`Connection failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  async close(): Promise<void> {
+    if (!this.connected) {
+      return;
+    }
+    
+    try {
+      // Simulate connection close
+      this.connected = false;
+      this.emit('disconnected', { agentId: this.agentId });
+      this.logger.debug('Agent disconnected', { agentId: this.agentId });
+    } catch (error) {
+      throw new Error(`Close failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  isConnected(): boolean {
+    return this.connected;
+  }
+  
+  async sendMessage(message: any): Promise<void> {
+    if (!this.connected) {
+      throw new Error('Not connected');
+    }
+    
+    try {
+      // Simulate message sending - in a real system this would send to the agent
+      this.logger.debug('Sending message to agent', { agentId: this.agentId, messageId: message.id });
+      
+      // Emit received message to simulate two-way communication
+      setTimeout(() => {
+        if (this.connected) {
+          this.emit('message', {
+            id: generateId('msg'),
+            type: 'response',
+            content: { received: true, messageId: message.id },
+            timestamp: new Date()
+          });
+        }
+      }, 10); // Small delay to simulate network
+      
+      return Promise.resolve();
+    } catch (error) {
+      throw new Error(`Send failed: ${error instanceof Error ? error.message : String(error)}`); 
+    }
+  }
+  
+  shouldReconnect(error: Error): boolean {
+    // Connection errors should trigger reconnect
+    return error.message.includes('Not connected') ||
+           error.message.includes('Connection closed') ||
+           error.message.includes('Network error');
+  }
+  
+  markForReconnect(): void {
+    this.shouldReconnectFlag = true;
+    this.connected = false;
+  }
+}
+
+/**
+ * Channel delivery handler interface
+ */
+interface ChannelDeliveryHandler {
+  deliverToChannel(message: Message, content: any): Promise<void>;
+}
+
+/**
+ * In-memory channel delivery handler
+ */
+class InMemoryChannelHandler implements ChannelDeliveryHandler {
+  // Store channel participants
+  private participants: Set<string> = new Set<string>();
+  // Channel message history
+  private messages: Array<{ message: Message, content: any }> = [];
+  private readonly MAX_HISTORY = 100;
+  
+  constructor(
+    private channelId: string,
+    private type: string,
+    private logger: ILogger
+  ) {}
+  
+  /**
+   * Add a participant to the channel
+   */
+  addParticipant(agentId: string): void {
+    this.participants.add(agentId);
+    this.logger.debug('Added participant to channel', {
+      channelId: this.channelId,
+      agentId,
+      participantCount: this.participants.size
+    });
+  }
+  
+  /**
+   * Remove a participant from the channel
+   */
+  removeParticipant(agentId: string): void {
+    this.participants.delete(agentId);
+    this.logger.debug('Removed participant from channel', {
+      channelId: this.channelId,
+      agentId,
+      participantCount: this.participants.size
+    });
+  }
+  
+  /**
+   * Deliver a message to this channel
+   */
+  async deliverToChannel(message: Message, content: any): Promise<void> {
+    // Record message in history
+    this.messages.push({ message, content });
+    
+    // Trim history if needed
+    if (this.messages.length > this.MAX_HISTORY) {
+      this.messages = this.messages.slice(-this.MAX_HISTORY);
+    }
+    
+    this.logger.debug('Message delivered to channel', {
+      channelId: this.channelId,
+      messageId: message.id,
+      participantCount: this.participants.size
+    });
+    
+    // In a real implementation, this would distribute the message to all participants
+    // For now, we just log it
+    return Promise.resolve();
+  }
+  
+  /**
+   * Get channel message history
+   */
+  getHistory(limit: number = 50): Array<{ message: Message, content: any }> {
+    return this.messages.slice(-Math.min(limit, this.messages.length));
+  }
+}
+
+/**
+ * Queue delivery handler interface
+ */
+interface QueueDeliveryHandler {
+  enqueueMessage(message: Message, content: any): Promise<void>;
+  dequeueMessage(): Promise<{ message: Message, content: any } | undefined>;
+  getQueueDepth(): number;
+}
+
+/**
+ * In-memory queue delivery handler
+ */
+class InMemoryQueueHandler implements QueueDeliveryHandler {
+  // Queue of messages
+  private queue: Array<{ message: Message, content: any }> = [];
+  private readonly MAX_QUEUE_SIZE = 1000;
+  
+  constructor(
+    private queueId: string,
+    private type: string,
+    private logger: ILogger
+  ) {}
+  
+  /**
+   * Enqueue a message
+   */
+  async enqueueMessage(message: Message, content: any): Promise<void> {
+    // Check queue capacity
+    if (this.queue.length >= this.MAX_QUEUE_SIZE) {
+      throw new Error(`Queue ${this.queueId} is full`);
+    }
+    
+    // Add message to queue based on type
+    if (this.type === 'priority') {
+      // Priority queue - insert based on message priority
+      const priorityOrder = { 'critical': 0, 'high': 1, 'normal': 2, 'low': 3 };
+      const messagePriority = priorityOrder[message.priority];
+      
+      let inserted = false;
+      for (let i = 0; i < this.queue.length; i++) {
+        const queuedPriority = priorityOrder[this.queue[i].message.priority];
+        if (messagePriority < queuedPriority) {
+          this.queue.splice(i, 0, { message, content });
+          inserted = true;
+          break;
+        }
+      }
+      
+      if (!inserted) {
+        this.queue.push({ message, content });
+      }
+    } else {
+      // FIFO queue - add to end
+      this.queue.push({ message, content });
+    }
+    
+    this.logger.debug('Message enqueued', {
+      queueId: this.queueId,
+      messageId: message.id,
+      queueDepth: this.queue.length
+    });
+    
+    return Promise.resolve();
+  }
+  
+  /**
+   * Dequeue a message
+   */
+  async dequeueMessage(): Promise<{ message: Message, content: any } | undefined> {
+    if (this.queue.length === 0) {
+      return undefined;
+    }
+    
+    const item = this.queue.shift()!;
+    
+    this.logger.debug('Message dequeued', {
+      queueId: this.queueId,
+      messageId: item.message.id,
+      queueDepth: this.queue.length
+    });
+    
+    return item;
+  }
+  
+  /**
+   * Get current queue depth
+   */
+  getQueueDepth(): number {
+    return this.queue.length;
   }
 }
 
 class RetryManager extends EventEmitter {
   private retryQueue: Array<{ message: Message; target: DeliveryTarget; attempts: number }> = [];
   private retryInterval?: NodeJS.Timeout;
+  private config: MessageBusConfig;
+  private logger: ILogger;
 
-  constructor(private config: MessageBusConfig, private logger: ILogger) {
+  constructor(config: MessageBusConfig, logger: ILogger) {
     super();
+    this.config = config;
+    this.logger = logger;
   }
 
   async initialize(): Promise<void> {

@@ -2,28 +2,134 @@
  * Test utilities for Claude-Flow
  */
 
-import { assertEquals, assertExists, assertRejects, assertThrows } from 'https://deno.land/std@0.220.0/assert/mod.ts';
-import { describe, it, beforeEach, afterEach, beforeAll, afterAll } from 'https://deno.land/std@0.220.0/testing/bdd.ts';
-import { spy, stub, assertSpyCall, assertSpyCalls } from 'https://deno.land/std@0.220.0/testing/mock.ts';
-import { FakeTime } from 'https://deno.land/std@0.220.0/testing/time.ts';
+import { jest } from '@jest/globals';
+import { spawn } from 'child_process';
+import { mkdtemp, mkdir, writeFile } from 'fs/promises';
+import { join, dirname } from 'path';
+import { tmpdir } from 'os';
 
-export {
-  assertEquals,
-  assertExists,
-  assertRejects,
-  assertThrows,
-  describe,
-  it,
-  beforeEach,
-  afterEach,
-  beforeAll,
-  afterAll,
-  spy,
-  stub,
-  assertSpyCall,
-  assertSpyCalls,
-  FakeTime,
+// Export Jest equivalents for common assertions
+export const assertEquals = (actual: any, expected: any) => expect(actual).toEqual(expected);
+export const assertExists = (value: any) => expect(value).toBeDefined();
+export const assertRejects = async (fn: () => Promise<any>, errorType?: any, message?: string) => {
+  if (errorType && message) {
+    await expect(fn()).rejects.toThrow(message);
+  } else if (errorType) {
+    await expect(fn()).rejects.toThrow(errorType);
+  } else {
+    await expect(fn()).rejects.toThrow();
+  }
 };
+export const assertThrows = (fn: () => any) => expect(fn).toThrow();
+
+// Jest already provides these globally, but export for compatibility
+export const describe = global.describe;
+export const it = global.it;
+export const beforeEach = global.beforeEach;
+export const afterEach = global.afterEach;
+export const beforeAll = global.beforeAll;
+export const afterAll = global.afterAll;
+
+// Jest spy/mock utilities
+export const spy = jest.fn;
+export const stub = jest.fn;
+export const assertSpyCall = (spy: any, callIndex: number, args: any[]) => {
+  expect(spy).toHaveBeenNthCalledWith(callIndex + 1, ...args);
+};
+export const assertSpyCalls = (spy: any, callCount: number) => {
+  expect(spy).toHaveBeenCalledTimes(callCount);
+};
+
+// Mock FakeTime for Node.js/Jest
+export class FakeTime {
+  private originalDateNow: () => number;
+  private originalSetTimeout: typeof setTimeout;
+  private originalSetInterval: typeof setInterval;
+  private originalClearTimeout: typeof clearTimeout;
+  private originalClearInterval: typeof clearInterval;
+  private currentTime: number;
+  private timers: Map<number, { callback: () => void; time: number; interval?: number }> = new Map();
+  private nextId = 1;
+
+  constructor(time: number | Date = Date.now()) {
+    this.currentTime = typeof time === 'number' ? time : time.getTime();
+    this.originalDateNow = Date.now;
+    this.originalSetTimeout = global.setTimeout;
+    this.originalSetInterval = global.setInterval;
+    this.originalClearTimeout = global.clearTimeout;
+    this.originalClearInterval = global.clearInterval;
+    
+    Date.now = () => this.currentTime;
+    
+    // Mock timers
+    global.setTimeout = ((callback: () => void, delay: number) => {
+      const id = this.nextId++;
+      this.timers.set(id, { callback, time: this.currentTime + delay });
+      return id as any;
+    }) as any;
+    
+    global.setInterval = ((callback: () => void, interval: number) => {
+      const id = this.nextId++;
+      this.timers.set(id, { callback, time: this.currentTime + interval, interval });
+      return id as any;
+    }) as any;
+    
+    global.clearTimeout = ((id: number) => {
+      this.timers.delete(id);
+    }) as any;
+    
+    global.clearInterval = ((id: number) => {
+      this.timers.delete(id);
+    }) as any;
+  }
+  
+  now(): number {
+    return this.currentTime;
+  }
+  
+  tick(ms: number): void {
+    this.currentTime += ms;
+    this.runTimers();
+  }
+  
+  async tickAsync(ms: number): Promise<void> {
+    this.currentTime += ms;
+    this.runTimers();
+    // Allow any pending promises to resolve
+    await new Promise(resolve => process.nextTick(resolve));
+  }
+  
+  private runTimers(): void {
+    const timersToRun = Array.from(this.timers.entries())
+      .filter(([_, timer]) => timer.time <= this.currentTime)
+      .sort(([_, a], [__, b]) => a.time - b.time);
+    
+    for (const [id, timer] of timersToRun) {
+      timer.callback();
+      
+      if (timer.interval) {
+        // Reschedule interval
+        this.timers.set(id, { 
+          callback: timer.callback, 
+          time: this.currentTime + timer.interval, 
+          interval: timer.interval 
+        });
+      } else {
+        // Remove timeout
+        this.timers.delete(id);
+      }
+    }
+  }
+  
+  restore(): void {
+    Date.now = this.originalDateNow;
+    global.setTimeout = this.originalSetTimeout;
+    global.setInterval = this.originalSetInterval;
+    global.clearTimeout = this.originalClearTimeout;
+    global.clearInterval = this.originalClearInterval;
+    this.timers.clear();
+  }
+}
 
 /**
  * Creates a test fixture
@@ -129,12 +235,12 @@ export async function createTestFile(
   path: string,
   content: string,
 ): Promise<string> {
-  const tempDir = await Deno.makeTempDir();
-  const filePath = `${tempDir}/${path}`;
-  const dir = filePath.substring(0, filePath.lastIndexOf('/'));
+  const tempDir = await mkdtemp(join(tmpdir(), 'claude-flow-test-'));
+  const filePath = join(tempDir, path);
+  const dir = dirname(filePath);
   
-  await Deno.mkdir(dir, { recursive: true });
-  await Deno.writeTextFile(filePath, content);
+  await mkdir(dir, { recursive: true });
+  await writeFile(filePath, content);
   
   return filePath;
 }
@@ -146,37 +252,36 @@ export async function runCommand(
   args: string[],
   options: { stdin?: string; env?: Record<string, string> } = {},
 ): Promise<{ stdout: string; stderr: string; code: number }> {
-  const cmdOptions: Deno.CommandOptions = {
-    args: ['run', '--allow-all', 'src/cli/index.ts', ...args],
-    stdout: 'piped',
-    stderr: 'piped',
-  };
+  return new Promise((resolve, reject) => {
+    const child = spawn('node', ['dist/cli/main.js', ...args], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, ...options.env },
+    });
 
-  if (options.stdin) {
-    cmdOptions.stdin = 'piped';
-  }
+    let stdout = '';
+    let stderr = '';
 
-  if (options.env) {
-    cmdOptions.env = options.env;
-  }
+    child.stdout?.on('data', (data) => {
+      stdout += data.toString();
+    });
 
-  const cmd = new Deno.Command(Deno.execPath(), cmdOptions);
+    child.stderr?.on('data', (data) => {
+      stderr += data.toString();
+    });
 
-  const child = cmd.spawn();
+    child.on('close', (code) => {
+      resolve({ stdout, stderr, code: code || 0 });
+    });
 
-  if (options.stdin) {
-    const writer = child.stdin.getWriter();
-    await writer.write(new TextEncoder().encode(options.stdin));
-    await writer.close();
-  }
+    child.on('error', (error) => {
+      reject(error);
+    });
 
-  const output = await child.output();
-  
-  return {
-    stdout: new TextDecoder().decode(output.stdout),
-    stderr: new TextDecoder().decode(output.stderr),
-    code: output.code,
-  };
+    if (options.stdin) {
+      child.stdin?.write(options.stdin);
+      child.stdin?.end();
+    }
+  });
 }
 
 /**
@@ -255,13 +360,26 @@ export class TestDataBuilder {
       },
       mcp: {
         transport: 'stdio' as const,
-        port: 8081,
-        tlsEnabled: false,
+        host: 'localhost',
+        port: 3000,
+        maxConnections: 10,
+        timeout: 30000,
+        auth: {
+          enabled: false,
+          secret: 'test-secret',
+        },
+        loadBalancer: {
+          enabled: false,
+          strategy: 'round-robin' as const,
+          healthCheckInterval: 30000,
+        },
       },
       logging: {
-        level: 'error' as const,
+        level: 'info' as const,
         format: 'json' as const,
         destination: 'console' as const,
+        maxFileSize: 1024 * 1024,
+        maxFiles: 5,
       },
       ...overrides,
     };
@@ -269,25 +387,28 @@ export class TestDataBuilder {
 }
 
 /**
- * Assertion helpers
+ * Asserts that an event was emitted
  */
 export function assertEventEmitted(
   events: Array<{ event: string; data: any }>,
   eventName: string,
   matcher?: (data: any) => boolean,
 ): void {
-  const emitted = events.find((e) => e.event === eventName);
-  assertExists(emitted, `Expected event '${eventName}' to be emitted`);
+  const emitted = events.find(e => e.event === eventName);
+  expect(emitted).toBeDefined();
   
-  if (matcher && !matcher(emitted.data)) {
-    throw new Error(`Event '${eventName}' data did not match expected criteria`);
+  if (matcher && emitted) {
+    expect(matcher(emitted.data)).toBe(true);
   }
 }
 
+/**
+ * Asserts that an event was NOT emitted
+ */
 export function assertNoEventEmitted(
   events: Array<{ event: string; data: any }>,
   eventName: string,
 ): void {
-  const emitted = events.find((e) => e.event === eventName);
-  assertEquals(emitted, undefined, `Expected event '${eventName}' not to be emitted`);
+  const emitted = events.find(e => e.event === eventName);
+  expect(emitted).toBeUndefined();
 }

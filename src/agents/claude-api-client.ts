@@ -81,7 +81,7 @@ export class ClaudeApiClient extends EventEmitter {
     this.config = {
       claudePath: config.claudePath || 'claude',
       workingDirectory: config.workingDirectory || process.cwd(),
-      model: config.model || 'claude-3-5-sonnet-20241022',
+      model: config.model || 'claude-3-sonnet-20240229',
       temperature: config.temperature || 0.7,
       maxTokens: config.maxTokens || 8192,
       timeout: config.timeout || 300000, // 5 minutes
@@ -287,10 +287,18 @@ Please implement this requirement completely.
   ): Promise<ClaudeResponse> {
     const startTime = Date.now();
     
+    // Store state of working directory before execution for more accurate change detection
+    const workDir = options.workingDirectory || this.config.workingDirectory;
+    let beforeFiles: Set<string> = new Set();
+    
     try {
       // Prepare working directory
-      const workDir = options.workingDirectory || this.config.workingDirectory;
       await mkdir(workDir, { recursive: true });
+
+      // Capture state of directory before making changes
+      if (options.allowFileOperations !== false) {
+        beforeFiles = await this.captureDirectoryState(workDir);
+      }
 
       // Prepare files if needed
       if (request.files) {
@@ -322,8 +330,16 @@ Please implement this requirement completely.
 
       // Check for created/modified files
       if (options.allowFileOperations !== false) {
-        // Fix: Remove workDir parameter from detectFileChanges call
+        // Use both beforeFiles state and other detection methods for comprehensive change tracking
         response.files = await this.detectFileChanges();
+        
+        // If no changes detected by standard methods, check for differences based on directory state
+        if (response.files.length === 0) {
+          const changedFiles = await this.detectFileChangesByComparison(workDir, beforeFiles);
+          if (changedFiles.length > 0) {
+            response.files = changedFiles;
+          }
+        }
       }
 
       this.logger.info('Claude CLI task completed', {
@@ -351,10 +367,21 @@ Please implement this requirement completely.
   }
 
   private buildClaudeArgs(request: ClaudeRequest, options: TaskExecutionOptions, workDir: string): string[] {
+    // Check for Claude CLI version to use appropriate args
+    let isV1 = false;
+    try {
+      const versionCheck = require('child_process').spawnSync('claude', ['--version']);
+      const versionOutput = versionCheck.stdout.toString().trim();
+      isV1 = versionOutput.includes('1.') || !versionOutput.includes('2.');
+      this.logger.info(`Detected Claude CLI version: ${versionOutput}`);
+    } catch (error) {
+      this.logger.warn('Failed to detect Claude CLI version, assuming latest', { error });
+    }
+    
     const args: string[] = [];
 
     // Always use non-interactive mode for automation
-    args.push('--print');
+    args.push(isV1 ? '--message' : '--print');
     
     // Output format
     if (request.outputFormat) {
@@ -415,7 +442,29 @@ Please implement this requirement completely.
         ...options.env
       };
 
-      const claudeProcess = spawn(this.config.claudePath, args, {
+      // Try to detect claude CLI path if not provided
+      let claudePath = this.config.claudePath;
+      let finalArgs = args;
+      if (claudePath === 'claude' || !claudePath) {
+        try {
+          // Check for claude in common locations
+          const whichResult = require('child_process').spawnSync('which', ['claude']);
+          if (whichResult.status === 0) {
+            claudePath = whichResult.stdout.toString().trim();
+            this.logger.info(`Found Claude CLI at: ${claudePath}`);
+          } else {
+            // Try npx
+            claudePath = 'npx';
+            finalArgs = ['claude', ...args];
+            this.logger.info('Using npx to run Claude CLI');
+          }
+        } catch (error) {
+          this.logger.warn('Could not detect Claude CLI path, using default', { error });
+          claudePath = 'claude'; // Fallback
+        }
+      }
+      
+      const claudeProcess = spawn(claudePath, finalArgs, {
         cwd: options.cwd || this.config.workingDirectory,
         env: processEnv,
         stdio: ['pipe', 'pipe', 'pipe']
@@ -470,19 +519,283 @@ Please implement this requirement completely.
     }
   }
 
+  /**
+   * Detects file changes made during Claude CLI execution
+   * Uses various strategies including git diff and direct file monitoring
+   */
   private async detectFileChanges(): Promise<Array<{ path: string; content: string; operation: string }>> {
-    // This is a simplified implementation
-    // In a full implementation, we'd track file changes more comprehensively
     const files: Array<{ path: string; content: string; operation: string }> = [];
+    const workDir = this.config.workingDirectory;
     
     try {
-      // For now, just return empty array
-      // Real implementation would use file watching or git diff
-      return files;
+      // Try git-based detection if in a git repository
+      const gitChanges = await this.detectGitChanges(workDir);
+      if (gitChanges.length > 0) {
+        return gitChanges;
+      }
+      
+      // Fall back to filesystem-based detection
+      return await this.detectFilesystemChanges(workDir);
     } catch (error) {
       this.logger.warn('Failed to detect file changes', { error });
       return files;
     }
+  }
+  
+  /**
+   * Detects file changes using git diff
+   */
+  private async detectGitChanges(workDir: string): Promise<Array<{ path: string; content: string; operation: string }>> {
+    const files: Array<{ path: string; content: string; operation: string }> = [];
+    
+    try {
+      // Check if directory is a git repository
+      const isGitRepo = await this.runCommand('git', ['rev-parse', '--is-inside-work-tree'], { cwd: workDir });
+      if (isGitRepo.exitCode !== 0) {
+        return [];
+      }
+      
+      // Get list of unstaged files
+      const { output: statusOutput } = await this.runCommand('git', ['status', '--porcelain'], { cwd: workDir });
+      if (!statusOutput.trim()) {
+        return [];
+      }
+      
+      const changedFiles = statusOutput
+        .split('\n')
+        .filter(line => line.trim())
+        .map(line => {
+          const status = line.substring(0, 2);
+          const path = line.substring(3);
+          
+          let operation = 'edit';
+          if (status.includes('A')) operation = 'create';
+          if (status.includes('D')) operation = 'delete';
+          if (status.includes('R')) operation = 'rename';
+          if (status.includes('M')) operation = 'edit';
+          
+          return { status, path, operation };
+        });
+      
+      // Process each changed file
+      for (const file of changedFiles) {
+        if (file.operation === 'delete') {
+          files.push({
+            path: file.path,
+            content: '',
+            operation: 'delete'
+          });
+          continue;
+        }
+        
+        try {
+          // Read file content
+          const { output: fileContent } = await this.runCommand('cat', [file.path], { cwd: workDir });
+          
+          files.push({
+            path: file.path,
+            content: fileContent,
+            operation: file.operation
+          });
+        } catch (error) {
+          this.logger.warn(`Failed to read file ${file.path}`, { error });
+        }
+      }
+      
+      return files;
+    } catch (error) {
+      this.logger.warn('Git-based file change detection failed', { error });
+      return [];
+    }
+  }
+  
+  /**
+   * Detects file changes using filesystem monitoring
+   */
+  private async detectFilesystemChanges(workDir: string): Promise<Array<{ path: string; content: string; operation: string }>> {
+    const files: Array<{ path: string; content: string; operation: string }> = [];
+    
+    try {
+      // Get recursive file listing
+      const { output: findOutput } = await this.runCommand('find', ['.', '-type', 'f', '-not', '-path', '*/\.*', '-mmin', '-5'], { cwd: workDir });
+      
+      const recentFiles = findOutput
+        .split('\n')
+        .filter(line => line.trim())
+        .filter(path => !path.includes('node_modules') && !path.includes('.git/'));
+      
+      // Process each recent file
+      for (const filePath of recentFiles) {
+        try {
+          // Read file content
+          const { output: fileContent } = await this.runCommand('cat', [filePath], { cwd: workDir });
+          
+          files.push({
+            path: filePath.startsWith('./') ? filePath.substring(2) : filePath,
+            content: fileContent,
+            operation: 'edit' // We don't know if it's new or edited, assume edited
+          });
+        } catch (error) {
+          this.logger.warn(`Failed to read file ${filePath}`, { error });
+        }
+      }
+      
+      return files;
+    } catch (error) {
+      this.logger.warn('Filesystem-based file change detection failed', { error });
+      return [];
+    }
+  }
+  
+  /**
+   * Run a shell command and return result
+   */
+  private async runCommand(
+    command: string,
+    args: string[],
+    options: { cwd?: string; timeout?: number } = {}
+  ): Promise<{ output: string; error: string; exitCode: number }> {
+    return new Promise((resolve, reject) => {
+      const childProcess = spawn(command, args, {
+        cwd: options.cwd || this.config.workingDirectory,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      
+      let output = '';
+      let error = '';
+      
+      childProcess.stdout?.on('data', (data: Buffer) => {
+        output += data.toString();
+      });
+      
+      childProcess.stderr?.on('data', (data: Buffer) => {
+        error += data.toString();
+      });
+      
+      childProcess.on('close', (code: number | null) => {
+        clearTimeout(timeoutHandle);
+        resolve({
+          output: output.trim(),
+          error: error.trim(),
+          exitCode: code || 0
+        });
+      });
+      
+      childProcess.on('error', (err: Error) => {
+        clearTimeout(timeoutHandle);
+        reject(err);
+      });
+      
+      // Set timeout
+      const timeoutHandle = setTimeout(() => {
+        childProcess.kill('SIGTERM');
+        reject(new Error(`Command timeout: ${command} ${args.join(' ')}`));
+      }, options.timeout || 30000);
+    });
+  }
+
+  /**
+   * Capture the state of a directory including file paths and modification times
+   * for more accurate change detection
+   */
+  private async captureDirectoryState(dir: string): Promise<Set<string>> {
+    const files = new Set<string>();
+    
+    try {
+      // Use find command to get all files with their modification times
+      const { output } = await this.runCommand('find', ['.', '-type', 'f', '-not', '-path', '*/\.*', '-printf', '%p\n'], { cwd: dir });
+      
+      output.split('\n')
+        .filter(Boolean)
+        .filter(path => !path.includes('node_modules') && !path.includes('.git/'))
+        .forEach(path => {
+          files.add(path.startsWith('./') ? path.substring(2) : path);
+        });
+    } catch (error) {
+      this.logger.warn('Failed to capture directory state', { error });
+    }
+    
+    return files;
+  }
+  
+  /**
+   * Detect file changes by comparing before and after directory state
+   */
+  private async detectFileChangesByComparison(
+    dir: string, 
+    beforeFiles: Set<string>
+  ): Promise<Array<{ path: string; content: string; operation: string }>> {
+    const changes: Array<{ path: string; content: string; operation: string }> = [];
+    
+    try {
+      // Get current files
+      const currentFiles = await this.captureDirectoryState(dir);
+      
+      // Find new files (in current but not in before)
+      for (const file of currentFiles) {
+        if (!beforeFiles.has(file)) {
+          try {
+            // Read file content
+            const { output: content } = await this.runCommand('cat', [file], { cwd: dir });
+            changes.push({
+              path: file,
+              content,
+              operation: 'create'
+            });
+          } catch (error) {
+            this.logger.warn(`Failed to read new file ${file}`, { error });
+          }
+        }
+      }
+      
+      // Find deleted files (in before but not in current)
+      for (const file of beforeFiles) {
+        if (!currentFiles.has(file)) {
+          changes.push({
+            path: file,
+            content: '',
+            operation: 'delete'
+          });
+        }
+      }
+      
+      // For files that exist in both, check if they've been modified
+      // by comparing content hashes or modification times
+      const commonFiles = Array.from(currentFiles).filter(f => beforeFiles.has(f));
+      
+      // Optimization: Only check files modified recently
+      const { output: recentFiles } = await this.runCommand(
+        'find', ['.', '-type', 'f', '-not', '-path', '*/\.*', '-mmin', '-5'], 
+        { cwd: dir }
+      );
+      
+      const recentFilesSet = new Set(
+        recentFiles.split('\n')
+          .filter(Boolean)
+          .map(f => f.startsWith('./') ? f.substring(2) : f)
+      );
+      
+      for (const file of commonFiles) {
+        // Skip files that haven't been modified recently
+        if (!recentFilesSet.has(file)) continue;
+        
+        try {
+          // Read file content
+          const { output: content } = await this.runCommand('cat', [file], { cwd: dir });
+          changes.push({
+            path: file,
+            content,
+            operation: 'edit'
+          });
+        } catch (error) {
+          this.logger.warn(`Failed to read modified file ${file}`, { error });
+        }
+      }
+    } catch (error) {
+      this.logger.warn('Failed to detect file changes by comparison', { error });
+    }
+    
+    return changes;
   }
 
   private parseFeatures(helpOutput: string): string[] {
@@ -510,7 +823,7 @@ export function createClaudeClient(logger: ILogger, config?: ClaudeCliConfig): C
     claudePath: process.env.CLAUDE_CLI_PATH || 'claude',
     model: process.env.CLAUDE_MODEL || 'claude-3-5-sonnet-20241022',
     temperature: process.env.CLAUDE_TEMPERATURE ? parseFloat(process.env.CLAUDE_TEMPERATURE) : 0.7,
-    maxTokens: process.env.CLAUDE_MAX_TOKENS ? parseInt(process.env.CLAUDE_MAX_TOKENS) : 8192,
+    maxTokens: process.env.CLAUDE_MAX_TOKENS ? parseInt(process.env.CLAUDE_MAX_TOKENS) : 4096,
     verbose: process.env.CLAUDE_VERBOSE === 'true',
     dangerouslySkipPermissions: process.env.CLAUDE_SKIP_PERMISSIONS === 'true' || true, // Default to true for automation
     ...config

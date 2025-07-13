@@ -4,9 +4,9 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { ValidationResult, ValidationCheck } from './types.js';
-import { logger } from './logger.js';
-import { colors } from '../utils/colors.js';
+import { ValidationResult, ValidationCheck } from './types.ts';
+import { logger } from './logger.ts';
+import { colors } from '../utils/colors.ts';
 import globPkg from 'glob';
 const { glob } = globPkg;
 
@@ -301,7 +301,7 @@ export class MigrationValidator {
     }
 
     // Check for potential conflicts
-    const packageJsonPath = path.join(projectPath, 'package.json');
+    const packageJsonPath = path.join(projectPath, 'package.tson');
     if (await pathExists(packageJsonPath)) {
       try {
         const packageJson = await readJson(packageJsonPath);
@@ -317,7 +317,7 @@ export class MigrationValidator {
         }
         
       } catch (error) {
-        result.warnings.push('Could not validate package.json');
+        result.warnings.push('Could not validate package.tson');
       }
     }
 

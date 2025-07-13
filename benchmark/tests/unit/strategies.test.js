@@ -2,13 +2,13 @@
  * Unit tests for benchmark strategies
  */
 
-const { Task, ResultStatus } = require('../../dist/swarm_benchmark/core/models');
+const { Task, ResultStatus } = require('../../dist/swarm_benchmark/core/models.js');
 const { 
   create_strategy,
   AutoStrategy,
   DevelopmentStrategy,
   ResearchStrategy
-} = require('../../dist/swarm_benchmark/strategies');
+} = require('../../dist/swarm_benchmark/strategies/index.js');
 
 describe('Benchmark Strategies', () => {
   describe('create_strategy', () => {

@@ -993,7 +993,7 @@ export class CloudManager extends EventEmitter {
     try {
       // Load providers
       const providerFiles = await readdir(join(this.cloudPath, 'providers'));
-      for (const file of providerFiles.filter(f => f.endsWith('.json'))) {
+      for (const file of providerFiles.filter(f => f.endsWith('.tson'))) {
         const content = await readFile(join(this.cloudPath, 'providers', file), 'utf-8');
         const provider: CloudProvider = JSON.parse(content);
         this.providers.set(provider.id, provider);
@@ -1001,7 +1001,7 @@ export class CloudManager extends EventEmitter {
 
       // Load resources
       const resourceFiles = await readdir(join(this.cloudPath, 'resources'));
-      for (const file of resourceFiles.filter(f => f.endsWith('.json'))) {
+      for (const file of resourceFiles.filter(f => f.endsWith('.tson'))) {
         const content = await readFile(join(this.cloudPath, 'resources', file), 'utf-8');
         const resource: CloudResource = JSON.parse(content);
         this.resources.set(resource.id, resource);
@@ -1009,7 +1009,7 @@ export class CloudManager extends EventEmitter {
 
       // Load infrastructures
       const infraFiles = await readdir(join(this.cloudPath, 'infrastructures'));
-      for (const file of infraFiles.filter(f => f.endsWith('.json'))) {
+      for (const file of infraFiles.filter(f => f.endsWith('.tson'))) {
         const content = await readFile(join(this.cloudPath, 'infrastructures', file), 'utf-8');
         const infrastructure: CloudInfrastructure = JSON.parse(content);
         this.infrastructures.set(infrastructure.id, infrastructure);
@@ -1176,17 +1176,17 @@ export class CloudManager extends EventEmitter {
   }
 
   private async saveProvider(provider: CloudProvider): Promise<void> {
-    const filePath = join(this.cloudPath, 'providers', `${provider.id}.json`);
+    const filePath = join(this.cloudPath, 'providers', `${provider.id}.tson`);
     await writeFile(filePath, JSON.stringify(provider, null, 2));
   }
 
   private async saveResource(resource: CloudResource): Promise<void> {
-    const filePath = join(this.cloudPath, 'resources', `${resource.id}.json`);
+    const filePath = join(this.cloudPath, 'resources', `${resource.id}.tson`);
     await writeFile(filePath, JSON.stringify(resource, null, 2));
   }
 
   private async saveInfrastructure(infrastructure: CloudInfrastructure): Promise<void> {
-    const filePath = join(this.cloudPath, 'infrastructures', `${infrastructure.id}.json`);
+    const filePath = join(this.cloudPath, 'infrastructures', `${infrastructure.id}.tson`);
     await writeFile(filePath, JSON.stringify(infrastructure, null, 2));
   }
 

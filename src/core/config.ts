@@ -84,7 +84,7 @@ const FORMAT_PARSERS: Record<string, FormatParser> = {
   json: {
     parse: JSON.parse,
     stringify: (obj) => JSON.stringify(obj, null, 2),
-    extension: '.json'
+    extension: '.tson'
   },
   yaml: {
     parse: (content) => {
@@ -544,8 +544,8 @@ export class ConfigManager {
       const entries = await fs.readdir(profilesDir, { withFileTypes: true });
       
       for (const entry of entries) {
-        if (entry.isFile() && entry.name.endsWith('.json')) {
-          const profileName = entry.name.replace('.json', '');
+        if (entry.isFile() && entry.name.endsWith('.tson')) {
+          const profileName = entry.name.replace('.tson', '');
           const profilePath = join(profilesDir, entry.name);
           
           try {
@@ -591,7 +591,7 @@ export class ConfigManager {
     await fs.mkdir(profilesDir, { recursive: true });
     
     const profileConfig = config || this.config;
-    const profilePath = join(profilesDir, `${profileName}.json`);
+    const profilePath = join(profilesDir, `${profileName}.tson`);
     
     const content = JSON.stringify(profileConfig, null, 2);
     await fs.writeFile(profilePath, content, 'utf8');
@@ -603,7 +603,7 @@ export class ConfigManager {
    * Deletes a profile
    */
   async deleteProfile(profileName: string): Promise<void> {
-    const profilePath = join(this.userConfigDir, 'profiles', `${profileName}.json`);
+    const profilePath = join(this.userConfigDir, 'profiles', `${profileName}.tson`);
     
     try {
       await fs.unlink(profilePath);

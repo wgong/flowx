@@ -3,7 +3,7 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { IEventBus } from '../core/event-bus.js';
+import { IEventBus } from '../core/event-bus.ts';
 
 /**
  * Create a simple event bus

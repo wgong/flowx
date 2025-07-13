@@ -8,11 +8,13 @@ export class CircularBuffer<T> {
   private writeIndex = 0;
   private size = 0;
   private totalItemsWritten = 0;
+  private capacity: number;
   
-  constructor(private capacity: number) {
+  constructor(capacity: number) {
     if (capacity <= 0) {
       throw new Error('Capacity must be greater than 0');
     }
+    this.capacity = capacity;
     this.buffer = new Array(capacity);
   }
   

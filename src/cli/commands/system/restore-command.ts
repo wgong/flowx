@@ -658,7 +658,7 @@ async function restoreAgents(backupPath: string, operation: RestoreOperation): P
       throw new Error('PersistenceManager not available');
     }
 
-    const agentsPath = join(backupPath, 'agents', 'agents.json');
+    const agentsPath = join(backupPath, 'agents', 'agents.tson');
     if (!existsSync(agentsPath)) {
       throw new Error('Agents backup file not found');
     }
@@ -716,7 +716,7 @@ async function restoreMemory(backupPath: string, operation: RestoreOperation): P
       throw new Error('MemoryManager not available');
     }
 
-    const memoryPath = join(backupPath, 'memory', 'memories.json');
+    const memoryPath = join(backupPath, 'memory', 'memories.tson');
     if (!existsSync(memoryPath)) {
       throw new Error('Memory backup file not found');
     }
@@ -751,7 +751,7 @@ async function getBackupList(backupDir: string, typeFilter?: string, limit?: num
   const entries = readdirSync(backupDir);
   for (const entry of entries) {
     const entryPath = join(backupDir, entry);
-    const manifestPath = join(entryPath, 'manifest.json');
+    const manifestPath = join(entryPath, 'manifest.tson');
     
     if (statSync(entryPath).isDirectory() && existsSync(manifestPath)) {
       try {
@@ -849,7 +849,7 @@ async function checkForExistingData(components: string[]): Promise<boolean> {
         break;
       case 'config':
         // Check for existing config files
-        const configFiles = ['claude-flow.json', 'claude-flow.yaml', '.claude-flow.json'];
+        const configFiles = ['claude-flow.tson', 'claude-flow.yaml', '.claude-flow.tson'];
         if (configFiles.some(f => existsSync(f))) return true;
         break;
       case 'logs':
@@ -869,7 +869,7 @@ async function saveRestoreOperation(operation: RestoreOperation): Promise<void> 
     mkdirSync(restoreDir, { recursive: true });
   }
   
-  const operationPath = join(restoreDir, `${operation.id}.json`);
+  const operationPath = join(restoreDir, `${operation.id}.tson`);
   writeFileSync(operationPath, JSON.stringify(operation, null, 2));
 }
 
@@ -881,7 +881,7 @@ async function getRestoreOperation(restoreId: string): Promise<RestoreOperation 
   
   const files = readdirSync(restoreDir);
   for (const file of files) {
-    if (file.startsWith(restoreId) && file.endsWith('.json')) {
+    if (file.startsWith(restoreId) && file.endsWith('.tson')) {
       const operationPath = join(restoreDir, file);
       const operationData = readFileSync(operationPath, 'utf8');
       return JSON.parse(operationData) as RestoreOperation;
@@ -901,7 +901,7 @@ async function getRestoreHistory(limit: number): Promise<RestoreOperation[]> {
   const files = readdirSync(restoreDir);
   
   for (const file of files) {
-    if (file.endsWith('.json')) {
+    if (file.endsWith('.tson')) {
       try {
         const operationPath = join(restoreDir, file);
         const operationData = readFileSync(operationPath, 'utf8');
