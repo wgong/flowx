@@ -22,11 +22,11 @@ A modern web-based terminal interface for Claude Code, providing an authentic co
 - **Connection Settings**: Server URL, authentication tokens, auto-connect
 - **Appearance Customization**: Multiple themes (dark, light, classic, matrix), font size, line height
 - **Behavior Options**: Auto-scroll, timestamps, sound notifications, history limits
-- **Claude Flow Configuration**: Default SPARC modes, swarm strategies, coordination modes
+- **FlowX Configuration**: Default SPARC modes, swarm strategies, coordination modes
 - **Persistent Storage**: Settings saved to localStorage with import/export capabilities
 
-### Claude Flow Integration
-- **Built-in Commands**: Support for all major Claude Flow commands
+### FlowX Integration
+- **Built-in Commands**: Support for all major FlowX commands
 - **SPARC Mode Support**: Integration with all 17 specialized SPARC modes
 - **Swarm Management**: Web interface for swarm coordination and monitoring
 - **Real-time Status**: Live updates of agent status, memory usage, and system metrics
@@ -60,7 +60,7 @@ src/ui/console/
 ### Starting the Web Console
 1. Start Claude Code with HTTP transport enabled:
    ```bash
-   claude-flow start --transport http --port 3000
+   flowx start --transport http --port 3000
    ```
 
 2. Open web browser and navigate to:
@@ -75,7 +75,7 @@ src/ui/console/
 - `connect [url] [token]` - Connect to Claude Code server
 - `status` - Show connection and system status
 - `clear` - Clear console output (or Ctrl+L)
-- `claude-flow <command>` - Execute Claude Flow commands
+- `flowx <command>` - Execute FlowX commands
 - `swarm <action>` - Manage swarms
 - `tools` - List available tools
 
@@ -92,7 +92,7 @@ Access via the ⚙️ Settings button to configure:
 - Server connection details
 - Visual appearance and themes
 - Console behavior preferences
-- Claude Flow default settings
+- FlowX default settings
 
 ## Themes
 

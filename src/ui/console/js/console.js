@@ -137,7 +137,7 @@ class ClaudeCodeConsole {
     this.wsClient.on('connected', () => {
       this.updateConnectionStatus(true, false);
       this.terminal.writeSuccess('Connected to Claude Code server');
-      this.terminal.setPrompt('claude-flow>');
+      this.terminal.setPrompt('flowx>');
     });
     
     this.wsClient.on('disconnected', (info) => {
@@ -328,9 +328,9 @@ class ClaudeCodeConsole {
       this.handleStreamingOutput(message.params);
     }
     
-    // Handle Claude Flow notifications
-    if (message.method && message.method.startsWith('claude-flow/')) {
-      this.handleClaudeFlowNotification(message);
+    // Handle FlowX notifications
+    if (message.method && message.method.startsWith('flowx/')) {
+      this.handleFlowXNotification(message);
     }
   }
   
@@ -379,26 +379,26 @@ class ClaudeCodeConsole {
   }
   
   /**
-   * Handle Claude Flow notifications
+   * Handle FlowX notifications
    */
-  handleClaudeFlowNotification(message) {
+  handleFlowXNotification(message) {
     const { method, params } = message;
     
     switch (method) {
-      case 'claude-flow/started':
-        this.terminal.writeSuccess(`Claude Flow started in ${params.mode} mode`);
+      case 'flowx/started':
+        this.terminal.writeSuccess(`FlowX started in ${params.mode} mode`);
         break;
         
-      case 'claude-flow/stopped':
-        this.terminal.writeInfo('Claude Flow stopped');
+      case 'flowx/stopped':
+        this.terminal.writeInfo('FlowX stopped');
         break;
         
-      case 'claude-flow/error':
-        this.terminal.writeError(`Claude Flow error: ${params.message}`);
+      case 'flowx/error':
+        this.terminal.writeError(`FlowX error: ${params.message}`);
         break;
         
       default:
-        this.terminal.writeInfo(`Claude Flow: ${method} - ${JSON.stringify(params)}`);
+        this.terminal.writeInfo(`FlowX: ${method} - ${JSON.stringify(params)}`);
     }
   }
   

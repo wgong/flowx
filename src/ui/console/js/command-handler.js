@@ -24,9 +24,9 @@ export class CommandHandler {
       'version': this.showVersion.bind(this)
     };
     
-    // Claude Flow commands
-    this.claudeFlowCommands = {
-      'claude-flow': this.executeClaudeFlow.bind(this),
+    // FlowX commands
+    this.flowxCommands = {
+      'flowx': this.executeFlowX.bind(this),
       'swarm': this.executeSwarm.bind(this),
       'init': this.initializeProject.bind(this),
       'config': this.manageConfig.bind(this),
@@ -36,7 +36,7 @@ export class CommandHandler {
       'sparc': this.executeSparc.bind(this)
     };
     
-    this.allCommands = { ...this.builtinCommands, ...this.claudeFlowCommands };
+    this.allCommands = { ...this.builtinCommands, ...this.flowxCommands };
   }
   
   /**
@@ -102,8 +102,8 @@ export class CommandHandler {
     });
     
     this.terminal.writeLine('');
-    this.terminal.writeInfo('Claude Flow Commands:');
-    Object.keys(this.claudeFlowCommands).forEach(cmd => {
+    this.terminal.writeInfo('FlowX Commands:');
+    Object.keys(this.flowxCommands).forEach(cmd => {
       this.terminal.writeLine(`  ${cmd.padEnd(12)} - ${this.getCommandDescription(cmd)}`);
     });
     
@@ -128,7 +128,7 @@ export class CommandHandler {
       'export': 'Export session data',
       'theme': 'Change console theme',
       'version': 'Show version information',
-      'claude-flow': 'Execute Claude Flow commands',
+      'flowx': 'Execute FlowX commands',
       'swarm': 'Manage and execute swarms',
       'init': 'Initialize new project',
       'config': 'Manage configuration',
@@ -171,20 +171,20 @@ Examples:
   connect ws://localhost:3000/ws
   connect ws://localhost:3000/ws my-auth-token`,
       
-      'claude-flow': `
-Usage: claude-flow <subcommand> [options]
-Execute Claude Flow commands.
+      'flowx': `
+Usage: flowx <subcommand> [options]
+Execute FlowX commands.
 
 Subcommands:
-  start [mode]     - Start Claude Flow in specified mode
-  stop             - Stop Claude Flow
-  status           - Show Claude Flow status
+  start [mode]     - Start FlowX in specified mode
+  stop             - Stop FlowX
+  status           - Show FlowX status
   modes            - List available SPARC modes
   
 Examples:
-  claude-flow start coder
-  claude-flow status
-  claude-flow modes`,
+  flowx start coder
+  flowx status
+  flowx modes`,
       
       'swarm': `
 Usage: swarm <action> [options]
@@ -276,7 +276,7 @@ Examples:
       await this.wsClient.initializeSession();
       
       this.terminal.writeSuccess('Connected successfully');
-      this.terminal.setPrompt('claude-flow>');
+      this.terminal.setPrompt('flowx>');
     } catch (error) {
       this.terminal.writeError(`Connection failed: ${error.message}`);
     }
@@ -419,16 +419,16 @@ Examples:
   }
   
   /**
-   * Execute Claude Flow command
+   * Execute FlowX command
    */
-  async executeClaudeFlow(args) {
+  async executeFlowX(args) {
     if (!this.wsClient.isConnected) {
       this.terminal.writeError('Not connected to server');
       return;
     }
     
     if (args.length === 0) {
-      this.terminal.writeError('Usage: claude-flow <subcommand> [options]');
+      this.terminal.writeError('Usage: flowx <subcommand> [options]');
       return;
     }
     
@@ -436,17 +436,17 @@ Examples:
     const subArgs = args.slice(1);
     
     try {
-      const result = await this.wsClient.executeCommand('claude-flow', {
+      const result = await this.wsClient.executeCommand('flowx', {
         subcommand,
         args: subArgs
       });
       
-      this.terminal.writeSuccess(`Claude Flow ${subcommand} executed successfully`);
+      this.terminal.writeSuccess(`FlowX ${subcommand} executed successfully`);
       if (result && result.output) {
         this.terminal.writeLine(result.output);
       }
     } catch (error) {
-      this.terminal.writeError(`Claude Flow command failed: ${error.message}`);
+      this.terminal.writeError(`FlowX command failed: ${error.message}`);
     }
   }
   

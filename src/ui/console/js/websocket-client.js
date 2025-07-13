@@ -434,12 +434,12 @@ export class WebSocketClient {
   }
   
   /**
-   * Execute Claude Flow command
+   * Execute FlowX command
    */
   async executeCommand(command, args = {}) {
     try {
       const result = await this.sendRequest('tools/call', {
-        name: 'claude-flow/execute',
+        name: 'flowx/execute',
         arguments: { command, args }
       });
       

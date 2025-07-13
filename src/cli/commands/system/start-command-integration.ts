@@ -14,15 +14,15 @@ import * as fs from 'fs/promises';
 
 export const startCommand: CLICommand = {
   name: 'start',
-  description: 'Start the Claude-Flow orchestration system',
+  description: 'Start the FlowX orchestration system',
   category: 'System',
-  usage: 'claude-flow start [OPTIONS]',
+  usage: 'flowx start [OPTIONS]',
   examples: [
-    'claude-flow start',
-    'claude-flow start --daemon',
-    'claude-flow start --ui',
-    'claude-flow start --port 3001',
-    'claude-flow start --auto-start --verbose'
+    'flowx start',
+    'flowx start --daemon',
+    'flowx start --ui',
+    'flowx start --port 3001',
+    'flowx start --auto-start --verbose'
   ],
   options: [
     {
@@ -96,11 +96,11 @@ export const startCommand: CLICommand = {
     try {
       // Check if already running
       if (!options.force && await isSystemRunning()) {
-        printWarning('⚠ Claude-Flow is already running');
+        printWarning('⚠ FlowX is already running');
         const shouldContinue = await confirmPrompt('Stop existing instance and restart?', false);
         
         if (!shouldContinue) {
-          printInfo('Use --force to override or "claude-flow stop" first');
+          printInfo('Use --force to override or "flowx stop" first');
           return;
         }
         
@@ -182,7 +182,7 @@ async function confirmPrompt(message: string, defaultValue = false): Promise<boo
 
 async function isSystemRunning(): Promise<boolean> {
   try {
-    const pidData = await fs.readFile('.claude-flow.pid', 'utf8');
+    const pidData = await fs.readFile('.flowx.pid', 'utf8');
     const { pid } = JSON.parse(pidData);
     
     // Check if process is still running
@@ -191,7 +191,7 @@ async function isSystemRunning(): Promise<boolean> {
       return true;
     } catch {
       // Process not found, remove stale PID file
-      await fs.unlink('.claude-flow.pid').catch(() => {});
+      await fs.unlink('.flowx.pid').catch(() => {});
       return false;
     }
   } catch {
@@ -201,7 +201,7 @@ async function isSystemRunning(): Promise<boolean> {
 
 async function stopExistingInstance(): Promise<void> {
   try {
-    const pidData = await fs.readFile('.claude-flow.pid', 'utf8');
+    const pidData = await fs.readFile('.flowx.pid', 'utf8');
     const { pid } = JSON.parse(pidData);
     
     printInfo(`Stopping existing instance (PID: ${pid})...`);
@@ -344,15 +344,15 @@ async function launchDaemonMode(processManager: ProcessManager, systemMonitor: S
     config: options.config || 'default',
     processes: processManager.getAllProcesses().map((p: any) => ({ id: p.id, status: p.status }))
   };
-  await fs.writeFile('.claude-flow.pid', JSON.stringify(pidData, null, 2));
+  await fs.writeFile('.flowx.pid', JSON.stringify(pidData, null, 2));
   printInfo(`Process ID: ${pid}`);
   
   // Wait for services to be fully ready
   await waitForSystemReady(processManager);
   
   printSuccess('✓ Daemon started successfully');
-  printInfo('Use "claude-flow status" to check system status');
-  printInfo('Use "claude-flow monitor" for real-time monitoring');
+  printInfo('Use "flowx status" to check system status');
+  printInfo('Use "flowx monitor" for real-time monitoring');
   
   // Keep process running
   await new Promise<void>(() => {});

@@ -1,7 +1,7 @@
 # Session Memory Storage
 
 ## Purpose
-This directory stores session-based memory data, conversation history, and contextual information for development sessions using the Claude-Flow orchestration system.
+This directory stores session-based memory data, conversation history, and contextual information for development sessions using the FlowX orchestration system.
 
 ## Structure
 Sessions are organized by date and session ID for easy retrieval:
@@ -29,4 +29,4 @@ memory/sessions/
 5. **State Preservation**: Snapshot coordination state regularly
 
 ## Last Updated
-2025-06-16T20:04:49.343Z
+2025-07-12T22:54:31.297Z
