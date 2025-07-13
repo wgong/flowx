@@ -1,6 +1,6 @@
 {
   "name": "flowx",
-  "version": "1.0.0",
+  "version": "8.0.1",
   "description": "Advanced AI agent orchestration system - FlowX",
   "main": "cli.js",
   "bin": {
@@ -29,7 +29,7 @@
     "lint": "eslint src --ext .ts,.js",
     "format": "prettier --write src",
     "postinstall": "node scripts/install.js",
-    "prepublishOnly": "node scripts/build/prepare-publish.js",
+    "_prepublishOnly": "node scripts/build/prepare-publish.js",
     "prepare-publish": "node scripts/build/prepare-publish.js",
     "benchmark": "node benchmark/bin/benchmark-cli.js run \"Benchmark simple task\"",
     "benchmark:test": "node benchmark/bin/benchmark-cli.js test",

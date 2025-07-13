@@ -44,7 +44,7 @@ async function main() {
     if (isHelpOrVersion) {
       // Fast path for help/version - no service initialization needed
       await app.run();
-      return;
+      process.exit(0);
     }
 
     // For actual commands, initialize services with timeout and progress
@@ -99,6 +99,12 @@ async function main() {
     }
     
     await app.run();
+
+    // Ensure process exits cleanly
+    if (isServicesInitialized()) {
+      await shutdownGlobalServices();
+    }
+    process.exit(0);
 
   } catch (error) {
     console.error('❌ Failed to start CLI:', error);
