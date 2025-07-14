@@ -6,10 +6,336 @@
 
 import { CLIContext, CLICommand } from '../../interfaces/index.ts';
 import { printSuccess, printError, printInfo, printWarning } from '../../core/output-formatter.ts';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+
+// Configuration management for persistent swarm state
+const CONFIG_DIR = '.flowx';
+const CONFIG_FILE = path.join(CONFIG_DIR, 'hive-config.json');
+
+interface HiveConfig {
+  activeSwarmId?: string;
+  lastCreated?: string;
+  swarms?: Array<{
+    id: string;
+    name: string;
+    preset: string;
+    createdAt: string;
+  }>;
+}
+
+async function ensureConfigDir(): Promise<void> {
+  try {
+    await fs.mkdir(CONFIG_DIR, { recursive: true });
+  } catch (error) {
+    // Directory might already exist
+  }
+}
+
+async function saveHiveConfig(config: HiveConfig): Promise<void> {
+  await ensureConfigDir();
+  await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2));
+}
+
+async function loadHiveConfig(): Promise<HiveConfig> {
+  try {
+    const data = await fs.readFile(CONFIG_FILE, 'utf-8');
+    return JSON.parse(data);
+  } catch (error) {
+    return { swarms: [] };
+  }
+}
+
+async function setActiveSwarm(swarmId: string, name: string, preset: string): Promise<void> {
+  const config = await loadHiveConfig();
+  config.activeSwarmId = swarmId;
+  config.lastCreated = new Date().toISOString();
+  
+  if (!config.swarms) {
+    config.swarms = [];
+  }
+  
+  // Add or update swarm in list
+  const existingIndex = config.swarms.findIndex(s => s.id === swarmId);
+  const swarmInfo = {
+    id: swarmId,
+    name,
+    preset,
+    createdAt: new Date().toISOString()
+  };
+  
+  if (existingIndex >= 0) {
+    config.swarms[existingIndex] = swarmInfo;
+  } else {
+    config.swarms.push(swarmInfo);
+  }
+  
+  await saveHiveConfig(config);
+}
+
+async function getActiveSwarm(): Promise<string | null> {
+  const config = await loadHiveConfig();
+  return config.activeSwarmId || null;
+}
+
+/**
+ * Launch Claude Code CLI with hive-mind coordination prompt
+ * This matches the behavior of the original flowx --claude flag
+ */
+async function launchUI(swarmId: string, agentId?: string): Promise<void> {
+  await launchClaudeCode(swarmId, agentId, undefined);
+}
+
+/**
+ * Launch Claude Code CLI with hive-mind coordination prompt and task context
+ */
+async function launchUIWithTask(swarmId: string, agentId?: string, taskDescription?: string): Promise<void> {
+  await launchClaudeCode(swarmId, agentId, taskDescription);
+}
+
+/**
+ * Launch Claude Code CLI with comprehensive hive-mind coordination prompt
+ */
+async function launchClaudeCode(swarmId: string, agentId?: string, taskDescription?: string): Promise<void> {
+  try {
+    printInfo('🚀 Launching Claude Code with Hive Mind coordination...');
+    
+    // Generate comprehensive hive-mind prompt
+    const prompt = generateHiveMindPrompt(swarmId, agentId, taskDescription);
+    
+    // Check if claude command is available
+    const { spawn, execSync } = await import('node:child_process');
+    let claudeAvailable = false;
+    
+    try {
+      execSync('which claude', { stdio: 'ignore' });
+      claudeAvailable = true;
+    } catch {
+      printWarning('⚠️  Claude Code CLI not found in PATH');
+      printInfo('Install it with: npm install -g @anthropic-ai/claude-code');
+      printInfo('Falling back to displaying instructions...');
+    }
+    
+    if (claudeAvailable) {
+      // Launch claude with the prompt
+      const claudeArgs = [prompt];
+      
+      // Add auto-permission flag by default for hive-mind mode
+      claudeArgs.push('--dangerously-skip-permissions');
+      printWarning('🔓 Using --dangerously-skip-permissions for seamless hive-mind execution');
+      
+      const claudeProcess = spawn('claude', claudeArgs, {
+        stdio: 'inherit',
+        shell: false
+      });
+      
+      printSuccess('✓ Claude Code launched with Hive Mind coordination');
+      printInfo('  The system will orchestrate task execution with MCP tools');
+      printInfo('  Use the comprehensive prompt for collective intelligence');
+      
+      // Wait for claude process to complete
+      await new Promise((resolve, reject) => {
+        claudeProcess.on('close', (code) => {
+          if (code === 0) {
+            printSuccess('✅ Claude Code session completed successfully');
+          } else {
+            printError(`Claude Code exited with code ${code}`);
+          }
+          resolve(code);
+        });
+        
+        claudeProcess.on('error', (error) => {
+          printError(`Failed to launch Claude Code: ${error.message}`);
+          reject(error);
+        });
+      });
+      
+    } else {
+      // Claude not available - save prompt and show instructions
+      const fs = await import('node:fs/promises');
+      const promptFile = `hive-mind-prompt-${swarmId}.txt`;
+      await fs.writeFile(promptFile, prompt, 'utf8');
+      
+      printInfo('📋 Manual Execution Instructions:');
+      printInfo('─'.repeat(50));
+      printInfo('1. Install Claude Code:');
+      printSuccess('   npm install -g @anthropic-ai/claude-code');
+      printInfo('2. Run with the saved prompt:');
+      printSuccess(`   claude < ${promptFile}`);
+      printInfo('3. Or copy the prompt manually:');
+      printSuccess(`   cat ${promptFile} | claude`);
+      printInfo('4. With auto-permissions:');
+      printSuccess(`   claude --dangerously-skip-permissions < ${promptFile}`);
+      
+      printSuccess(`✓ Full prompt saved to: ${promptFile}`);
+    }
+    
+  } catch (error) {
+    printError(`Failed to launch Claude Code: ${error instanceof Error ? error.message : String(error)}`);
+    printInfo('The hive-mind is still running in the background');
+    printInfo(`🆔 Swarm ID: ${swarmId}`);
+    if (agentId) {
+      printInfo(`👤 Agent ID: ${agentId}`);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Generate comprehensive hive-mind coordination prompt for Claude Code
+ */
+function generateHiveMindPrompt(swarmId: string, agentId?: string, taskDescription?: string): string {
+  const timestamp = new Date().toISOString();
+  
+  return `# FlowX Hive Mind Coordination System
+
+## Mission Control
+- **Swarm ID**: ${swarmId}
+- **Agent ID**: ${agentId || 'Primary Coordinator'}
+- **Task**: ${taskDescription || 'System coordination and task execution'}
+- **Timestamp**: ${timestamp}
+
+## System Context
+You are now connected to the FlowX Hive Mind system, a sophisticated multi-agent orchestration platform. Your role is to coordinate with other agents, utilize MCP (Model Context Protocol) tools, and execute tasks with collective intelligence.
+
+## Available MCP Tools
+The FlowX MCP server provides the following tools (use with mcp__flowx__ prefix):
+
+### Hive-Mind Tools
+- **mcp__flowx__hive_mind_create**: Create new hive-mind instances
+- **mcp__flowx__hive_mind_spawn**: Spawn agents in the hive-mind
+- **mcp__flowx__hive_mind_status**: Check hive-mind status and health
+- **mcp__flowx__hive_mind_shutdown**: Shutdown hive-mind instances
+
+### Agent Management
+- **mcp__flowx__agent_spawn**: Spawn new agents
+- **mcp__flowx__agent_list**: List all active agents
+- **mcp__flowx__agent_terminate**: Terminate specific agents
+- **mcp__flowx__agent_info**: Get detailed agent information
+
+### Task Management
+- **mcp__flowx__task_create**: Create new tasks
+- **mcp__flowx__task_list**: List all tasks
+- **mcp__flowx__task_status**: Check task status
+- **mcp__flowx__task_cancel**: Cancel running tasks
+
+### Memory Management
+- **mcp__flowx__memory_query**: Query collective memory
+- **mcp__flowx__memory_store**: Store information in memory
+- **mcp__flowx__memory_stats**: Get memory statistics
+- **mcp__flowx__memory_export**: Export memory data
+
+### System Tools
+- **mcp__flowx__system_health**: Check system health
+- **mcp__flowx__system_metrics**: Get performance metrics
+- **mcp__flowx__system_status**: Get overall system status
+
+## Coordination Instructions
+1. **Collective Intelligence**: Work collaboratively with other agents in the swarm
+2. **Task Distribution**: Break down complex tasks into manageable subtasks
+3. **Resource Optimization**: Efficiently utilize available computational resources
+4. **Quality Assurance**: Ensure high-quality outputs through peer review
+5. **Continuous Learning**: Adapt and improve based on collective feedback
+
+## Specific Task Context
+${taskDescription ? `
+### Current Task: ${taskDescription}
+
+**Approach**:
+1. Analyze the task requirements thoroughly
+2. Identify necessary resources and capabilities
+3. Coordinate with relevant agents in the swarm using MCP tools
+4. Execute the task using available MCP tools
+5. Provide comprehensive results and documentation
+
+**Success Criteria**:
+- Task completion with high quality
+- Proper documentation of the process
+- Efficient resource utilization
+- Collaborative coordination with other agents
+
+**Example Usage**:
+\`\`\`
+// Check system status
+mcp__flowx__system_status()
+
+// Create additional agents if needed
+mcp__flowx__agent_spawn({
+  "type": "coder",
+  "name": "TaskExecutor",
+  "capabilities": ["coding", "testing"]
+})
+
+// Store task progress in memory
+mcp__flowx__memory_store({
+  "key": "task_progress",
+  "value": "Task analysis complete, beginning implementation"
+})
+\`\`\`
+` : `
+### General Coordination Mode
+
+You are in general coordination mode. Available actions:
+- Monitor swarm status using mcp__flowx__hive_mind_status()
+- Coordinate with other agents using mcp__flowx__agent_list()
+- Handle incoming task assignments using mcp__flowx__task_list()
+- Optimize system performance using mcp__flowx__system_metrics()
+- Provide assistance to other agents
+`}
+
+## Communication Protocol
+- Use clear, structured communication
+- Provide regular status updates
+- Collaborate effectively with other agents
+- Escalate issues when necessary
+- Document all significant actions using mcp__flowx__memory_store()
+
+## Getting Started
+1. Check system status: mcp__flowx__system_status()
+2. Review current swarm configuration: mcp__flowx__hive_mind_status()
+3. Identify any pending tasks: mcp__flowx__task_list()
+4. Begin task execution or coordination as appropriate
+
+Ready to begin hive-mind coordination. How can I assist with the current objectives?`;
+}
+
+/**
+ * Open URL in browser (cross-platform)
+ */
+async function openBrowser(url: string): Promise<void> {
+  const { exec } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const execAsync = promisify(exec);
+  
+  try {
+    printInfo(`🚀 Opening browser at ${url}...`);
+    
+    const platform = process.platform;
+    let command: string;
+    
+    switch (platform) {
+      case 'darwin':
+        command = `open "${url}"`;
+        break;
+      case 'win32':
+        command = `start "${url}"`;
+        break;
+      default:
+        command = `xdg-open "${url}"`;
+    }
+    
+    await execAsync(command);
+    printSuccess('✅ Browser opened successfully');
+  } catch (error) {
+    printWarning(`Could not open browser automatically: ${error instanceof Error ? error.message : String(error)}`);
+    printInfo(`Please manually open: ${url}`);
+  }
+}
 
 async function hiveMindHandler(context: CLIContext): Promise<void> {
   const { args, options } = context;
-  const subcommand = args[0];
+  // Check for subcommand in context first (from CLI framework), then fall back to args[0]
+  const subcommand = context.subcommand || args[0];
 
   try {
     switch (subcommand) {
@@ -81,8 +407,9 @@ async function createHiveMind(context: CLIContext): Promise<void> {
     printInfo(`🤖 Max Agents: ${stats.config.maxAgents}`);
     printInfo(`👥 Current Agents: ${stats.agentCount}`);
 
-    // Store the swarm ID for future commands
-    process.env.HIVE_MIND_SWARM_ID = stats.swarmId;
+    // Save the swarm ID persistently
+    await setActiveSwarm(stats.swarmId, name, preset);
+    printInfo(`💾 Swarm ID saved as active hive-mind`);
     
     await hiveMind.shutdown();
   } catch (error) {
@@ -156,17 +483,29 @@ ${status.warnings.length > 0 ? `⚠️  Warnings:\n${status.warnings.map((w: any
  */
 async function spawnAgent(context: CLIContext): Promise<void> {
   const { args, options } = context;
-  const swarmId = (options.load as string) || process.env.HIVE_MIND_SWARM_ID;
+  const swarmId = (options.load as string) || await getActiveSwarm();
   
   if (!swarmId) {
     printError('No active hive-mind found. Create one first or specify --load <swarmId>');
     return;
   }
 
+  const taskDescription = args[0]; // First argument is the task description
   const agentType = args[1] || 'specialist';
   const agentName = args[2] || `${agentType}-${Date.now()}`;
 
+  // Validate agent type
+  const validAgentTypes = ['queen', 'coordinator', 'researcher', 'coder', 'analyst', 'architect', 'tester', 'reviewer', 'optimizer', 'documenter', 'monitor', 'specialist', 'security', 'devops'];
+  if (!validAgentTypes.includes(agentType)) {
+    printError(`Invalid agent type: ${agentType}`);
+    printInfo(`Valid agent types: ${validAgentTypes.join(', ')}`);
+    return;
+  }
+
   printInfo(`Spawning agent: ${agentName} (${agentType})`);
+  if (taskDescription) {
+    printInfo(`Task: "${taskDescription}"`);
+  }
 
   try {
     const { HiveMindFactory } = await import('../../../hive-mind/index.ts');
@@ -178,11 +517,33 @@ async function spawnAgent(context: CLIContext): Promise<void> {
       autoAssign: true
     });
 
+    // If a task description was provided, create and assign the task
+    if (taskDescription) {
+      const taskId = await hiveMind.submitTask({
+        description: taskDescription,
+        priority: 'medium',
+        assignedAgent: agentId,
+        maxDuration: 3600000, // 1 hour
+        requirements: {
+          agentType: agentType,
+          capabilities: ['general', 'analysis', 'development']
+        }
+      });
+      
+      printInfo(`📋 Task assigned: ${taskId}`);
+    }
+
     printSuccess(`✅ Agent spawned successfully!`);
     printInfo(`🆔 Agent ID: ${agentId}`);
     printInfo(`📛 Name: ${agentName}`);
     printInfo(`🎭 Type: ${agentType}`);
     printInfo(`🛠️  Capabilities: [Generated based on type]`);
+
+    // Launch Claude Code CLI if requested
+    if (options.ui || options.claude) {
+      printInfo(`🚀 Launching Claude Code CLI...`);
+      await launchUIWithTask(swarmId, agentId, taskDescription);
+    }
 
     await hiveMind.shutdown();
   } catch (error) {
@@ -672,12 +1033,12 @@ async function showHelp(): Promise<void> {
   console.log(`
 🧠 Hive-Mind Command Help
 
-Usage: claude-flow hive-mind <command> [options]
+Usage: flowx hive-mind <command> [options]
 
 Commands:
 create [name]              Create a new hive-mind
 status                     Show hive-mind status
-spawn <type> [name]        Spawn a new agent
+spawn <task> [type] [name] Spawn a new agent with optional task
 task <description>         Submit a task
 neural <command>           Neural pattern commands
 list                       List all hive-minds
@@ -701,18 +1062,24 @@ Options:
 --consensus                Require consensus for task
 --max-agents <number>      Maximum agents for task
 --load <swarmId>          Load specific hive-mind
+--ui                       Launch Claude Code CLI with hive-mind coordination prompt
 --optimization <level>     Optimization level for neural workflows (0-3)
 
 Examples:
-claude-flow hive-mind create MyHive --preset development
-claude-flow hive-mind spawn researcher "Research Agent"
-claude-flow hive-mind task "Build a REST API"
-claude-flow hive-mind neural status
-claude-flow hive-mind neural workflow '{"data":"example"}' coordination --optimization 2
-claude-flow hive-mind neural patterns coordination
-claude-flow hive-mind neural workflow-stats
-claude-flow hive-mind status
-claude-flow hive-mind demo
+flowx hive-mind create MyHive --preset development
+flowx hive-mind spawn "Build a REST API" researcher "Research Agent" --claude
+flowx hive-mind spawn "Debug the system" --claude
+flowx hive-mind task "Build a REST API"
+flowx hive-mind neural status
+flowx hive-mind neural workflow '{"data":"example"}' coordination --optimization 2
+flowx hive-mind neural patterns coordination
+flowx hive-mind neural workflow-stats
+flowx hive-mind status
+flowx hive-mind demo
+
+Note: The --ui flag launches the Claude Code CLI with a comprehensive hive-mind 
+coordination prompt, enabling collective intelligence and MCP tool integration.
+The --claude flag is available for hive-mind commands to launch Claude Code CLI.
 `);
 }
 
@@ -798,14 +1165,28 @@ export const hiveMindCommand: CLICommand = {
       name: 'load',
       description: 'Load specific hive-mind by ID',
       type: 'string'
+    },
+
+    {
+      name: 'ui',
+      description: 'Launch Claude Code CLI with hive-mind coordination prompt (alias for --claude)',
+      type: 'boolean',
+      default: false
+    },
+    {
+      name: 'claude',
+      description: 'Launch Claude Code CLI with hive-mind coordination prompt',
+      type: 'boolean',
+      default: false
     }
   ],
   examples: [
-    'hive-flow hive-mind create MyHive --preset development',
-    'hive-flow hive-mind spawn researcher "Research Agent"',
-    'hive-flow hive-mind task "Build a REST API" --priority high',
-    'hive-flow hive-mind neural status',
-    'hive-flow hive-mind demo'
+    'flowx hive-mind create MyHive --preset development',
+    'flowx hive-mind spawn "Build a REST API" researcher "Research Agent" --claude',
+    'flowx hive-mind spawn "Debug the system" --claude',
+    'flowx hive-mind task "Build a REST API" --priority high',
+    'flowx hive-mind neural status',
+    'flowx hive-mind demo'
   ]
 }; 
 

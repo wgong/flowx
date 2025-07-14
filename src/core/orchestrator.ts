@@ -1,5 +1,5 @@
 /**
- * Main orchestrator for Claude-Flow
+ * Main orchestrator for FlowX
  */
 
 import {
@@ -1864,4 +1864,82 @@ export class Orchestrator implements IOrchestrator {
       }
     }
   }
+}
+
+// Main execution when run as standalone script
+if (import.meta.url === `file://${process.argv[1]}`) {
+  async function main() {
+    try {
+      // Import dependencies
+      const { configManager } = await import('./config.js');
+      const { TerminalManager } = await import('../terminal/manager.js');
+      const { MemoryManager } = await import('../memory/manager.js');
+      const { CoordinationManager } = await import('../coordination/manager.js');
+      const { MCPServer } = await import('../mcp/server.js');
+      const { eventBus } = await import('./event-bus.js');
+      const { logger } = await import('./logger.js');
+
+      // Load configuration
+      const config = configManager.get();
+      
+      // Initialize dependencies
+      const terminalManager = new TerminalManager(config.terminal, eventBus, logger);
+      const memoryManager = new MemoryManager(config.memory, eventBus, logger);
+      const coordinationManager = CoordinationManager.createDefault(eventBus, logger);
+      const mcpServer = new MCPServer(config.mcp, eventBus, logger);
+
+      // Initialize all components
+      await terminalManager.initialize();
+      await memoryManager.initialize();
+      await coordinationManager.initialize();
+      await mcpServer.start();
+
+      // Create and initialize orchestrator
+      const orchestrator = new Orchestrator(
+        config,
+        terminalManager,
+        memoryManager,
+        coordinationManager,
+        mcpServer,
+        eventBus,
+        logger
+      );
+
+      await orchestrator.initialize();
+      
+      logger.info('Orchestrator started successfully');
+
+      // Handle shutdown signals
+      const shutdown = async () => {
+        logger.info('Shutting down orchestrator...');
+        try {
+          await orchestrator.shutdown();
+          await mcpServer.stop();
+          await coordinationManager.shutdown();
+          await memoryManager.shutdown();
+          await terminalManager.shutdown();
+          logger.info('Orchestrator shutdown complete');
+          process.exit(0);
+        } catch (error) {
+          logger.error('Error during shutdown:', error);
+          process.exit(1);
+        }
+      };
+
+      process.on('SIGINT', shutdown);
+      process.on('SIGTERM', shutdown);
+
+      // Keep the process running
+      await new Promise(() => {});
+      
+    } catch (error) {
+      console.error('Failed to start orchestrator:', error);
+      process.exit(1);
+    }
+  }
+
+  main().catch(error => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  });
 }

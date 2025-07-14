@@ -36,14 +36,14 @@ export const validateCommand: CLICommand = {
   name: 'validate',
   description: 'Configuration and system validation with comprehensive checks',
   category: 'System',
-  usage: 'claude-flow validate [target] [OPTIONS]',
+  usage: 'flowx validate [target] [OPTIONS]',
   examples: [
-    'claude-flow validate',
-    'claude-flow validate config',
-    'claude-flow validate workflow workflow-123',
-    'claude-flow validate system --verbose',
-    'claude-flow validate agents --fix',
-    'claude-flow validate all --report validation-report.tson'
+    'flowx validate',
+    'flowx validate config',
+    'flowx validate workflow workflow-123',
+    'flowx validate system --verbose',
+    'flowx validate agents --fix',
+    'flowx validate all --report validation-report.tson'
   ],
   options: [
     {
@@ -365,7 +365,7 @@ async function validateConfigurationChecks(): Promise<ValidationResult[]> {
 
   try {
     // Check main configuration file
-    const configPath = path.join(process.cwd(), '.claude-flow', 'config.tson');
+    const configPath = path.join(process.cwd(), '.flowx', 'config.tson');
     
     try {
       await fs.access(configPath);
@@ -391,7 +391,7 @@ async function validateConfigurationChecks(): Promise<ValidationResult[]> {
         status: 'warning',
         message: 'Configuration file not found or invalid',
         details: { error: error instanceof Error ? error.message : String(error) },
-        suggestions: ['Run "claude-flow config init" to create default configuration'],
+        suggestions: ['Run "flowx config init" to create default configuration'],
         severity: 'medium'
       });
     }
@@ -452,7 +452,7 @@ async function validateSystemChecks(): Promise<ValidationResult[]> {
     });
 
     // Check required directories
-    const requiredDirs = ['.claude-flow', 'agents', 'memory', 'swarm-memory'];
+    const requiredDirs = ['.flowx', 'agents', 'memory', 'swarm-memory'];
     for (const dir of requiredDirs) {
       try {
         await fs.access(dir);
@@ -907,12 +907,12 @@ async function validateFilePermissions(): Promise<ValidationResult> {
     await fs.writeFile(testFile, 'test');
     await fs.unlink(testFile);
 
-    // Test .claude-flow directory permissions
-    const claudeFlowDir = path.join(process.cwd(), '.claude-flow');
+    // Test .flowx directory permissions
+    const claudeFlowDir = path.join(process.cwd(), '.flowx');
     try {
       await fs.access(claudeFlowDir, fs.constants.W_OK);
     } catch {
-      issues.push('No write permission to .claude-flow directory');
+      issues.push('No write permission to .flowx directory');
     }
 
   } catch (error) {
@@ -1181,7 +1181,7 @@ async function generateValidationReport(results: ValidationResult[], summary: Va
     summary,
     results,
     metadata: {
-      generatedBy: 'claude-flow validate',
+      generatedBy: 'flowx validate',
       nodeVersion: process.version,
       platform: process.platform
     }
@@ -1229,7 +1229,7 @@ async function autoFixIssue(result: ValidationResult): Promise<boolean> {
           agents: { defaultType: 'general', maxConcurrentTasks: 5, heartbeatInterval: 30000, idleTimeout: 300000 }
         };
         
-        const configDir = path.join(process.cwd(), '.claude-flow');
+        const configDir = path.join(process.cwd(), '.flowx');
         await fs.mkdir(configDir, { recursive: true });
         await fs.writeFile(path.join(configDir, 'config.tson'), JSON.stringify(defaultConfig, null, 2));
         return true;

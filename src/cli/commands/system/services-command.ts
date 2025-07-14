@@ -50,13 +50,13 @@ export const servicesCommand: CLICommand = {
   name: 'services',
   description: 'Manage and monitor Claude Flow services',
   category: 'System',
-  usage: 'claude-flow services <subcommand> [OPTIONS]',
+  usage: 'flowx services <subcommand> [OPTIONS]',
   examples: [
-    'claude-flow services status',
-    'claude-flow services start all',
-    'claude-flow services stop memory-manager',
-    'claude-flow services restart --group core',
-    'claude-flow services health --detailed'
+    'flowx services status',
+    'flowx services start all',
+    'flowx services stop memory-manager',
+    'flowx services restart --group core',
+    'flowx services health --detailed'
   ],
   subcommands: [
     {
@@ -1046,7 +1046,7 @@ async function startServices(context: CLIContext): Promise<void> {
       }
     } else {
       printError('Specify --service, --group, or "all"');
-      printInfo('Usage: claude-flow services start [all|--service <name>|--group <name>]');
+      printInfo('Usage: flowx services start [all|--service <name>|--group <name>]');
     }
   } catch (error) {
     printError(`Failed to start services: ${error instanceof Error ? error.message : String(error)}`);
@@ -1095,7 +1095,7 @@ async function stopServices(context: CLIContext): Promise<void> {
       }
     } else {
       printError('Specify --service, --group, or "all"');
-      printInfo('Usage: claude-flow services stop [all|--service <name>|--group <name>]');
+      printInfo('Usage: flowx services stop [all|--service <name>|--group <name>]');
     }
   } catch (error) {
     printError(`Failed to stop services: ${error instanceof Error ? error.message : String(error)}`);
@@ -1188,7 +1188,7 @@ async function showServiceLogs(context: CLIContext): Promise<void> {
 
   if (!options.service) {
     printError('Service name is required');
-    printInfo('Usage: claude-flow services logs --service <service-name> [options]');
+    printInfo('Usage: flowx services logs --service <service-name> [options]');
     return;
   }
 

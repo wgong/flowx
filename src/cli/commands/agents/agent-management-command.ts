@@ -639,7 +639,7 @@ export const agentCommand: CLICommand = {
         
         if (!agentType) {
           printError('Agent type is required. Use --type option.');
-          printInfo('Example: claude-flow agent create my-agent --type researcher');
+          printInfo('Example: flowx agent create my-agent --type researcher');
           return;
         }
         

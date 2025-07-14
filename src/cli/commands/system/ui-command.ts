@@ -50,13 +50,13 @@ export const uiCommand: CLICommand = {
   name: 'ui',
   description: 'Launch and manage the web console interface',
   category: 'System',
-  usage: 'claude-flow ui <subcommand> [OPTIONS]',
+  usage: 'flowx ui <subcommand> [OPTIONS]',
   examples: [
-    'claude-flow ui start',
-    'claude-flow ui start --port 8080',
-    'claude-flow ui stop',
-    'claude-flow ui status',
-    'claude-flow ui open --browser'
+    'flowx ui start',
+    'flowx ui start --port 8080',
+    'flowx ui stop',
+    'flowx ui status',
+    'flowx ui open --browser'
   ],
   options: [
     {
@@ -149,7 +149,7 @@ export const uiCommand: CLICommand = {
       return;
     }
     
-    printError('Invalid subcommand. Use "claude-flow ui --help" for usage information.');
+    printError('Invalid subcommand. Use "flowx ui --help" for usage information.');
   }
 };
 
@@ -612,7 +612,10 @@ class UIServer {
 // Subcommand handlers
 
 async function startUIServer(context: CLIContext): Promise<void> {
+  console.log('🔥 DEBUG: startUIServer called!');
   const { options } = context;
+  console.log('🔥 DEBUG: options.daemon =', options.daemon);
+  console.log('🔥 DEBUG: options =', JSON.stringify(options, null, 2));
 
   if (uiServer && uiServer.getStatus().running) {
     printWarning('UI server is already running');
@@ -621,38 +624,296 @@ async function startUIServer(context: CLIContext): Promise<void> {
   }
 
   try {
-    const config: Partial<UIServerConfig> = {
-      port: options.port || 3001,
-      host: options.host || 'localhost',
-      enableAuth: options.auth || false,
-      authToken: options.token,
-      logLevel: options.verbose ? 'debug' : 'info'
-    };
-
-    uiServer = new UIServer(config);
-    
-    printInfo('Starting UI server...');
-    await uiServer.start();
-    
-    const url = `http://${config.host}:${config.port}`;
-    printSuccess(`✅ UI server started successfully!`);
-    printInfo(`🌐 Web console available at: ${url}`);
-    printInfo(`🔗 WebSocket endpoint: ws://${config.host}:${config.port}/ws`);
-    
-    if (config.enableAuth) {
-      printInfo(`🔐 Authentication enabled with token: ${config.authToken}`);
-    }
-
-    // Open in browser if requested
-    if (options.browser) {
-      await openBrowser(url);
-    }
-
-    // Run as daemon if requested
+    // Handle daemon mode FIRST - before starting in-process server
     if (options.daemon) {
-      printInfo('Running in daemon mode. Use "claude-flow ui stop" to stop the server.');
-      // Keep process running
-      process.stdin.resume();
+      printInfo('Starting UI server in daemon mode...');
+      
+      // Create a detached daemon process
+      const { spawn } = await import('node:child_process');
+      const path = await import('node:path');
+      const fs = await import('node:fs/promises');
+      
+      // Create daemon script content
+      const daemonScript = `
+import express from 'express';
+import http from 'http';
+import { WebSocketServer } from 'ws';
+import path from 'path';
+import fs from 'fs/promises';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+class UIServer {
+  constructor(config) {
+    this.config = {
+      port: 3001,
+      host: 'localhost',
+      enableAuth: false,
+      enableHTTPS: false,
+      staticPath: path.join(__dirname, '../src/ui/console'),
+      maxConnections: 100,
+      enableCORS: true,
+      logLevel: 'info',
+      ...config
+    };
+    this.connections = new Map();
+    this.isRunning = false;
+    this.logs = [];
+    this.maxLogs = 1000;
+  }
+
+  async start() {
+    if (this.isRunning) return;
+    
+    this.app = express();
+    this.setupExpress();
+    this.setupAPIRoutes();
+    
+    this.server = http.createServer(this.app);
+    this.setupWebSocket();
+    
+    return new Promise((resolve, reject) => {
+      this.server.listen(this.config.port, this.config.host, () => {
+        this.isRunning = true;
+        this.startTime = new Date();
+        this.log(\`UI Server started on http://\${this.config.host}:\${this.config.port}\`);
+        resolve();
+      });
+      
+      this.server.on('error', reject);
+    });
+  }
+
+  async stop() {
+    if (!this.isRunning) return;
+    
+    this.isRunning = false;
+    
+    // Close WebSocket connections
+    if (this.wss) {
+      this.wss.close();
+    }
+    
+    // Close HTTP server
+    if (this.server) {
+      this.server.close();
+    }
+    
+    this.log('UI Server stopped');
+  }
+
+  setupExpress() {
+    if (this.config.enableCORS) {
+      this.app.use((req, res, next) => {
+        res.header('Access-Control-Allow-Origin', '*');
+        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+        if (req.method === 'OPTIONS') {
+          res.sendStatus(200);
+        } else {
+          next();
+        }
+      });
+    }
+    
+    this.app.use(express.json());
+    this.app.use(express.static(this.config.staticPath));
+  }
+
+  setupAPIRoutes() {
+    this.app.get('/health', (req, res) => {
+      res.json({ status: 'healthy', uptime: this.getUptime() });
+    });
+    
+    this.app.get('/console', (req, res) => {
+      res.sendFile(path.join(this.config.staticPath, 'index.html'));
+    });
+  }
+
+  setupWebSocket() {
+    this.wss = new WebSocketServer({ 
+      server: this.server,
+      path: '/ws'
+    });
+    
+    this.wss.on('connection', (ws, req) => {
+      const connectionId = this.generateConnectionId();
+      const connection = {
+        id: connectionId,
+        ws: ws,
+        authenticated: !this.config.enableAuth,
+        connectedAt: new Date(),
+        lastActivity: new Date(),
+        clientInfo: {
+          ip: req.socket.remoteAddress,
+          userAgent: req.headers['user-agent']
+        }
+      };
+      
+      this.connections.set(connectionId, connection);
+      this.log(\`New WebSocket connection: \${connectionId}\`);
+      
+      // Send welcome message
+      ws.send(JSON.stringify({
+        type: 'welcome',
+        connectionId: connectionId,
+        serverTime: new Date().toISOString(),
+        authenticated: connection.authenticated
+      }));
+      
+      // Handle incoming messages
+      ws.on('message', (data) => {
+        try {
+          const message = JSON.parse(data.toString());
+          this.handleWebSocketMessage(connectionId, message);
+        } catch (error) {
+          this.log(\`Invalid WebSocket message from \${connectionId}: \${error.message}\`, 'error');
+        }
+      });
+      
+      ws.on('close', () => {
+        this.connections.delete(connectionId);
+        this.log(\`WebSocket connection closed: \${connectionId}\`);
+      });
+      
+      ws.on('error', (error) => {
+        this.log(\`WebSocket error for \${connectionId}: \${error.message}\`, 'error');
+      });
+    });
+  }
+  
+  handleWebSocketMessage(connectionId, message) {
+    const connection = this.connections.get(connectionId);
+    if (!connection) return;
+    
+    connection.lastActivity = new Date();
+    
+    // Echo message back for now (can be extended for actual command handling)
+    connection.ws.send(JSON.stringify({
+      type: 'response',
+      id: message.id || Date.now(),
+      result: { received: message, timestamp: new Date().toISOString() }
+    }));
+  }
+
+  generateConnectionId() {
+    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  }
+
+  getUptime() {
+    return this.startTime ? Date.now() - this.startTime.getTime() : 0;
+  }
+
+  log(message, level = 'info') {
+    const timestamp = new Date().toISOString();
+    const logEntry = \`[\${timestamp}] \${level.toUpperCase()}: \${message}\`;
+    
+    console.log(logEntry);
+    
+    this.logs.push(logEntry);
+    if (this.logs.length > this.maxLogs) {
+      this.logs.shift();
+    }
+  }
+}
+
+// Create and start the server
+const server = new UIServer({
+  port: ${options.port || 3001},
+  host: '${options.host || 'localhost'}',
+  enableCORS: ${options.enableCors || true}
+});
+
+server.start().then(() => {
+  console.log('UI server started successfully in daemon mode');
+  
+  // Write PID file
+  fs.writeFile('.flowx/ui-daemon.pid', process.pid.toString());
+  
+  // Keep process alive
+  process.on('SIGTERM', async () => {
+    console.log('Received SIGTERM, shutting down gracefully...');
+    await server.stop();
+    process.exit(0);
+  });
+  
+  process.on('SIGINT', async () => {
+    console.log('Received SIGINT, shutting down gracefully...');
+    await server.stop();
+    process.exit(0);
+  });
+  
+}).catch(error => {
+  console.error('Failed to start UI server daemon:', error);
+  process.exit(1);
+});
+`;
+
+      // Ensure .flowx directory exists
+      await fs.mkdir('.flowx', { recursive: true });
+      
+      // Write daemon script
+      const daemonPath = '.flowx/ui-daemon.js';
+      await fs.writeFile(daemonPath, daemonScript);
+      
+      // Spawn detached daemon process
+      const daemon = spawn('node', [daemonPath], {
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        cwd: process.cwd()
+      });
+      
+      // Write PID file
+      await fs.writeFile('.flowx/ui-daemon.pid', daemon.pid?.toString() || '');
+      
+      // Set up log files
+      const logFile = await fs.open('.flowx/ui-daemon.log', 'a');
+      const errorFile = await fs.open('.flowx/ui-daemon.error.log', 'a');
+      
+      daemon.stdout?.pipe(logFile.createWriteStream());
+      daemon.stderr?.pipe(errorFile.createWriteStream());
+      
+      // Detach from parent process
+      daemon.unref();
+      
+      printSuccess(`✅ UI server daemon started with PID ${daemon.pid}`);
+      printInfo(`📊 Web console available at: http://${options.host || 'localhost'}:${options.port || 3001}/console`);
+      printInfo(`📝 Logs: .flowx/ui-daemon.log`);
+      printInfo(`🛑 Stop with: flowx ui stop`);
+      
+      // Exit the CLI process immediately - daemon is now independent
+      return;
+    } else {
+      // Non-daemon mode - start in-process server
+      const config: Partial<UIServerConfig> = {
+        port: options.port || 3001,
+        host: options.host || 'localhost',
+        enableAuth: options.auth || false,
+        authToken: options.token,
+        logLevel: options.verbose ? 'debug' : 'info'
+      };
+
+      uiServer = new UIServer(config);
+      
+      printInfo('Starting UI server...');
+      await uiServer.start();
+      
+      const url = `http://${config.host}:${config.port}`;
+      printSuccess(`✅ UI server started successfully!`);
+      printInfo(`🌐 Web console available at: ${url}`);
+      printInfo(`🔗 WebSocket endpoint: ws://${config.host}:${config.port}/ws`);
+      
+      if (config.enableAuth) {
+        printInfo(`🔐 Authentication enabled with token: ${config.authToken}`);
+      }
+
+      // Open in browser if requested
+      if (options.browser) {
+        await openBrowser(url);
+      }
     }
 
   } catch (error) {
@@ -662,16 +923,77 @@ async function startUIServer(context: CLIContext): Promise<void> {
 }
 
 async function stopUIServer(context: CLIContext): Promise<void> {
-  if (!uiServer || !uiServer.getStatus().running) {
-    printWarning('UI server is not running');
-    return;
-  }
-
+  const { options } = context;
+  
   try {
-    printInfo('Stopping UI server...');
-    await uiServer.stop();
-    printSuccess('✅ UI server stopped successfully');
-    uiServer = null;
+    const fs = await import('node:fs/promises');
+    
+    // Check for daemon mode first
+    const pidFile = '.flowx/ui-daemon.pid';
+    try {
+      const pidData = await fs.readFile(pidFile, 'utf8');
+      const pid = parseInt(pidData.trim());
+      
+      printInfo(`Stopping UI daemon (PID: ${pid})...`);
+      
+      // Check if process exists
+      try {
+        process.kill(pid, 0);
+      } catch (error) {
+        printWarning('UI daemon process not found - may already be stopped');
+        await fs.unlink(pidFile).catch(() => {});
+        return;
+      }
+      
+      // Send termination signal
+      if (options.force) {
+        process.kill(pid, 'SIGKILL');
+      } else {
+        process.kill(pid, 'SIGTERM');
+        
+        // Wait for graceful shutdown
+        const timeout = (options.timeout || 10) * 1000;
+        const startTime = Date.now();
+        
+        while (Date.now() - startTime < timeout) {
+          try {
+            process.kill(pid, 0);
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } catch {
+            // Process has exited
+            break;
+          }
+        }
+        
+        // Force kill if still running
+        try {
+          process.kill(pid, 0);
+          printWarning('Graceful shutdown timed out, force killing...');
+          process.kill(pid, 'SIGKILL');
+        } catch {
+          // Process already exited
+        }
+      }
+      
+      // Clean up PID file
+      await fs.unlink(pidFile).catch(() => {});
+      
+      printSuccess('✅ UI daemon stopped successfully');
+      return;
+      
+    } catch (error) {
+      // No daemon running, check in-process server
+      if (!uiServer || !uiServer.getStatus().running) {
+        printWarning('UI server is not running');
+        return;
+      }
+
+      printInfo('Stopping UI server...');
+      await uiServer.stop();
+      printSuccess('✅ UI server stopped successfully');
+      uiServer = null;
+    }
+    
   } catch (error) {
     printError(`Failed to stop UI server: ${error instanceof Error ? error.message : String(error)}`);
     throw error;
@@ -694,34 +1016,99 @@ async function showUIStatus(context: CLIContext): Promise<void> {
   printInfo('🖥️  UI Server Status');
   console.log('─'.repeat(50));
 
-  if (!uiServer) {
-    printWarning('UI server is not initialized');
-    printInfo('Use "claude-flow ui start" to start the server');
-    return;
-  }
+  try {
+    const fs = await import('node:fs/promises');
+    
+    // Check for daemon mode first
+    const pidFile = '.flowx/ui-daemon.pid';
+    try {
+      const pidData = await fs.readFile(pidFile, 'utf8');
+      const pid = parseInt(pidData.trim());
+      
+      // Check if process is running
+      try {
+        process.kill(pid, 0);
+        printSuccess(`✅ UI daemon is running (PID: ${pid})`);
+        
+        const statusData = [
+          { label: 'Mode', value: '🔄 Daemon' },
+          { label: 'PID', value: pid },
+          { label: 'Host', value: 'localhost' },
+          { label: 'Port', value: '3001' },
+          { label: 'Logs', value: '.flowx/ui-daemon.log' },
+          { label: 'Error Logs', value: '.flowx/ui-daemon.error.log' }
+        ];
 
-  const status = uiServer.getStatus();
-  
-  const statusData = [
-    { label: 'Status', value: status.running ? '🟢 Running' : '🔴 Stopped' },
-    { label: 'Host', value: status.config.host },
-    { label: 'Port', value: status.config.port },
-    { label: 'Started', value: status.startTime ? status.startTime.toLocaleString() : 'N/A' },
-    { label: 'Uptime', value: status.running ? formatUptime(status.uptime) : 'N/A' },
-    { label: 'Connections', value: status.connections },
-    { label: 'Authentication', value: status.config.enableAuth ? '🔐 Enabled' : '🔓 Disabled' },
-    { label: 'Static Path', value: status.config.staticPath }
-  ];
+        statusData.forEach(({ label, value }) => {
+          console.log(`${label.padEnd(15)}: ${value}`);
+        });
+        
+        // Try to get server info
+        const http = await import('node:http');
+        const options = {
+          hostname: 'localhost',
+          port: 3001,
+          path: '/health',
+          method: 'GET',
+          timeout: 2000,
+        };
+        
+        const req = http.request(options, (res) => {
+          if (res.statusCode === 200) {
+            console.log();
+            printInfo('📊 Web console: http://localhost:3001/console');
+            printInfo('🔗 WebSocket: ws://localhost:3001/ws');
+          }
+        });
+        
+        req.on('error', () => {
+          console.log();
+          printWarning('UI daemon process running but not responding to HTTP requests');
+        });
+        
+        req.end();
+        
+      } catch (error) {
+        printWarning(`UI daemon PID file exists but process is not running (PID: ${pid})`);
+        await fs.unlink(pidFile).catch(() => {});
+      }
+      
+    } catch (error) {
+      // No daemon running, check in-process server
+      if (!uiServer) {
+        printWarning('UI server is not running');
+        printInfo('Use "flowx ui start" to start the server');
+        return;
+      }
 
-  statusData.forEach(({ label, value }) => {
-    console.log(`${label.padEnd(15)}: ${value}`);
-  });
+      const status = uiServer.getStatus();
+      
+      const statusData = [
+        { label: 'Mode', value: '🔄 In-Process' },
+        { label: 'Status', value: status.running ? '🟢 Running' : '🔴 Stopped' },
+        { label: 'Host', value: status.config.host },
+        { label: 'Port', value: status.config.port },
+        { label: 'Started', value: status.startTime ? status.startTime.toLocaleString() : 'N/A' },
+        { label: 'Uptime', value: status.running ? formatUptime(status.uptime) : 'N/A' },
+        { label: 'Connections', value: status.connections },
+        { label: 'Authentication', value: status.config.enableAuth ? '🔐 Enabled' : '🔓 Disabled' },
+        { label: 'Static Path', value: status.config.staticPath }
+      ];
 
-  if (status.running) {
-    const url = `http://${status.config.host}:${status.config.port}`;
-    console.log();
-    printInfo(`🌐 Web console: ${url}`);
-    printInfo(`🔗 WebSocket: ws://${status.config.host}:${status.config.port}/ws`);
+      statusData.forEach(({ label, value }) => {
+        console.log(`${label.padEnd(15)}: ${value}`);
+      });
+
+      if (status.running) {
+        const url = `http://${status.config.host}:${status.config.port}`;
+        console.log();
+        printInfo(`🌐 Web console: ${url}`);
+        printInfo(`🔗 WebSocket: ws://${status.config.host}:${status.config.port}/ws`);
+      }
+    }
+    
+  } catch (error) {
+    printError(`Failed to check UI server status: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   console.log();
@@ -731,7 +1118,7 @@ async function openInBrowser(context: CLIContext): Promise<void> {
   const { options } = context;
 
   if (!uiServer || !uiServer.getStatus().running) {
-    printError('UI server is not running. Start it first with "claude-flow ui start"');
+    printError('UI server is not running. Start it first with "flowx ui start"');
     return;
   }
 

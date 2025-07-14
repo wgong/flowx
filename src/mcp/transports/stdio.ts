@@ -110,7 +110,7 @@ export class StdioTransport extends EventEmitter implements ITransport {
     try {
       message = JSON.parse(line);
       
-      if (!message.tsonrpc || message.tsonrpc !== '2.0') {
+      if (!message.jsonrpc || message.jsonrpc !== '2.0') {
         throw new Error('Invalid JSON-RPC version');
       }
 

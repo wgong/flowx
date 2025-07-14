@@ -13,15 +13,15 @@ const exec = promisify(child_process.exec);
 
 export const stopCommand: CLICommand = {
   name: 'stop',
-  description: 'Stop the Claude-Flow orchestration system',
+  description: 'Stop the flowx orchestration system',
   category: 'System',
-  usage: 'claude-flow stop [OPTIONS]',
+  usage: 'flowx stop [OPTIONS]',
   examples: [
-    'claude-flow stop',
-    'claude-flow stop --force',
-    'claude-flow stop --timeout 30',
-    'claude-flow stop --service mcp-server',
-    'claude-flow stop --all'
+    'flowx stop',
+    'flowx stop --force',
+    'flowx stop --timeout 30',
+    'flowx stop --service mcp-server',
+    'flowx stop --all'
   ],
   options: [
     {
@@ -98,7 +98,7 @@ export const stopCommand: CLICommand = {
   handler: async (context: CLIContext) => {
     const { options } = context;
     
-    printInfo('🛑 Claude-Flow System Shutdown');
+    printInfo('🛑 flowx System Shutdown');
     console.log('─'.repeat(50));
 
     try {
@@ -106,7 +106,7 @@ export const stopCommand: CLICommand = {
       const systemStatus = await getSystemStatus();
       
       if (!systemStatus.isRunning) {
-        printWarning('Claude-Flow is not currently running');
+        printWarning('flowx is not currently running');
         if (options.cleanup) {
           await performCleanup(options.verbose);
         }
@@ -139,7 +139,7 @@ export const stopCommand: CLICommand = {
         await performCleanup(options.verbose);
       }
 
-      printSuccess('✓ Claude-Flow stopped successfully');
+      printSuccess('✓ flowx stopped successfully');
 
     } catch (error) {
       printError(`Failed to stop system: ${error instanceof Error ? error.message : String(error)}`);
@@ -239,10 +239,10 @@ async function stopSpecificService(serviceName: string, options: any): Promise<v
 async function stopDaemon(context: CLIContext): Promise<void> {
   const { options } = context;
   
-  printInfo('Stopping Claude-Flow daemon...');
+  printInfo('Stopping flowx daemon...');
   
   try {
-    const pidData = await fs.readFile('.claude-flow.pid', 'utf8');
+    const pidData = await fs.readFile('.flowx.pid', 'utf8');
     const { pid } = JSON.parse(pidData);
     
     if (options.force) {
@@ -253,7 +253,7 @@ async function stopDaemon(context: CLIContext): Promise<void> {
     }
     
     // Remove PID file
-    await fs.unlink('.claude-flow.pid').catch(() => {});
+    await fs.unlink('.flowx.pid').catch(() => {});
     
     printSuccess('✓ Daemon stopped');
   } catch (error) {
@@ -411,7 +411,7 @@ interface ProcessInfo {
 async function getSystemStatus(): Promise<SystemStatus> {
   try {
     // Check if daemon is running
-    const pidData = await fs.readFile('.claude-flow.pid', 'utf8');
+    const pidData = await fs.readFile('.flowx.pid', 'utf8');
     const { pid, startTime } = JSON.parse(pidData);
     
     try {
@@ -427,7 +427,7 @@ async function getSystemStatus(): Promise<SystemStatus> {
       };
     } catch {
       // Process not found
-      await fs.unlink('.claude-flow.pid').catch(() => {});
+      await fs.unlink('.flowx.pid').catch(() => {});
       return {
         isRunning: false,
         services: [],
@@ -580,7 +580,7 @@ async function stopDaemonProcess(systemStatus: SystemStatus, options: any): Prom
       await waitForProcessExit(systemStatus.pid, 10000);
       
       // Remove PID file
-      await fs.unlink('.claude-flow.pid').catch(() => {});
+      await fs.unlink('.flowx.pid').catch(() => {});
       
       if (options.verbose) {
         printSuccess('✓ Daemon process stopped');
@@ -602,7 +602,7 @@ async function cleanupResources(options: any): Promise<void> {
   }
   
   // Clean up temporary files
-  const tempFiles = ['.claude-flow.pid', '.claude-flow.lock'];
+  const tempFiles = ['.flowx.pid', '.flowx.lock'];
   
   for (const file of tempFiles) {
     try {
@@ -616,7 +616,7 @@ async function cleanupResources(options: any): Promise<void> {
   }
   
   // Clean up temporary directories
-  const tempDirs = ['./tmp/claude-flow', './logs/temp'];
+  const tempDirs = ['./tmp/flowx', './logs/temp'];
   
   for (const dir of tempDirs) {
     try {
@@ -635,7 +635,7 @@ async function performCleanup(verbose: boolean): Promise<void> {
   
   try {
     // Remove PID files
-    await fs.unlink('.claude-flow.pid').catch(() => {});
+    await fs.unlink('.flowx.pid').catch(() => {});
     
     // Clean up log files older than 7 days
     await cleanupOldLogs(verbose);
@@ -659,9 +659,9 @@ async function forceCleanup(options: any): Promise<void> {
   
   // Force remove all Claude Flow files
   const forceRemoveFiles = [
-    '.claude-flow.pid',
-    '.claude-flow.lock',
-    '.claude-flow.socket'
+    '.flowx.pid',
+    '.flowx.lock',
+    '.flowx.socket'
   ];
   
   for (const file of forceRemoveFiles) {
@@ -674,7 +674,7 @@ async function forceCleanup(options: any): Promise<void> {
   
   // Kill any remaining processes
   try {
-    await exec('pkill -f claude-flow').catch(() => {});
+    await exec('pkill -f flowx').catch(() => {});
   } catch {
     // Ignore errors
   }
@@ -684,7 +684,7 @@ async function forceCleanup(options: any): Promise<void> {
 
 async function getAllClaudeFlowProcesses(): Promise<ProcessInfo[]> {
   try {
-    const { stdout } = await exec('ps aux | grep claude-flow | grep -v grep');
+    const { stdout } = await exec('ps aux | grep flowx | grep -v grep');
     const lines = stdout.trim().split('\n');
     
     return lines.map(line => {

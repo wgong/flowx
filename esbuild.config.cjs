@@ -1,4 +1,30 @@
 const { build } = require('esbuild');
+const fs = require('fs');
+const path = require('path');
+
+// Plugin to fix import extensions from .ts to .js
+const fixImportExtensionsPlugin = {
+  name: 'fix-import-extensions',
+  setup(build) {
+    build.onLoad({ filter: /\.ts$/ }, async (args) => {
+      const contents = await fs.promises.readFile(args.path, 'utf8');
+      
+      // Replace .ts imports with .js imports
+      const fixedContents = contents.replace(
+        /from\s+['"]([^'"]+)\.ts['"]/g,
+        'from "$1.js"'
+      ).replace(
+        /import\s+['"]([^'"]+)\.ts['"]/g,
+        'import "$1.js"'
+      );
+      
+      return {
+        contents: fixedContents,
+        loader: 'ts',
+      };
+    });
+  },
+};
 
 // Plugin to strip "npm:" prefixes
 const stripNpmPrefixPlugin = {
@@ -32,6 +58,25 @@ const makeAllPackagesExternalPlugin = {
   },
 };
 
+// Function to copy static files after build
+async function copyStaticFiles() {
+  const staticFiles = [
+    {
+      src: 'src/hive-mind/database/schema.sql',
+      dest: 'dist/schema.sql'
+    }
+  ];
+
+  for (const file of staticFiles) {
+    try {
+      await fs.promises.copyFile(file.src, file.dest);
+      console.log(`Copied ${file.src} to ${file.dest}`);
+    } catch (error) {
+      console.warn(`Warning: Could not copy ${file.src}:`, error.message);
+    }
+  }
+}
+
 
 (async () => {
   try {
@@ -42,7 +87,7 @@ const makeAllPackagesExternalPlugin = {
       platform: 'node',
       outfile: 'dist/main.js',
       format: 'esm',
-      plugins: [stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
       banner: {
         js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
       }
@@ -60,7 +105,7 @@ const makeAllPackagesExternalPlugin = {
       platform: 'node',
       outdir: 'dist/hive-mind',
       format: 'esm',
-      plugins: [stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
       banner: {
         js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
       }
@@ -73,7 +118,7 @@ const makeAllPackagesExternalPlugin = {
       platform: 'node',
       outdir: 'dist/hive-mind/core',
       format: 'esm',
-      plugins: [stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
       banner: {
         js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
       }
@@ -89,7 +134,7 @@ const makeAllPackagesExternalPlugin = {
       platform: 'node',
       outdir: 'dist/hive-mind/agents',
       format: 'esm',
-      plugins: [stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
       banner: {
         js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
       }
@@ -102,7 +147,7 @@ const makeAllPackagesExternalPlugin = {
       platform: 'node',
       outdir: 'dist/hive-mind/tasks',
       format: 'esm',
-      plugins: [stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
       banner: {
         js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
       }
@@ -115,7 +160,7 @@ const makeAllPackagesExternalPlugin = {
       platform: 'node',
       outdir: 'dist/hive-mind/database',
       format: 'esm',
-      plugins: [stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
       banner: {
         js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
       }
@@ -135,7 +180,7 @@ const makeAllPackagesExternalPlugin = {
       platform: 'node',
       outdir: 'dist/hive-mind/neural',
       format: 'esm',
-      plugins: [stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
       banner: {
         js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
       }
@@ -148,7 +193,7 @@ const makeAllPackagesExternalPlugin = {
       platform: 'node',
       outdir: 'dist/hive-mind/consensus',
       format: 'esm',
-      plugins: [stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
       banner: {
         js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
       }
@@ -161,7 +206,7 @@ const makeAllPackagesExternalPlugin = {
       platform: 'node',
       outdir: 'dist/hive-mind/utilities',
       format: 'esm',
-      plugins: [stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
       banner: {
         js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
       }
@@ -169,12 +214,12 @@ const makeAllPackagesExternalPlugin = {
     
     // Utils
     await build({
-      entryPoints: ['src/utils/helpers.ts', 'src/utils/types.ts'],
+      entryPoints: ['src/utils/helpers.ts', 'src/utils/types.ts', 'src/utils/errors.ts'],
       bundle: false,
       platform: 'node',
       outdir: 'dist/utils',
       format: 'esm',
-      plugins: [stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
       banner: {
         js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
       }
@@ -187,7 +232,69 @@ const makeAllPackagesExternalPlugin = {
       platform: 'node',
       outdir: 'dist/agents',
       format: 'esm',
-      plugins: [stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      banner: {
+        js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
+      }
+    });
+    
+    // Terminal
+    await build({
+      entryPoints: [
+        'src/terminal/manager.ts',
+        'src/terminal/session.ts',
+        'src/terminal/pool.ts',
+        'src/terminal/vscode-bridge.ts'
+      ],
+      bundle: false,
+      platform: 'node',
+      outdir: 'dist/terminal',
+      format: 'esm',
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      banner: {
+        js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
+      }
+    });
+    
+    // Memory
+    await build({
+      entryPoints: [
+        'src/memory/manager.ts',
+        'src/memory/cache.ts',
+        'src/memory/indexer.ts',
+        'src/memory/memory-vault.ts',
+        'src/memory/distributed-memory.ts',
+        'src/memory/swarm-memory.ts'
+      ],
+      bundle: false,
+      platform: 'node',
+      outdir: 'dist/memory',
+      format: 'esm',
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      banner: {
+        js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
+      }
+    });
+    
+    // MCP
+    await build({
+      entryPoints: [
+        'src/mcp/server.ts',
+        'src/mcp/client.ts',
+        'src/mcp/auth.ts',
+        'src/mcp/flowx-tools.ts',
+        'src/mcp/claude-flow-tools.ts',
+        'src/mcp/gemini-tools.ts',
+        'src/mcp/lifecycle-manager.ts',
+        'src/mcp/load-balancer.ts',
+        'src/mcp/enterprise-tools-registry.ts',
+        'src/mcp/index.ts'
+      ],
+      bundle: false,
+      platform: 'node',
+      outdir: 'dist/mcp',
+      format: 'esm',
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
       banner: {
         js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
       }
@@ -209,7 +316,7 @@ const makeAllPackagesExternalPlugin = {
       platform: 'node',
       outdir: 'dist/core',
       format: 'esm',
-      plugins: [stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
       banner: {
         js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
       }
@@ -229,11 +336,14 @@ const makeAllPackagesExternalPlugin = {
       platform: 'node',
       outdir: 'dist/coordination',
       format: 'esm',
-      plugins: [stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
       banner: {
         js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
       }
     });
+    
+    // Copy static files after build
+    await copyStaticFiles();
     
     console.log('Build finished successfully!');
   } catch (e) {

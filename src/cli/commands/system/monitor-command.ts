@@ -14,13 +14,13 @@ export const monitorCommand: CLICommand = {
   name: 'monitor',
   description: 'Real-time system monitoring and performance tracking',
   category: 'System',
-  usage: 'claude-flow monitor [component] [OPTIONS]',
+  usage: 'flowx monitor [component] [OPTIONS]',
   examples: [
-    'claude-flow monitor',
-    'claude-flow monitor system',
-    'claude-flow monitor agents',
-    'claude-flow monitor --watch',
-    'claude-flow monitor memory --detailed'
+    'flowx monitor',
+    'flowx monitor system',
+    'flowx monitor agents',
+    'flowx monitor --watch',
+    'flowx monitor memory --detailed'
   ],
   options: [
     {
@@ -374,7 +374,7 @@ async function getSystemMetrics(): Promise<any> {
     }
     
     // Get network stats
-    let networkMetrics = { bytesIn: 0, bytesOut: 0, packetsIn: 0, packetsOut: 0 };
+    const networkMetrics = { bytesIn: 0, bytesOut: 0, packetsIn: 0, packetsOut: 0 };
     try {
       if (process.platform === 'darwin') {
         const netstatOutput = execSync('netstat -ibn | grep -E "en[0-9]" | head -1', { encoding: 'utf8' });
@@ -610,7 +610,7 @@ function parseSystemLogEntry(logLine: string): any {
   const timestamp = new Date();
   let level = 'info';
   let component = 'system';
-  let message = logLine;
+  const message = logLine;
   
   // Try to extract log level
   if (logLine.includes('ERROR') || logLine.includes('error')) {
@@ -622,8 +622,8 @@ function parseSystemLogEntry(logLine: string): any {
   }
   
   // Try to extract component
-  if (logLine.includes('claude-flow')) {
-    component = 'claude-flow';
+  if (logLine.includes('flowx')) {
+    component = 'flowx';
   } else if (logLine.includes('node')) {
     component = 'node';
   }

@@ -1,985 +1,1108 @@
 /**
- * Advanced load balancing and work stealing implementation
+ * Load balancer for intelligent agent selection with predictive modeling
+ * Handles multiple load balancing strategies with adaptive thresholds
  */
 
 import { EventEmitter } from 'node:events';
+import { TaskDefinition, TaskResult, AgentState, TaskId, AgentId } from "../swarm/types.ts";
 import { ILogger } from "../core/logger.ts";
 import { IEventBus } from "../core/event-bus.ts";
-import { 
-  AgentId, 
-  AgentState, 
-  TaskDefinition, 
-  TaskId,
-  LoadBalancingStrategy 
-} from "../swarm/types.ts";
-import { WorkStealingCoordinator } from "./work-stealing.ts";
+import { generateId } from "../utils/helpers.ts";
 
 export interface LoadBalancerConfig {
   strategy: LoadBalancingStrategy;
-  enableWorkStealing: boolean;
-  stealThreshold: number;
-  maxStealBatch: number;
-  rebalanceInterval: number;
-  loadSamplingInterval: number;
-  affinityWeight: number;
-  performanceWeight: number;
-  loadWeight: number;
-  latencyWeight: number;
-  queueDepthThreshold: number;
   adaptiveThresholds: boolean;
-  predictiveEnabled: boolean;
-  debugMode: boolean;
+  predictiveModeling: boolean;
+  healthCheckInterval: number;
+  rebalanceInterval: number;
+  maxLoadThreshold: number;
+  minLoadThreshold: number;
+  responseTimeThreshold: number;
+  errorRateThreshold: number;
+  capacityBuffer: number;
+  learningRate: number;
+  predictionWindow: number;
+  enableMetrics: boolean;
 }
+
+export type LoadBalancingStrategy = 
+  | 'round-robin'
+  | 'least-connections'
+  | 'least-loaded'
+  | 'weighted-round-robin'
+  | 'performance-based'
+  | 'cost-based'
+  | 'hybrid'
+  | 'predictive'
+  | 'adaptive';
 
 export interface AgentLoad {
   agentId: string;
-  queueDepth: number;
-  cpuUsage: number;
-  memoryUsage: number;
-  taskCount: number;
+  currentLoad: number;
+  maxCapacity: number;
+  utilization: number;
+  activeConnections: number;
+  queueLength: number;
   averageResponseTime: number;
+  errorRate: number;
   throughput: number;
   lastUpdated: Date;
-  capacity: number;
-  utilization: number;
-  efficiency: number;
-  affinityScore: number;
-}
-
-export interface LoadBalancingDecision {
-  selectedAgent: AgentId;
-  reason: string;
-  confidence: number;
-  alternatives: Array<{
-    agent: AgentId;
-    score: number;
-    reason: string;
-  }>;
-  loadBefore: Record<string, number>;
-  predictedLoadAfter: Record<string, number>;
-  timestamp: Date;
-}
-
-export interface WorkStealingOperation {
-  id: string;
-  sourceAgent: AgentId;
-  targetAgent: AgentId;
-  tasks: TaskId[];
-  reason: string;
-  status: 'planned' | 'executing' | 'completed' | 'failed';
-  startTime: Date;
-  endTime?: Date;
-  metrics: {
-    tasksStolen: number;
-    loadReduction: number;
-    latencyImprovement: number;
-  };
 }
 
 export interface LoadPrediction {
   agentId: string;
-  currentLoad: number;
   predictedLoad: number;
   confidence: number;
-  timeHorizon: number;
-  factors: Record<string, number>;
+  timeWindow: number;
+  factors: PredictionFactor[];
+  timestamp: Date;
 }
 
-/**
- * Advanced load balancing system with work stealing and predictive capabilities
- */
+export interface PredictionFactor {
+  name: string;
+  weight: number;
+  value: number;
+  trend: 'increasing' | 'decreasing' | 'stable';
+}
+
+export interface LoadBalancingDecision {
+  selectedAgent: string;
+  strategy: LoadBalancingStrategy;
+  confidence: number;
+  reasoning: string;
+  alternatives: AlternativeAgent[];
+  timestamp: Date;
+}
+
+export interface AlternativeAgent {
+  agentId: string;
+  score: number;
+  reason: string;
+}
+
+export interface LoadBalancerMetrics {
+  totalRequests: number;
+  successfulAssignments: number;
+  failedAssignments: number;
+  averageResponseTime: number;
+  throughput: number;
+  loadDistribution: Map<string, number>;
+  strategyEffectiveness: Map<LoadBalancingStrategy, number>;
+  predictionAccuracy: number;
+  rebalanceCount: number;
+  adaptationCount: number;
+}
+
+export interface AgentPerformanceHistory {
+  agentId: string;
+  timestamps: Date[];
+  loads: number[];
+  responseTimes: number[];
+  errorRates: number[];
+  throughputs: number[];
+  maxHistory: number;
+}
+
+export interface LoadBalancingRule {
+  id: string;
+  name: string;
+  condition: string;
+  action: LoadBalancingAction;
+  priority: number;
+  enabled: boolean;
+  metadata: Record<string, any>;
+}
+
+export interface LoadBalancingAction {
+  type: 'redirect' | 'scale' | 'throttle' | 'alert' | 'switch-strategy';
+  parameters: Record<string, any>;
+}
+
 export class LoadBalancer extends EventEmitter {
-  private logger: ILogger;
-  private eventBus: IEventBus;
-  private config: LoadBalancerConfig;
-  private workStealer: WorkStealingCoordinator;
-
-  // Load tracking
-  private agentLoads = new Map<string, AgentLoad>();
-  private loadHistory = new Map<string, Array<{ timestamp: Date; load: number }>>();
-  private taskQueues = new Map<string, TaskDefinition[]>();
-
-  // Monitoring and statistics
-  private loadSamplingInterval?: NodeJS.Timeout | number;
-  private rebalanceInterval?: NodeJS.Timeout | number;
-  private decisions: LoadBalancingDecision[] = [];
-  private stealOperations = new Map<string, WorkStealingOperation>();
-
-  // Predictive modeling
-  private loadPredictors = new Map<string, LoadPredictor>();
-  private performanceBaselines = new Map<string, PerformanceBaseline>();
+  private agents = new Map<string, AgentLoad>();
+  private performanceHistory = new Map<string, AgentPerformanceHistory>();
+  private predictions = new Map<string, LoadPrediction>();
+  private rules: LoadBalancingRule[] = [];
+  private metrics: LoadBalancerMetrics;
+  private healthCheckTimer?: NodeJS.Timeout;
+  private rebalanceTimer?: NodeJS.Timeout;
+  private predictionTimer?: NodeJS.Timeout;
+  private currentStrategy: LoadBalancingStrategy;
+  private roundRobinIndex = 0;
+  private isShuttingDown = false;
 
   constructor(
-    config: Partial<LoadBalancerConfig>,
-    logger: ILogger,
-    eventBus: IEventBus
+    private config: LoadBalancerConfig,
+    private logger: ILogger,
+    private eventBus: IEventBus
   ) {
     super();
-    this.logger = logger;
-    this.eventBus = eventBus;
-
-    this.config = {
-      strategy: 'distributed' as LoadBalancingStrategy,
-      enableWorkStealing: true,
-      stealThreshold: 3,
-      maxStealBatch: 5,
-      rebalanceInterval: 10000,
-      loadSamplingInterval: 5000,
-      affinityWeight: 0.3,
-      performanceWeight: 0.3,
-      loadWeight: 0.25,
-      latencyWeight: 0.15,
-      queueDepthThreshold: 10,
-      adaptiveThresholds: true,
-      predictiveEnabled: true,
-      debugMode: false,
-      ...config
-    };
-
-    this.workStealer = new WorkStealingCoordinator(
-      {
-        enabled: this.config.enableWorkStealing,
-        stealThreshold: this.config.stealThreshold,
-        maxStealBatch: this.config.maxStealBatch,
-        stealInterval: this.config.rebalanceInterval
-      },
-      this.eventBus,
-      this.logger
-    );
-
+    this.currentStrategy = config.strategy;
+    this.metrics = this.initializeMetrics();
     this.setupEventHandlers();
   }
 
+  private initializeMetrics(): LoadBalancerMetrics {
+    return {
+      totalRequests: 0,
+      successfulAssignments: 0,
+      failedAssignments: 0,
+      averageResponseTime: 0,
+      throughput: 0,
+      loadDistribution: new Map(),
+      strategyEffectiveness: new Map(),
+      predictionAccuracy: 0,
+      rebalanceCount: 0,
+      adaptationCount: 0
+    };
+  }
+
   private setupEventHandlers(): void {
-    this.eventBus.on('agent:load-update', (data: any) => {
-      this.updateAgentLoad(data?.agentId, data?.load);
-    });
-
-    this.eventBus.on('task:queued', (data: any) => {
-      this.updateTaskQueue(data?.agentId, data?.task, 'add');
-    });
-
-    this.eventBus.on('task:started', (data: any) => {
-      this.updateTaskQueue(data?.agentId, data?.task, 'remove');
-    });
-
-    this.eventBus.on('workstealing:request', (data: any) => {
-      this.executeWorkStealing(data?.sourceAgent, data?.targetAgent, data?.taskCount);
-    });
-
-    this.eventBus.on('agent:performance-update', (data: any) => {
-      this.updatePerformanceBaseline(data?.agentId, data?.metrics);
-    });
+    this.eventBus.on('system:shutdown', () => this.shutdown());
+    this.eventBus.on('agent:registered', (agent: AgentState) => this.registerAgent(agent));
+    this.eventBus.on('agent:unregistered', (agentId: string) => this.unregisterAgent(agentId));
+    this.eventBus.on('agent:updated', (agent: AgentState) => this.updateAgent(agent));
+    this.eventBus.on('task:completed', (result: TaskResult) => this.handleTaskCompletion(result));
+    this.eventBus.on('task:failed', (error: any) => this.handleTaskFailure(error));
   }
 
   async initialize(): Promise<void> {
-    this.logger.info('Initializing load balancer', {
-      strategy: this.config.strategy,
-      workStealing: this.config.enableWorkStealing,
-      predictive: this.config.predictiveEnabled
-    });
+    this.logger.info('Initializing LoadBalancer');
 
-    // Initialize work stealer
-    await this.workStealer.initialize();
+    // Start health checks
+    if (this.config.healthCheckInterval > 0) {
+      this.healthCheckTimer = setInterval(
+        () => this.performHealthCheck(),
+        this.config.healthCheckInterval
+      );
+    }
 
-    // Start monitoring
-    this.startLoadSampling();
-    this.startRebalancing();
+    // Start rebalancing
+    if (this.config.rebalanceInterval > 0) {
+      this.rebalanceTimer = setInterval(
+        () => this.performRebalancing(),
+        this.config.rebalanceInterval
+      );
+    }
 
-    this.emit('loadbalancer:initialized');
+    // Start prediction updates
+    if (this.config.predictiveModeling) {
+      this.predictionTimer = setInterval(
+        () => this.updatePredictions(),
+        this.config.predictionWindow
+      );
+    }
+
+    this.logger.info('LoadBalancer initialized successfully');
   }
 
   async shutdown(): Promise<void> {
-    this.logger.info('Shutting down load balancer');
+    this.logger.info('Shutting down LoadBalancer');
+    this.isShuttingDown = true;
 
-    // Stop monitoring
-    if (this.loadSamplingInterval) clearInterval(this.loadSamplingInterval as any);
-    if (this.rebalanceInterval) clearInterval(this.rebalanceInterval as any);
+    // Clear timers
+    if (this.healthCheckTimer) clearInterval(this.healthCheckTimer);
+    if (this.rebalanceTimer) clearInterval(this.rebalanceTimer);
+    if (this.predictionTimer) clearInterval(this.predictionTimer);
 
-    // Shutdown work stealer
-    await this.workStealer.shutdown();
-
-    this.emit('loadbalancer:shutdown');
+    this.logger.info('LoadBalancer shutdown complete');
   }
 
-  // === AGENT SELECTION ===
-
-  async selectAgent(
-    task: TaskDefinition,
-    availableAgents: AgentState[],
-    constraints?: {
-      excludeAgents?: AgentId[];
-      preferredAgents?: AgentId[];
-      maxLoad?: number;
-      requireCapabilities?: string[];
+  /**
+   * Select the best agent for a task using the configured strategy
+   */
+  async selectAgent(task: TaskDefinition): Promise<LoadBalancingDecision> {
+    if (this.isShuttingDown) {
+      throw new Error('LoadBalancer is shutting down');
     }
-  ): Promise<LoadBalancingDecision> {
-    const startTime = Date.now();
+
+    this.metrics.totalRequests++;
 
     try {
-      // Filter agents based on constraints
-      let candidates = this.filterAgentsByConstraints(availableAgents, task, constraints);
+      const decision = await this.makeLoadBalancingDecision(task);
       
-      if (candidates.length === 0) {
-        throw new Error('No suitable agents available for task');
+      if (decision.selectedAgent) {
+        this.updateAgentLoad(decision.selectedAgent, 1);
+        this.metrics.successfulAssignments++;
+        
+        this.logger.info('Agent selected for task', {
+          taskId: task.id.id,
+          selectedAgent: decision.selectedAgent,
+          strategy: decision.strategy,
+          confidence: decision.confidence
+        });
+
+        this.emit('agent:selected', decision);
+      } else {
+        this.metrics.failedAssignments++;
+        this.logger.warn('No agent could be selected for task', { taskId: task.id.id });
       }
-
-      // Apply selection strategy
-      const decision = await this.applySelectionStrategy(task, candidates);
-
-      // Record decision
-      this.decisions.push(decision);
-      
-      // Keep only last 1000 decisions
-      if (this.decisions.length > 1000) {
-        this.decisions.shift();
-      }
-
-      const selectionTime = Date.now() - startTime;
-      this.logger.debug('Agent selected', {
-        taskId: task.id.id,
-        selectedAgent: decision.selectedAgent.id,
-        reason: decision.reason,
-        confidence: decision.confidence,
-        selectionTime
-      });
-
-      this.emit('agent:selected', { task, decision, selectionTime });
 
       return decision;
 
     } catch (error) {
+      this.metrics.failedAssignments++;
       this.logger.error('Agent selection failed', { taskId: task.id.id, error });
       throw error;
     }
   }
 
-  private filterAgentsByConstraints(
-    agents: AgentState[],
-    task: TaskDefinition,
-    constraints?: {
-      excludeAgents?: AgentId[];
-      preferredAgents?: AgentId[];
-      maxLoad?: number;
-      requireCapabilities?: string[];
-    }
-  ): AgentState[] {
-    return agents.filter(agent => {
-      // Exclude specific agents
-      if (constraints?.excludeAgents?.some(excluded => excluded.id === agent.id.id)) {
-        return false;
-      }
+  /**
+   * Register a new agent with the load balancer
+   */
+  registerAgent(agent: AgentState): void {
+    const agentLoad: AgentLoad = {
+      agentId: agent.id.id,
+      currentLoad: 0,
+      maxCapacity: agent.capabilities.maxConcurrentTasks || 10,
+      utilization: 0,
+      activeConnections: 0,
+      queueLength: 0,
+      averageResponseTime: 0,
+      errorRate: 0,
+      throughput: 0,
+      lastUpdated: new Date()
+    };
 
-      // Check maximum load
-      const load = this.agentLoads.get(agent.id.id);
-      if (constraints?.maxLoad && load && load.utilization > constraints.maxLoad) {
-        return false;
-      }
+    this.agents.set(agent.id.id, agentLoad);
+    this.initializePerformanceHistory(agent.id.id);
 
-      // Check required capabilities
-      if (constraints?.requireCapabilities) {
-        const hasAllCapabilities = constraints.requireCapabilities.every(cap =>
-          agent.capabilities.domains.includes(cap) ||
-          agent.capabilities.tools.includes(cap) ||
-          agent.capabilities.languages.includes(cap)
-        );
-        if (!hasAllCapabilities) {
-          return false;
-        }
-      }
-
-      // Check task type compatibility
-      if (!this.isAgentCompatible(agent, task)) {
-        return false;
-      }
-
-      return true;
-    });
+    this.logger.info('Agent registered with load balancer', { agentId: agent.id.id });
+    this.emit('agent:registered', agentLoad);
   }
 
-  private async applySelectionStrategy(
-    task: TaskDefinition,
-    candidates: AgentState[]
-  ): Promise<LoadBalancingDecision> {
-    const scores = new Map<string, number>();
-    const reasons = new Map<string, string>();
-    const loadBefore: Record<string, number> = {};
-    const predictedLoadAfter: Record<string, number> = {};
+  /**
+   * Unregister an agent from the load balancer
+   */
+  unregisterAgent(agentId: string): void {
+    this.agents.delete(agentId);
+    this.performanceHistory.delete(agentId);
+    this.predictions.delete(agentId);
 
-    // Calculate scores for each candidate
-    for (const agent of candidates) {
-      const agentId = agent.id.id;
-      const load = this.agentLoads.get(agentId) || this.createDefaultLoad(agentId);
-      
-      loadBefore[agentId] = load.utilization;
+    this.logger.info('Agent unregistered from load balancer', { agentId });
+    this.emit('agent:unregistered', { agentId });
+  }
 
-      let score = 0;
-      const scoreComponents: string[] = [];
-
-      switch (this.config.strategy) {
-        case 'work-stealing':
-          score = this.calculateLoadScore(agent, load);
-          scoreComponents.push(`load:${score.toFixed(2)}`);
-          break;
-
-        case 'work-sharing':
-          score = this.calculatePerformanceScore(agent, load);
-          scoreComponents.push(`perf:${score.toFixed(2)}`);
-          break;
-
-        case 'centralized':
-          score = this.calculateCapabilityScore(agent, task);
-          scoreComponents.push(`cap:${score.toFixed(2)}`);
-          break;
-
-        case 'distributed':
-          score = this.calculateAffinityScore(agent, task);
-          scoreComponents.push(`affinity:${score.toFixed(2)}`);
-          break;
-
-        case 'predictive':
-          score = this.calculateCostScore(agent, task);
-          scoreComponents.push(`cost:${score.toFixed(2)}`);
-          break;
-
-        case 'reactive':
-          score = this.calculateHybridScore(agent, task, load);
-          scoreComponents.push(`hybrid:${score.toFixed(2)}`);
-          break;
-
-        default:
-          score = Math.random(); // Random fallback
-          scoreComponents.push(`random:${score.toFixed(2)}`);
-      }
-
-      // Apply predictive modeling if enabled
-      if (this.config.predictiveEnabled) {
-        const prediction = this.predictLoad(agentId, task);
-        const predictiveScore = this.calculatePredictiveScore(prediction);
-        score = score * 0.7 + predictiveScore * 0.3;
-        predictedLoadAfter[agentId] = prediction.predictedLoad;
-        scoreComponents.push(`pred:${predictiveScore.toFixed(2)}`);
-      } else {
-        predictedLoadAfter[agentId] = load.utilization + 0.1; // Simple estimate
-      }
-
-      scores.set(agentId, score);
-      reasons.set(agentId, scoreComponents.join(','));
+  /**
+   * Update agent information
+   */
+  updateAgent(agent: AgentState): void {
+    const existingLoad = this.agents.get(agent.id.id);
+    if (existingLoad) {
+      existingLoad.maxCapacity = agent.capabilities.maxConcurrentTasks || 10;
+      existingLoad.lastUpdated = new Date();
+      this.updateUtilization(existingLoad);
     }
+  }
 
-    // Select agent with highest score
-    const sortedCandidates = candidates.sort((a, b) => {
-      const scoreA = scores.get(a.id.id) || 0;
-      const scoreB = scores.get(b.id.id) || 0;
-      return scoreB - scoreA;
+  /**
+   * Get current metrics
+   */
+  getMetrics(): LoadBalancerMetrics {
+    this.updateMetrics();
+    return { ...this.metrics };
+  }
+
+  /**
+   * Get agent load information
+   */
+  getAgentLoad(agentId: string): AgentLoad | undefined {
+    return this.agents.get(agentId);
+  }
+
+  /**
+   * Get all agent loads
+   */
+  getAllAgentLoads(): AgentLoad[] {
+    return Array.from(this.agents.values());
+  }
+
+  /**
+   * Switch load balancing strategy
+   */
+  switchStrategy(strategy: LoadBalancingStrategy): void {
+    const oldStrategy = this.currentStrategy;
+    this.currentStrategy = strategy;
+    this.metrics.adaptationCount++;
+
+    this.logger.info('Load balancing strategy changed', {
+      from: oldStrategy,
+      to: strategy
     });
 
-    const selectedAgent = sortedCandidates[0];
-    const selectedScore = scores.get(selectedAgent.id.id) || 0;
-    const selectedReason = reasons.get(selectedAgent.id.id) || 'unknown';
+    this.emit('strategy:changed', { from: oldStrategy, to: strategy });
+  }
 
-    // Build alternatives list
-    const alternatives = sortedCandidates.slice(1, 4).map(agent => ({
-      agent: agent.id,
-      score: scores.get(agent.id.id) || 0,
-      reason: reasons.get(agent.id.id) || 'unknown'
-    }));
+  /**
+   * Add a load balancing rule
+   */
+  addRule(rule: LoadBalancingRule): void {
+    this.rules.push(rule);
+    this.rules.sort((a, b) => b.priority - a.priority);
 
-    // Calculate confidence based on score gap
-    const secondBestScore = alternatives.length > 0 ? alternatives[0].score : 0;
-    const confidence = Math.min(1, (selectedScore - secondBestScore) + 0.5);
+    this.logger.info('Load balancing rule added', { ruleId: rule.id, name: rule.name });
+  }
+
+  /**
+   * Remove a load balancing rule
+   */
+  removeRule(ruleId: string): boolean {
+    const index = this.rules.findIndex(rule => rule.id === ruleId);
+    if (index > -1) {
+      this.rules.splice(index, 1);
+      this.logger.info('Load balancing rule removed', { ruleId });
+      return true;
+    }
+    return false;
+  }
+
+  // Private methods for load balancing decision making
+  private async makeLoadBalancingDecision(task: TaskDefinition): Promise<LoadBalancingDecision> {
+    // Check rules first
+    const ruleDecision = this.applyRules(task);
+    if (ruleDecision) {
+      return ruleDecision;
+    }
+
+    // Get available agents
+    const availableAgents = this.getAvailableAgents(task);
+    
+    if (availableAgents.length === 0) {
+      return {
+        selectedAgent: '',
+        strategy: this.currentStrategy,
+        confidence: 0,
+        reasoning: 'No available agents found',
+        alternatives: [],
+        timestamp: new Date()
+      };
+    }
+
+    // Select strategy
+    const strategy = this.config.adaptiveThresholds ? 
+      this.adaptiveStrategySelection(task) : 
+      this.currentStrategy;
+
+    // Apply strategy
+    let selectedAgent: string;
+    let confidence: number;
+    let reasoning: string;
+    let alternatives: AlternativeAgent[] = [];
+
+    switch (strategy) {
+      case 'round-robin':
+        ({ selectedAgent, confidence, reasoning, alternatives } = this.roundRobinSelection(task));
+        break;
+      case 'least-connections':
+        ({ selectedAgent, confidence, reasoning, alternatives } = this.leastConnectionsSelection(task));
+        break;
+      case 'least-loaded':
+        ({ selectedAgent, confidence, reasoning, alternatives } = this.leastLoadedSelection(task));
+        break;
+      case 'weighted-round-robin':
+        ({ selectedAgent, confidence, reasoning, alternatives } = this.weightedRoundRobinSelection(task));
+        break;
+      case 'performance-based':
+        ({ selectedAgent, confidence, reasoning, alternatives } = this.performanceBasedSelection(task));
+        break;
+      case 'cost-based':
+        ({ selectedAgent, confidence, reasoning, alternatives } = this.costBasedSelection(task));
+        break;
+      case 'hybrid':
+        ({ selectedAgent, confidence, reasoning, alternatives } = this.hybridSelection(task));
+        break;
+      case 'predictive':
+        ({ selectedAgent, confidence, reasoning, alternatives } = this.predictiveSelection(task));
+        break;
+      case 'adaptive':
+        ({ selectedAgent, confidence, reasoning, alternatives } = this.adaptiveSelection(task));
+        break;
+      default:
+        ({ selectedAgent, confidence, reasoning, alternatives } = this.roundRobinSelection(task));
+    }
 
     return {
-      selectedAgent: selectedAgent.id,
-      reason: selectedReason,
+      selectedAgent,
+      strategy,
       confidence,
+      reasoning,
       alternatives,
-      loadBefore,
-      predictedLoadAfter,
       timestamp: new Date()
     };
   }
 
-  // === SCORING ALGORITHMS ===
-
-  private calculateLoadScore(agent: AgentState, load: AgentLoad): number {
-    // Higher score for lower load (inverted)
-    return 1 - load.utilization;
+  private selectStrategy(task: TaskDefinition): LoadBalancingStrategy {
+    // Simple strategy selection based on task characteristics
+    // In a real implementation, this would be more sophisticated
+    return this.currentStrategy;
   }
 
-  private calculatePerformanceScore(agent: AgentState, load: AgentLoad): number {
-    const baseline = this.performanceBaselines.get(agent.id.id);
-    if (!baseline) return 0.5;
-
-    // Combine throughput, efficiency, and response time
-    const throughputScore = Math.min(1, load.throughput / baseline.expectedThroughput);
-    const efficiencyScore = load.efficiency;
-    const responseScore = Math.min(1, baseline.expectedResponseTime / load.averageResponseTime);
-
-    return (throughputScore + efficiencyScore + responseScore) / 3;
-  }
-
-  private calculateCapabilityScore(agent: AgentState, task: TaskDefinition): number {
-    let score = 0;
-    let totalChecks = 0;
-
-    // Check language compatibility
-    if (task.requirements.capabilities.includes('coding')) {
-      const hasLanguage = agent.capabilities.languages.some(lang =>
-        task.context.language === lang
-      );
-      score += hasLanguage ? 1 : 0;
-      totalChecks++;
-    }
-
-    // Check framework compatibility
-    if (task.context.framework) {
-      const hasFramework = agent.capabilities.frameworks.includes(task.context.framework);
-      score += hasFramework ? 1 : 0;
-      totalChecks++;
-    }
-
-    // Check domain expertise
-    const domainMatch = agent.capabilities.domains.some(domain =>
-      task.type.includes(domain) || task.requirements.capabilities.includes(domain)
-    );
-    score += domainMatch ? 1 : 0;
-    totalChecks++;
-
-    // Check required tools
-    const hasTools = task.requirements.tools.every(tool =>
-      agent.capabilities.tools.includes(tool)
-    );
-    score += hasTools ? 1 : 0;
-    totalChecks++;
-
-    return totalChecks > 0 ? score / totalChecks : 0;
-  }
-
-  private calculateAffinityScore(agent: AgentState, task: TaskDefinition): number {
-    const load = this.agentLoads.get(agent.id.id);
-    if (!load) return 0;
-
-    return load.affinityScore || 0.5;
-  }
-
-  private calculateCostScore(agent: AgentState, task: TaskDefinition): number {
-    // Simple cost model - could be enhanced
-    const baseCost = 1.0;
-    const performanceFactor = agent.capabilities.speed;
-    const reliabilityFactor = agent.capabilities.reliability;
-
-    const cost = baseCost / (performanceFactor * reliabilityFactor);
-    return Math.max(0, 1 - (cost / 2)); // Normalize and invert
-  }
-
-  private calculateHybridScore(agent: AgentState, task: TaskDefinition, load: AgentLoad): number {
-    const loadScore = this.calculateLoadScore(agent, load);
-    const performanceScore = this.calculatePerformanceScore(agent, load);
-    const capabilityScore = this.calculateCapabilityScore(agent, task);
-    const affinityScore = this.calculateAffinityScore(agent, task);
-
-    return (
-      loadScore * this.config.loadWeight +
-      performanceScore * this.config.performanceWeight +
-      capabilityScore * this.config.affinityWeight +
-      affinityScore * this.config.latencyWeight
-    );
-  }
-
-  private calculatePredictiveScore(prediction: LoadPrediction): number {
-    // Higher score for lower predicted load
-    const loadScore = 1 - prediction.predictedLoad;
-    const confidenceBonus = prediction.confidence * 0.2;
-    return Math.min(1, loadScore + confidenceBonus);
-  }
-
-  // === WORK STEALING ===
-
-  private async executeWorkStealing(
-    sourceAgentId: string,
-    targetAgentId: string,
-    taskCount: number
-  ): Promise<void> {
-    const operationId = `steal-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  private roundRobinSelection(task: TaskDefinition): any {
+    const availableAgents = this.getAvailableAgents(task);
     
-    const operation: WorkStealingOperation = {
-      id: operationId,
-      sourceAgent: { id: sourceAgentId, swarmId: 'default', type: 'coordinator', instance: 1 },
-      targetAgent: { id: targetAgentId, swarmId: 'default', type: 'coordinator', instance: 1 },
-      tasks: [],
-      reason: 'load_imbalance',
-      status: 'planned',
-      startTime: new Date(),
-      metrics: {
-        tasksStolen: 0,
-        loadReduction: 0,
-        latencyImprovement: 0
-      }
-    };
-
-    this.stealOperations.set(operationId, operation);
-
-    try {
-      operation.status = 'executing';
-
-      // Get source queue
-      const sourceQueue = this.taskQueues.get(sourceAgentId) || [];
-      if (sourceQueue.length === 0) {
-        throw new Error('Source agent has no tasks to steal');
-      }
-
-      // Select tasks to steal (lowest priority first)
-      const tasksToSteal = sourceQueue
-        .sort((a, b) => a.priority === b.priority ? 0 : (a.priority === 'low' ? -1 : 1))
-        .slice(0, Math.min(taskCount, this.config.maxStealBatch));
-
-      // Remove tasks from source
-      for (const task of tasksToSteal) {
-        this.updateTaskQueue(sourceAgentId, task, 'remove');
-        this.updateTaskQueue(targetAgentId, task, 'add');
-        operation.tasks.push(task.id);
-      }
-
-      // Update metrics
-      operation.metrics.tasksStolen = tasksToSteal.length;
-      operation.metrics.loadReduction = this.calculateLoadReduction(sourceAgentId, tasksToSteal.length);
-      operation.status = 'completed';
-      operation.endTime = new Date();
-
-      this.logger.info('Work stealing completed', {
-        operationId,
-        sourceAgent: sourceAgentId,
-        targetAgent: targetAgentId,
-        tasksStolen: operation.metrics.tasksStolen
-      });
-
-      this.emit('workstealing:completed', { operation });
-
-    } catch (error) {
-      operation.status = 'failed';
-      operation.endTime = new Date();
-      
-      this.logger.error('Work stealing failed', {
-        operationId,
-        sourceAgent: sourceAgentId,
-        targetAgent: targetAgentId,
-        error
-      });
-
-      this.emit('workstealing:failed', { operation, error });
-    }
-  }
-
-  // === LOAD MONITORING ===
-
-  private startLoadSampling(): void {
-    this.loadSamplingInterval = setInterval(() => {
-      this.sampleAgentLoads();
-    }, this.config.loadSamplingInterval);
-
-    this.logger.info('Started load sampling', { 
-      interval: this.config.loadSamplingInterval 
-    });
-  }
-
-  private startRebalancing(): void {
-    this.rebalanceInterval = setInterval(() => {
-      this.performRebalancing();
-    }, this.config.rebalanceInterval);
-
-    this.logger.info('Started rebalancing', { 
-      interval: this.config.rebalanceInterval 
-    });
-  }
-
-  private async sampleAgentLoads(): Promise<void> {
-    // Sample current loads from all agents
-    for (const [agentId, load] of this.agentLoads) {
-      // Update load history
-      const history = this.loadHistory.get(agentId) || [];
-      history.push({ timestamp: new Date(), load: load.utilization });
-      
-      // Keep only last 100 samples
-      if (history.length > 100) {
-        history.shift();
-      }
-      
-      this.loadHistory.set(agentId, history);
-
-      // Update predictive models
-      if (this.config.predictiveEnabled) {
-        this.updateLoadPredictor(agentId, load);
-      }
-    }
-  }
-
-  private async performRebalancing(): Promise<void> {
-    if (!this.config.enableWorkStealing) return;
-
-    try {
-      // Find overloaded and underloaded agents
-      const loads = Array.from(this.agentLoads.entries());
-      const overloaded = loads.filter(([_, load]) => 
-        load.utilization > 0.8 && load.queueDepth > this.config.queueDepthThreshold
-      );
-      const underloaded = loads.filter(([_, load]) => 
-        load.utilization < 0.3 && load.queueDepth < 2
-      );
-
-      if (overloaded.length === 0 || underloaded.length === 0) {
-        return; // No rebalancing needed
-      }
-
-      // Perform work stealing
-      for (const [overloadedId, overloadedLoad] of overloaded) {
-        // Find best underloaded target
-        const target = underloaded
-          .sort((a, b) => a[1].utilization - b[1].utilization)[0];
-        
-        if (target) {
-          const [targetId] = target;
-          const tasksToSteal = Math.min(
-            Math.floor((overloadedLoad.queueDepth - targetId.length) / 2),
-            this.config.maxStealBatch
-          );
-
-          if (tasksToSteal > 0) {
-            await this.executeWorkStealing(overloadedId, targetId, tasksToSteal);
-          }
-        }
-      }
-
-    } catch (error) {
-      this.logger.error('Rebalancing failed', error);
-    }
-  }
-
-  // === PREDICTIVE MODELING ===
-
-  private predictLoad(agentId: string, task: TaskDefinition): LoadPrediction {
-    const predictor = this.loadPredictors.get(agentId);
-    const currentLoad = this.agentLoads.get(agentId)?.utilization || 0;
-
-    if (!predictor) {
-      // Simple fallback prediction
+    if (availableAgents.length === 0) {
       return {
-        agentId,
-        currentLoad,
-        predictedLoad: Math.min(1, currentLoad + 0.1),
-        confidence: 0.5,
-        timeHorizon: 60000, // 1 minute
-        factors: { task_complexity: 0.1 }
+        selectedAgent: '',
+        confidence: 0,
+        reasoning: 'No available agents',
+        alternatives: []
       };
     }
 
-    return predictor.predict(task);
+    this.roundRobinIndex = (this.roundRobinIndex + 1) % availableAgents.length;
+    const selected = availableAgents[this.roundRobinIndex];
+
+    const alternatives = availableAgents
+      .filter(agent => agent.agentId !== selected.agentId)
+      .slice(0, 3)
+      .map(agent => ({
+        agentId: agent.agentId,
+        score: 1 - agent.utilization,
+        reason: `Utilization: ${(agent.utilization * 100).toFixed(1)}%`
+      }));
+
+    return {
+      selectedAgent: selected.agentId,
+      confidence: 0.8,
+      reasoning: `Round-robin selection (index: ${this.roundRobinIndex})`,
+      alternatives
+    };
   }
 
-  private updateLoadPredictor(agentId: string, load: AgentLoad): void {
-    let predictor = this.loadPredictors.get(agentId);
-    if (!predictor) {
-      predictor = new LoadPredictor(agentId);
-      this.loadPredictors.set(agentId, predictor);
+  private leastConnectionsSelection(task: TaskDefinition): any {
+    const availableAgents = this.getAvailableAgents(task);
+    
+    if (availableAgents.length === 0) {
+      return {
+        selectedAgent: '',
+        confidence: 0,
+        reasoning: 'No available agents',
+        alternatives: []
+      };
     }
 
-    predictor.update(load);
-  }
+    // Sort by least active connections
+    const sorted = availableAgents.sort((a, b) => a.activeConnections - b.activeConnections);
+    const selected = sorted[0];
 
-  // === UTILITY METHODS ===
+    const alternatives = sorted
+      .slice(1, 4)
+      .map(agent => ({
+        agentId: agent.agentId,
+        score: 1 / (agent.activeConnections + 1),
+        reason: `Connections: ${agent.activeConnections}`
+      }));
 
-  private isAgentCompatible(agent: AgentState, task: TaskDefinition): boolean {
-    // Check basic type compatibility
-    const typeCompatible = this.checkTypeCompatibility(agent.type, task.type);
-    if (!typeCompatible) return false;
-
-    // Check capability requirements
-    const hasRequiredCapabilities = task.requirements.capabilities.every(cap => {
-      return agent.capabilities.domains.includes(cap) ||
-             agent.capabilities.tools.includes(cap) ||
-             agent.capabilities.languages.includes(cap);
-    });
-
-    return hasRequiredCapabilities;
-  }
-
-  private checkTypeCompatibility(agentType: string, taskType: string): boolean {
-    const compatibilityMap: Record<string, string[]> = {
-      'researcher': ['research', 'analysis', 'documentation'],
-      'developer': ['coding', 'testing', 'integration', 'deployment'],
-      'analyzer': ['analysis', 'validation', 'review'],
-      'reviewer': ['review', 'validation', 'documentation'],
-      'coordinator': ['coordination', 'monitoring', 'management'],
-      'tester': ['testing', 'validation', 'integration'],
-      'specialist': ['custom', 'optimization', 'maintenance']
+    return {
+      selectedAgent: selected.agentId,
+      confidence: 0.9,
+      reasoning: `Least connections: ${selected.activeConnections}`,
+      alternatives
     };
-
-    const compatibleTypes = compatibilityMap[agentType] || [];
-    return compatibleTypes.some(type => taskType.includes(type));
   }
 
-  private updateAgentLoad(agentId: string, loadData: Partial<AgentLoad>): void {
-    const existing = this.agentLoads.get(agentId) || this.createDefaultLoad(agentId);
-    const updated = { ...existing, ...loadData, lastUpdated: new Date() };
+  private leastLoadedSelection(task: TaskDefinition): any {
+    const availableAgents = this.getAvailableAgents(task);
     
-    // Recalculate utilization
-    updated.utilization = this.calculateUtilization(updated);
-    
-    this.agentLoads.set(agentId, updated);
+    if (availableAgents.length === 0) {
+      return {
+        selectedAgent: '',
+        confidence: 0,
+        reasoning: 'No available agents',
+        alternatives: []
+      };
+    }
+
+    // Sort by least current load
+    const sorted = availableAgents.sort((a, b) => a.currentLoad - b.currentLoad);
+    const selected = sorted[0];
+
+    const alternatives = sorted
+      .slice(1, 4)
+      .map(agent => ({
+        agentId: agent.agentId,
+        score: 1 / (agent.currentLoad + 1),
+        reason: `Load: ${agent.currentLoad}`
+      }));
+
+    return {
+      selectedAgent: selected.agentId,
+      confidence: 0.85,
+      reasoning: `Least loaded: ${selected.currentLoad}`,
+      alternatives
+    };
   }
 
-  private updateTaskQueue(agentId: string, task: TaskDefinition, operation: 'add' | 'remove'): void {
-    const queue = this.taskQueues.get(agentId) || [];
+  private weightedRoundRobinSelection(task: TaskDefinition): any {
+    const availableAgents = this.getAvailableAgents(task);
     
-    if (operation === 'add') {
-      queue.push(task);
-    } else {
-      const index = queue.findIndex(t => t.id.id === task.id.id);
-      if (index >= 0) {
-        queue.splice(index, 1);
+    if (availableAgents.length === 0) {
+      return {
+        selectedAgent: '',
+        confidence: 0,
+        reasoning: 'No available agents',
+        alternatives: []
+      };
+    }
+
+    // Calculate weights based on capacity
+    const weights = availableAgents.map(agent => agent.maxCapacity);
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    
+    // Select based on weighted probability
+    let random = Math.random() * totalWeight;
+    let selectedIndex = 0;
+    
+    for (let i = 0; i < weights.length; i++) {
+      random -= weights[i];
+      if (random <= 0) {
+        selectedIndex = i;
+        break;
       }
     }
-    
-    this.taskQueues.set(agentId, queue);
 
-    // Update agent load
-    this.updateAgentLoad(agentId, {
-      queueDepth: queue.length,
-      taskCount: queue.length
-    });
-  }
+    const selected = availableAgents[selectedIndex];
 
-  private updatePerformanceBaseline(agentId: string, metrics: any): void {
-    const baseline = this.performanceBaselines.get(agentId) || {
-      expectedThroughput: 10,
-      expectedResponseTime: 5000,
-      expectedQuality: 0.8
+    const alternatives = availableAgents
+      .filter(agent => agent.agentId !== selected.agentId)
+      .slice(0, 3)
+      .map(agent => ({
+        agentId: agent.agentId,
+        score: agent.maxCapacity / totalWeight,
+        reason: `Weight: ${agent.maxCapacity}`
+      }));
+
+    return {
+      selectedAgent: selected.agentId,
+      confidence: 0.75,
+      reasoning: `Weighted selection (capacity: ${selected.maxCapacity})`,
+      alternatives
     };
-
-    // Update baseline with exponential moving average
-    const alpha = 0.1;
-    baseline.expectedThroughput = baseline.expectedThroughput * (1 - alpha) + metrics.throughput * alpha;
-    baseline.expectedResponseTime = baseline.expectedResponseTime * (1 - alpha) + metrics.responseTime * alpha;
-
-    this.performanceBaselines.set(agentId, baseline);
   }
 
-  private calculateUtilization(load: AgentLoad): number {
-    // Combine multiple factors to calculate overall utilization
-    const queueFactor = Math.min(1, load.queueDepth / 10);
-    const cpuFactor = load.cpuUsage / 100;
-    const memoryFactor = load.memoryUsage / 100;
-    const taskFactor = Math.min(1, load.taskCount / load.capacity);
+  private performanceBasedSelection(task: TaskDefinition): any {
+    const availableAgents = this.getAvailableAgents(task);
+    
+    if (availableAgents.length === 0) {
+      return {
+        selectedAgent: '',
+        confidence: 0,
+        reasoning: 'No available agents',
+        alternatives: []
+      };
+    }
 
-    return (queueFactor + cpuFactor + memoryFactor + taskFactor) / 4;
-  }
-
-  private calculateLoadReduction(agentId: string, tasksRemoved: number): number {
-    const load = this.agentLoads.get(agentId);
-    if (!load) return 0;
-
-    const oldUtilization = load.utilization;
-    const newUtilization = this.calculateUtilization({
-      ...load,
-      queueDepth: load.queueDepth - tasksRemoved,
-      taskCount: load.taskCount - tasksRemoved
+    // Score agents based on performance metrics
+    const scoredAgents = availableAgents.map(agent => {
+      const history = this.performanceHistory.get(agent.agentId);
+      const score = this.calculatePerformanceScore(agent, history);
+      
+      return { agent, score };
     });
 
-    return oldUtilization - newUtilization;
+    // Sort by score (highest first)
+    scoredAgents.sort((a, b) => b.score - a.score);
+    const selected = scoredAgents[0];
+
+    const alternatives = scoredAgents
+      .slice(1, 4)
+      .map(item => ({
+        agentId: item.agent.agentId,
+        score: item.score,
+        reason: `Performance score: ${item.score.toFixed(2)}`
+      }));
+
+    return {
+      selectedAgent: selected.agent.agentId,
+      confidence: 0.9,
+      reasoning: `Best performance score: ${selected.score.toFixed(2)}`,
+      alternatives
+    };
   }
 
-  private createDefaultLoad(agentId: string): AgentLoad {
+  private costBasedSelection(task: TaskDefinition): any {
+    const availableAgents = this.getAvailableAgents(task);
+    
+    if (availableAgents.length === 0) {
+      return {
+        selectedAgent: '',
+        confidence: 0,
+        reasoning: 'No available agents',
+        alternatives: []
+      };
+    }
+
+    // Score agents based on cost efficiency
+    const scoredAgents = availableAgents.map(agent => {
+      const cost = this.calculateAgentCost(agent);
+      const score = 1 / (cost + 1); // Lower cost = higher score
+      
+      return { agent, score, cost };
+    });
+
+    // Sort by score (highest first, i.e., lowest cost)
+    scoredAgents.sort((a, b) => b.score - a.score);
+    const selected = scoredAgents[0];
+
+    const alternatives = scoredAgents
+      .slice(1, 4)
+      .map(item => ({
+        agentId: item.agent.agentId,
+        score: item.score,
+        reason: `Cost: ${item.cost.toFixed(2)}`
+      }));
+
+    return {
+      selectedAgent: selected.agent.agentId,
+      confidence: 0.8,
+      reasoning: `Lowest cost: ${selected.cost.toFixed(2)}`,
+      alternatives
+    };
+  }
+
+  private hybridSelection(task: TaskDefinition): any {
+    const availableAgents = this.getAvailableAgents(task);
+    
+    if (availableAgents.length === 0) {
+      return {
+        selectedAgent: '',
+        confidence: 0,
+        reasoning: 'No available agents',
+        alternatives: []
+      };
+    }
+
+    // Combine multiple factors
+    const scoredAgents = availableAgents.map(agent => {
+      const history = this.performanceHistory.get(agent.agentId);
+      const performanceScore = this.calculatePerformanceScore(agent, history);
+      const loadScore = 1 - agent.utilization;
+      const costScore = 1 / (this.calculateAgentCost(agent) + 1);
+      
+      // Weighted combination
+      const combinedScore = (performanceScore * 0.4) + (loadScore * 0.4) + (costScore * 0.2);
+      
+      return { agent, score: combinedScore, performanceScore, loadScore, costScore };
+    });
+
+    // Sort by combined score
+    scoredAgents.sort((a, b) => b.score - a.score);
+    const selected = scoredAgents[0];
+
+    const alternatives = scoredAgents
+      .slice(1, 4)
+      .map(item => ({
+        agentId: item.agent.agentId,
+        score: item.score,
+        reason: `Hybrid score: ${item.score.toFixed(2)}`
+      }));
+
+    return {
+      selectedAgent: selected.agent.agentId,
+      confidence: 0.95,
+      reasoning: `Hybrid selection (score: ${selected.score.toFixed(2)})`,
+      alternatives
+    };
+  }
+
+  private predictiveSelection(task: TaskDefinition): any {
+    const availableAgents = this.getAvailableAgents(task);
+    
+    if (availableAgents.length === 0) {
+      return {
+        selectedAgent: '',
+        confidence: 0,
+        reasoning: 'No available agents',
+        alternatives: []
+      };
+    }
+
+    // Use predictions to select agent
+    const scoredAgents = availableAgents.map(agent => {
+      const prediction = this.predictions.get(agent.agentId);
+      const predictedLoad = prediction ? prediction.predictedLoad : agent.currentLoad;
+      const confidence = prediction ? prediction.confidence : 0.5;
+      
+      // Score based on predicted future load
+      const score = (1 - predictedLoad / agent.maxCapacity) * confidence;
+      
+      return { agent, score, predictedLoad, confidence };
+    });
+
+    // Sort by score
+    scoredAgents.sort((a, b) => b.score - a.score);
+    const selected = scoredAgents[0];
+
+    const alternatives = scoredAgents
+      .slice(1, 4)
+      .map(item => ({
+        agentId: item.agent.agentId,
+        score: item.score,
+        reason: `Predicted load: ${item.predictedLoad.toFixed(1)}`
+      }));
+
+    return {
+      selectedAgent: selected.agent.agentId,
+      confidence: selected.confidence,
+      reasoning: `Predictive selection (predicted load: ${selected.predictedLoad.toFixed(1)})`,
+      alternatives
+    };
+  }
+
+  private adaptiveSelection(task: TaskDefinition): any {
+    const availableAgents = this.getAvailableAgents(task);
+    
+    if (availableAgents.length === 0) {
+      return {
+        selectedAgent: '',
+        confidence: 0,
+        reasoning: 'No available agents',
+        alternatives: []
+      };
+    }
+
+    // Adapt strategy based on current system state
+    const systemLoad = this.calculateSystemLoad();
+    const systemErrorRate = this.calculateSystemErrorRate();
+    
+    let strategy: LoadBalancingStrategy;
+    
+    if (systemErrorRate > 0.1) {
+      // High error rate - use performance-based
+      strategy = 'performance-based';
+    } else if (systemLoad > 0.8) {
+      // High load - use least-loaded
+      strategy = 'least-loaded';
+    } else {
+      // Normal conditions - use hybrid
+      strategy = 'hybrid';
+    }
+
+    // Apply the selected strategy
+    switch (strategy) {
+      case 'performance-based':
+        return this.performanceBasedSelection(task);
+      case 'least-loaded':
+        return this.leastLoadedSelection(task);
+      default:
+        return this.hybridSelection(task);
+    }
+  }
+
+  private getAvailableAgents(task: TaskDefinition): AgentLoad[] {
+    const agents = Array.from(this.agents.values());
+    
+    return agents.filter(agent => {
+      // Check capacity
+      if (agent.currentLoad >= agent.maxCapacity) {
+        return false;
+      }
+      
+      // Check utilization threshold
+      if (agent.utilization > this.config.maxLoadThreshold) {
+        return false;
+      }
+      
+      // Check error rate
+      if (agent.errorRate > this.config.errorRateThreshold) {
+        return false;
+      }
+      
+      return true;
+    });
+  }
+
+  private updateAgentLoad(agentId: string, increment: number): void {
+    const agent = this.agents.get(agentId);
+    if (agent) {
+      agent.currentLoad += increment;
+      agent.lastUpdated = new Date();
+      this.updateUtilization(agent);
+    }
+  }
+
+  private updateUtilization(agent: AgentLoad): void {
+    agent.utilization = agent.currentLoad / agent.maxCapacity;
+  }
+
+  private calculatePerformanceScore(agent: AgentLoad, history?: AgentPerformanceHistory): number {
+    let score = 0.5; // Default score
+    
+    if (history && history.responseTimes.length > 0) {
+      // Response time factor (30%)
+      const avgResponseTime = history.responseTimes.reduce((sum, time) => sum + time, 0) / history.responseTimes.length;
+      const responseScore = Math.max(0, 1 - (avgResponseTime / this.config.responseTimeThreshold));
+      score += responseScore * 0.3;
+      
+      // Error rate factor (40%)
+      const avgErrorRate = history.errorRates.reduce((sum, rate) => sum + rate, 0) / history.errorRates.length;
+      const errorScore = Math.max(0, 1 - (avgErrorRate / this.config.errorRateThreshold));
+      score += errorScore * 0.4;
+      
+      // Throughput factor (30%)
+      const avgThroughput = history.throughputs.reduce((sum, tp) => sum + tp, 0) / history.throughputs.length;
+      const throughputScore = Math.min(1, avgThroughput / 10); // Normalize to 0-1
+      score += throughputScore * 0.3;
+    }
+    
+    return Math.max(0, Math.min(1, score));
+  }
+
+  private calculateAgentCost(agent: AgentLoad): number {
+    // Simple cost calculation - could be more sophisticated
+    const baseCost = 1.0;
+    const loadMultiplier = 1 + agent.utilization;
+    const responseTimeMultiplier = 1 + (agent.averageResponseTime / 1000);
+    
+    return baseCost * loadMultiplier * responseTimeMultiplier;
+  }
+
+  private calculateSystemLoad(): number {
+    const agents = Array.from(this.agents.values());
+    if (agents.length === 0) return 0;
+    
+    const totalUtilization = agents.reduce((sum, agent) => sum + agent.utilization, 0);
+    return totalUtilization / agents.length;
+  }
+
+  private calculateSystemErrorRate(): number {
+    const agents = Array.from(this.agents.values());
+    if (agents.length === 0) return 0;
+    
+    const totalErrorRate = agents.reduce((sum, agent) => sum + agent.errorRate, 0);
+    return totalErrorRate / agents.length;
+  }
+
+  private initializePerformanceHistory(agentId: string): void {
+    this.performanceHistory.set(agentId, {
+      agentId,
+      timestamps: [],
+      loads: [],
+      responseTimes: [],
+      errorRates: [],
+      throughputs: [],
+      maxHistory: 100
+    });
+  }
+
+  private updatePerformanceHistory(agentId: string, responseTime: number, success: boolean): void {
+    const history = this.performanceHistory.get(agentId);
+    if (!history) return;
+    
+    const now = new Date();
+    history.timestamps.push(now);
+    history.responseTimes.push(responseTime);
+    history.errorRates.push(success ? 0 : 1);
+    
+    // Keep only recent history
+    if (history.timestamps.length > history.maxHistory) {
+      history.timestamps.shift();
+      history.responseTimes.shift();
+      history.errorRates.shift();
+      history.loads.shift();
+      history.throughputs.shift();
+    }
+  }
+
+  private performHealthCheck(): void {
+    for (const [agentId, agent] of this.agents) {
+      // Check if agent is responsive
+      const timeSinceUpdate = Date.now() - agent.lastUpdated.getTime();
+      
+      if (timeSinceUpdate > this.config.healthCheckInterval * 2) {
+        this.logger.warn('Agent appears unresponsive', {
+          agentId,
+          timeSinceUpdate
+        });
+        
+        this.emit('agent:unresponsive', { agentId, timeSinceUpdate });
+      }
+    }
+  }
+
+  private performRebalancing(): void {
+    if (!this.config.adaptiveThresholds) return;
+    
+    const imbalance = this.calculateLoadImbalance();
+    
+    if (imbalance > 0.3) { // 30% imbalance threshold
+      this.logger.info('Load imbalance detected, triggering rebalancing', { imbalance });
+      this.rebalanceLoad();
+      this.metrics.rebalanceCount++;
+    }
+  }
+
+  private calculateLoadImbalance(): number {
+    const agents = Array.from(this.agents.values());
+    if (agents.length < 2) return 0;
+    
+    const utilizations = agents.map(agent => agent.utilization);
+    const maxUtil = Math.max(...utilizations);
+    const minUtil = Math.min(...utilizations);
+    
+    return maxUtil - minUtil;
+  }
+
+  private rebalanceLoad(): void {
+    // Simple rebalancing - could be more sophisticated
+    const agents = Array.from(this.agents.values());
+    const overloaded = agents.filter(agent => agent.utilization > this.config.maxLoadThreshold);
+    const underloaded = agents.filter(agent => agent.utilization < this.config.minLoadThreshold);
+    
+    this.logger.info('Rebalancing load', {
+      overloaded: overloaded.length,
+      underloaded: underloaded.length
+    });
+    
+    this.emit('rebalancing:triggered', { overloaded, underloaded });
+  }
+
+  private adaptThresholds(): void {
+    if (!this.config.adaptiveThresholds) return;
+    
+    const systemLoad = this.calculateSystemLoad();
+    const systemErrorRate = this.calculateSystemErrorRate();
+    
+    // Adjust thresholds based on system performance
+    if (systemErrorRate > 0.1) {
+      // Increase thresholds to be more conservative
+      this.config.maxLoadThreshold = Math.min(0.9, this.config.maxLoadThreshold + 0.1);
+    } else if (systemLoad < 0.5) {
+      // Decrease thresholds to be more aggressive
+      this.config.maxLoadThreshold = Math.max(0.6, this.config.maxLoadThreshold - 0.05);
+    }
+    
+    this.logger.debug('Adapted load balancing thresholds', {
+      maxLoadThreshold: this.config.maxLoadThreshold,
+      systemLoad,
+      systemErrorRate
+    });
+  }
+
+  private updatePredictions(): void {
+    if (!this.config.predictiveModeling) return;
+    
+    for (const [agentId, agent] of this.agents) {
+      const history = this.performanceHistory.get(agentId);
+      if (history) {
+        const prediction = this.predictAgentLoad(agentId, history);
+        this.predictions.set(agentId, prediction);
+      }
+    }
+  }
+
+  private predictAgentLoad(agentId: string, history: AgentPerformanceHistory): LoadPrediction {
+    // Simple linear prediction - could use more sophisticated ML models
+    const recentLoads = history.loads.slice(-10); // Last 10 data points
+    
+    if (recentLoads.length < 2) {
+      return {
+        agentId,
+        predictedLoad: history.loads[history.loads.length - 1] || 0,
+        confidence: 0.5,
+        timeWindow: this.config.predictionWindow,
+        factors: [],
+        timestamp: new Date()
+      };
+    }
+    
+    // Calculate trend
+    const trend = (recentLoads[recentLoads.length - 1] - recentLoads[0]) / recentLoads.length;
+    const predictedLoad = Math.max(0, recentLoads[recentLoads.length - 1] + trend);
+    
     return {
       agentId,
-      queueDepth: 0,
-      cpuUsage: 0,
-      memoryUsage: 0,
-      taskCount: 0,
-      averageResponseTime: 5000,
-      throughput: 0,
-      lastUpdated: new Date(),
-      capacity: 10,
-      utilization: 0,
-      efficiency: 1.0,
-      affinityScore: 0.5
-    };
-  }
-
-  // === PUBLIC API ===
-
-  getAgentLoad(agentId: string): AgentLoad | undefined {
-    return this.agentLoads.get(agentId);
-  }
-
-  getAllLoads(): AgentLoad[] {
-    return Array.from(this.agentLoads.values());
-  }
-
-  getRecentDecisions(limit: number = 10): LoadBalancingDecision[] {
-    return this.decisions.slice(-limit);
-  }
-
-  getStealOperations(): WorkStealingOperation[] {
-    return Array.from(this.stealOperations.values());
-  }
-
-  getLoadStatistics(): {
-    totalAgents: number;
-    averageUtilization: number;
-    overloadedAgents: number;
-    underloadedAgents: number;
-    totalStealOperations: number;
-    successfulSteals: number;
-  } {
-    const loads = Array.from(this.agentLoads.values());
-    const avgUtilization = loads.reduce((sum, load) => sum + load.utilization, 0) / loads.length || 0;
-    const overloaded = loads.filter(load => load.utilization > 0.8).length;
-    const underloaded = loads.filter(load => load.utilization < 0.3).length;
-    const successfulSteals = Array.from(this.stealOperations.values())
-      .filter(op => op.status === 'completed').length;
-
-    return {
-      totalAgents: loads.length,
-      averageUtilization: avgUtilization,
-      overloadedAgents: overloaded,
-      underloadedAgents: underloaded,
-      totalStealOperations: this.stealOperations.size,
-      successfulSteals
-    };
-  }
-
-  // Force rebalance
-  async forceRebalance(): Promise<void> {
-    await this.performRebalancing();
-  }
-}
-
-// === HELPER CLASSES ===
-
-class LoadPredictor {
-  private agentId: string;
-  private history: Array<{ timestamp: Date; load: number }> = [];
-  private model: SimpleLinearModel;
-
-  constructor(agentId: string) {
-    this.agentId = agentId;
-    this.model = new SimpleLinearModel();
-  }
-
-  update(load: AgentLoad): void {
-    this.history.push({ timestamp: new Date(), load: load.utilization });
-    
-    // Keep only last 50 samples
-    if (this.history.length > 50) {
-      this.history.shift();
-    }
-
-    // Update model if we have enough data
-    if (this.history.length >= 10) {
-      this.model.train(this.history);
-    }
-  }
-
-  predict(task: TaskDefinition): LoadPrediction {
-    const currentLoad = this.history.length > 0 ? 
-      this.history[this.history.length - 1].load : 0;
-
-    let predictedLoad = currentLoad;
-    let confidence = 0.5;
-
-    if (this.history.length >= 10) {
-      const prediction = this.model.predict();
-      predictedLoad = prediction.value;
-      confidence = prediction.confidence;
-    }
-
-    // Adjust for task complexity
-    const taskComplexity = this.estimateTaskComplexity(task);
-    predictedLoad = Math.min(1, predictedLoad + taskComplexity * 0.1);
-
-    return {
-      agentId: this.agentId,
-      currentLoad,
       predictedLoad,
-      confidence,
-      timeHorizon: 60000,
-      factors: {
-        task_complexity: taskComplexity,
-        historical_trend: predictedLoad - currentLoad
+      confidence: 0.7,
+      timeWindow: this.config.predictionWindow,
+      factors: [
+        {
+          name: 'trend',
+          weight: 1.0,
+          value: trend,
+          trend: trend > 0 ? 'increasing' : trend < 0 ? 'decreasing' : 'stable'
+        }
+      ],
+      timestamp: new Date()
+    };
+  }
+
+  private adaptiveStrategySelection(task: TaskDefinition): LoadBalancingStrategy {
+    const systemLoad = this.calculateSystemLoad();
+    const systemErrorRate = this.calculateSystemErrorRate();
+    
+    if (systemErrorRate > 0.1) {
+      return 'performance-based';
+    } else if (systemLoad > 0.8) {
+      return 'least-loaded';
+    } else if (this.config.predictiveModeling) {
+      return 'predictive';
+    } else {
+      return 'hybrid';
+    }
+  }
+
+  private applyRules(task: TaskDefinition): LoadBalancingDecision | undefined {
+    for (const rule of this.rules) {
+      if (rule.enabled && this.evaluateRule(rule, task)) {
+        return this.executeRuleAction(rule, task);
       }
-    };
+    }
+    return undefined;
   }
 
-  private estimateTaskComplexity(task: TaskDefinition): number {
-    // Simple complexity estimation
-    let complexity = 0.5;
-
-    if (task.requirements.estimatedDuration && task.requirements.estimatedDuration > 300000) {
-      complexity += 0.3; // Long-running task
-    }
-
-    if (task.requirements.memoryRequired && task.requirements.memoryRequired > 512 * 1024 * 1024) {
-      complexity += 0.2; // Memory-intensive
-    }
-
-    if (task.requirements.capabilities.length > 3) {
-      complexity += 0.2; // Requires multiple capabilities
-    }
-
-    return Math.min(1, complexity);
-  }
-}
-
-class SimpleLinearModel {
-  private slope = 0;
-  private intercept = 0;
-  private r2 = 0;
-
-  train(data: Array<{ timestamp: Date; load: number }>): void {
-    if (data.length < 2) return;
-
-    // Convert timestamps to relative time points
-    const startTime = data[0].timestamp.getTime();
-    const points = data.map((point, index) => ({
-      x: index, // Use index as x for simplicity
-      y: point.load
-    }));
-
-    // Calculate linear regression
-    const n = points.length;
-    const sumX = points.reduce((sum, p) => sum + p.x, 0);
-    const sumY = points.reduce((sum, p) => sum + p.y, 0);
-    const sumXY = points.reduce((sum, p) => sum + p.x * p.y, 0);
-    const sumXX = points.reduce((sum, p) => sum + p.x * p.x, 0);
-
-    this.slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-    this.intercept = (sumY - this.slope * sumX) / n;
-
-    // Calculate R²
-    const meanY = sumY / n;
-    const ssTotal = points.reduce((sum, p) => sum + Math.pow(p.y - meanY, 2), 0);
-    const ssRes = points.reduce((sum, p) => {
-      const predicted = this.slope * p.x + this.intercept;
-      return sum + Math.pow(p.y - predicted, 2);
-    }, 0);
-
-    this.r2 = 1 - (ssRes / ssTotal);
+  private evaluateRule(rule: LoadBalancingRule, task: TaskDefinition): boolean {
+    // Simple rule evaluation - could be more sophisticated
+    return true; // Placeholder
   }
 
-  predict(): { value: number; confidence: number } {
-    // Predict next value (x = n)
-    const nextValue = this.slope * 1 + this.intercept; // Predict 1 step ahead
-    const confidence = Math.max(0, this.r2); // Use R² as confidence
-
+  private executeRuleAction(rule: LoadBalancingRule, task: TaskDefinition): LoadBalancingDecision {
+    // Execute rule action - placeholder implementation
     return {
-      value: Math.max(0, Math.min(1, nextValue)),
-      confidence
+      selectedAgent: '',
+      strategy: this.currentStrategy,
+      confidence: 0.5,
+      reasoning: `Rule applied: ${rule.name}`,
+      alternatives: [],
+      timestamp: new Date()
     };
   }
-}
 
-interface PerformanceBaseline {
-  expectedThroughput: number;
-  expectedResponseTime: number;
-  expectedQuality: number;
+  private handleTaskCompletion(result: TaskResult): void {
+    // Update performance metrics based on task completion
+    // Note: TaskResult doesn't have agentId, this would need to be tracked separately
+    this.logger.debug('Task completed, updating metrics');
+  }
+
+  private handleTaskFailure(error: any): void {
+    // Update performance metrics based on task failure
+    this.logger.debug('Task failed, updating metrics', { error });
+  }
+
+  private updateMetrics(): void {
+    const now = Date.now();
+    const agents = Array.from(this.agents.values());
+    
+    // Update load distribution
+    this.metrics.loadDistribution.clear();
+    for (const agent of agents) {
+      this.metrics.loadDistribution.set(agent.agentId, agent.currentLoad);
+    }
+    
+    // Calculate average response time
+    let totalResponseTime = 0;
+    let responseTimeCount = 0;
+    
+    for (const history of this.performanceHistory.values()) {
+      if (history.responseTimes.length > 0) {
+        totalResponseTime += history.responseTimes.reduce((sum, time) => sum + time, 0);
+        responseTimeCount += history.responseTimes.length;
+      }
+    }
+    
+    this.metrics.averageResponseTime = responseTimeCount > 0 ? totalResponseTime / responseTimeCount : 0;
+    
+    // Calculate throughput
+    this.metrics.throughput = this.metrics.successfulAssignments / Math.max(1, (now - 0) / 60000); // per minute
+  }
 }

@@ -58,14 +58,14 @@ export const benchmarkCommand: CLICommand = {
   name: 'benchmark',
   description: 'Run performance benchmarks and load testing',
   category: 'System',
-  usage: 'claude-flow benchmark <subcommand> [OPTIONS]',
+  usage: 'flowx benchmark <subcommand> [OPTIONS]',
   examples: [
-    'claude-flow benchmark run --suite all',
-    'claude-flow benchmark run --test memory',
-    'claude-flow benchmark load --concurrent 10',
-    'claude-flow benchmark compare --baseline baseline.tson',
-    'claude-flow benchmark system --duration 60',
-    'claude-flow benchmark report --format json'
+    'flowx benchmark run --suite all',
+    'flowx benchmark run --test memory',
+    'flowx benchmark load --concurrent 10',
+    'flowx benchmark compare --baseline baseline.tson',
+    'flowx benchmark system --duration 60',
+    'flowx benchmark report --format json'
   ],
   options: [
     {
@@ -195,7 +195,7 @@ export const benchmarkCommand: CLICommand = {
       return;
     }
     
-    printError('Invalid subcommand. Use "claude-flow benchmark --help" for usage information.');
+    printError('Invalid subcommand. Use "flowx benchmark --help" for usage information.');
   }
 };
 
@@ -697,7 +697,7 @@ async function getBenchmarkSuites(): Promise<BenchmarkSuite[]> {
           name: 'help-generation',
           operation: async () => {
             // Simulate help text generation
-            const helpText = 'Usage: claude-flow benchmark <subcommand> [OPTIONS]...';
+            const helpText = 'Usage: flowx benchmark <subcommand> [OPTIONS]...';
             return helpText.length;
           }
         }

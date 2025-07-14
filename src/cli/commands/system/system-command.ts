@@ -69,13 +69,13 @@ export const systemCommand: CLICommand = {
   name: 'system',
   description: 'Low-level system operations and diagnostics',
   category: 'System',
-  usage: 'claude-flow system <subcommand> [OPTIONS]',
+  usage: 'flowx system <subcommand> [OPTIONS]',
   examples: [
-    'claude-flow system info',
-    'claude-flow system diagnostics --detailed',
-    'claude-flow system cleanup --dry-run',
-    'claude-flow system monitor --duration 60',
-    'claude-flow system processes --filter claude'
+    'flowx system info',
+    'flowx system diagnostics --detailed',
+    'flowx system cleanup --dry-run',
+    'flowx system monitor --duration 60',
+    'flowx system processes --filter claude'
   ],
   subcommands: [
     {
@@ -1027,7 +1027,7 @@ async function analyzeCleanupItems(aggressive: boolean): Promise<Array<{ type: s
 
   // Mock cleanup items
   items.push(
-    { type: 'temp', path: '/tmp/claude-flow-temp', size: 1024 * 1024 * 50 }, // 50MB
+    { type: 'temp', path: '/tmp/flowx-temp', size: 1024 * 1024 * 50 }, // 50MB
     { type: 'logs', path: './logs/old-logs', size: 1024 * 1024 * 100 }, // 100MB
     { type: 'cache', path: './.cache', size: 1024 * 1024 * 25 } // 25MB
   );

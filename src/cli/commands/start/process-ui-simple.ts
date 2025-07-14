@@ -36,7 +36,7 @@ export class ProcessUI {
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
-      prompt: 'claude-flow> '
+      prompt: 'flowx> '
     });
 
     rl.prompt();

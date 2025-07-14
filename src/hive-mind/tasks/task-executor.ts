@@ -188,8 +188,25 @@ export class TaskExecutor extends EventEmitter {
     }
     
     try {
-      // Submit task to hive mind
-      const task = await this.hiveMind.submitTask(options);
+      // Create task directly instead of calling back to HiveMind (fixes circular dependency)
+      const task: Task = {
+        id: generateId('task'),
+        swarmId: this.hiveMind.getId(),
+        description: options.description,
+        priority: options.priority || 'medium',
+        strategy: options.strategy,
+        progress: 0,
+        dependencies: options.dependencies || [],
+        assignedAgents: [],
+        result: undefined,
+        error: undefined,
+        status: 'pending',
+        requireConsensus: options.requireConsensus || false,
+        maxAgents: options.maxAgents || 1,
+        requiredCapabilities: options.requiredCapabilities || [],
+        metadata: options.metadata || {},
+        createdAt: new Date()
+      };
       
       // Add to pending tasks
       this.pendingTasks.push(task);

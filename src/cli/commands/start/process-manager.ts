@@ -514,8 +514,8 @@ export class ProcessManager extends EventEmitter {
     const errorCount = processes.filter(p => p.status === ProcessStatus.ERROR).length;
     
     // Calculate total memory and CPU usage by summing up actual process stats
-    let totalMemoryUsage = process.memoryUsage().heapUsed;
-    let totalCpuUsage = process.cpuUsage().user;
+    const totalMemoryUsage = process.memoryUsage().heapUsed;
+    const totalCpuUsage = process.cpuUsage().user;
     
     // Add actual process resource usage when available (future expansion)
 

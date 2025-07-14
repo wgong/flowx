@@ -16,14 +16,14 @@ export const swarmCommand: CLICommand = {
   name: 'swarm',
   description: 'Manage AI swarms with real coordination',
   category: 'Swarm',
-  usage: 'claude-flow swarm <subcommand> [OPTIONS]',
+  usage: 'flowx swarm <subcommand> [OPTIONS]',
   examples: [
-    'claude-flow swarm create development --agents 5',
-    'claude-flow swarm list',
-    'claude-flow swarm status swarm-001',
-    'claude-flow swarm scale swarm-001 --agents 10',
-    'claude-flow swarm start swarm-001',
-    'claude-flow swarm stop swarm-001'
+    'flowx swarm create development --agents 5',
+    'flowx swarm list',
+    'flowx swarm status swarm-001',
+    'flowx swarm scale swarm-001 --agents 10',
+    'flowx swarm start swarm-001',
+    'flowx swarm stop swarm-001'
   ],
   subcommands: [
     {
@@ -304,7 +304,7 @@ async function listSwarms(context: CLIContext): Promise<void> {
     
     if (swarms.length === 0) {
       printWarning('No active swarms found');
-      printInfo('Use "claude-flow swarm create <name>" to create a new swarm');
+      printInfo('Use "flowx swarm create <name>" to create a new swarm');
       return;
     }
     

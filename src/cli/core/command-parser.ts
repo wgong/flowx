@@ -35,23 +35,12 @@ export class CommandParser {
     }
 
     const command = args[0];
-    let subcommand: string | undefined = undefined;
-    let startIndex = 1;
-
-    // Check for subcommand (non-option second argument)
-    if (args.length > 1 && !args[1].startsWith('-')) {
-      // This could be a subcommand, but we need to validate it exists
-      // For now, we'll assume it's a subcommand if it doesn't start with -
-      subcommand = args[1];
-      startIndex = 2;
-    }
-
-    // Parse options and remaining arguments
-    const { options, args: remainingArgs } = this.parseOptions(args.slice(startIndex));
+    
+    // Parse options and remaining arguments from position 1 onwards
+    const { options, args: remainingArgs } = this.parseOptions(args.slice(1));
 
     return {
       command,
-      subcommand,
       args: remainingArgs,
       options
     };

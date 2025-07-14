@@ -73,10 +73,10 @@ async function showHelp(): Promise<void> {
   console.log('  --auth         Show only authenticated tools');
   console.log('  --format       Output format (table, json, yaml)');
   console.log('\nExamples:');
-  console.log('  claude-flow mcp-tools list --category development');
-  console.log('  claude-flow mcp-tools info github_repository_manager');
-  console.log('  claude-flow mcp-tools search kubernetes');
-  console.log('  claude-flow mcp-tools server start');
+  console.log('  flowx mcp-tools list --category development');
+  console.log('  flowx mcp-tools info github_repository_manager');
+  console.log('  flowx mcp-tools search kubernetes');
+  console.log('  flowx mcp-tools server start');
 }
 
 /**

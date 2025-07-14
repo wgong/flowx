@@ -211,7 +211,7 @@ async function stopExistingInstance(): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 3000));
     
     // Remove PID file
-    await fs.unlink('.claude-flow.pid').catch(() => {});
+    await fs.unlink('.flowx.pid').catch(() => {});
     
     printSuccess('✓ Existing instance stopped');
   } catch (error) {
@@ -505,7 +505,7 @@ function formatDuration(ms: number): string {
 
 async function cleanupOnFailure(): Promise<void> {
   try {
-    await fs.unlink('.claude-flow.pid').catch(() => {});
+    await fs.unlink('.flowx.pid').catch(() => {});
     printInfo('Cleanup completed');
   } catch (error) {
     printError(`Cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -514,7 +514,7 @@ async function cleanupOnFailure(): Promise<void> {
 
 async function cleanupOnShutdown(): Promise<void> {
   try {
-    await fs.unlink('.claude-flow.pid').catch(() => {});
+    await fs.unlink('.flowx.pid').catch(() => {});
   } catch (error) {
     // Ignore cleanup errors during shutdown
   }

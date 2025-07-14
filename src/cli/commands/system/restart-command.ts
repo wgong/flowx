@@ -13,15 +13,15 @@ const exec = promisify(child_process.exec);
 
 export const restartCommand: CLICommand = {
   name: 'restart',
-  description: 'Restart the Claude-Flow orchestration system',
+  description: 'Restart the flowx orchestration system',
   category: 'System',
-  usage: 'claude-flow restart [OPTIONS]',
+  usage: 'flowx restart [OPTIONS]',
   examples: [
-    'claude-flow restart',
-    'claude-flow restart --rolling',
-    'claude-flow restart --service mcp-server',
-    'claude-flow restart --health-check',
-    'claude-flow restart --wait-time 10'
+    'flowx restart',
+    'flowx restart --rolling',
+    'flowx restart --service mcp-server',
+    'flowx restart --health-check',
+    'flowx restart --wait-time 10'
   ],
   options: [
     {
@@ -111,7 +111,7 @@ export const restartCommand: CLICommand = {
   handler: async (context: CLIContext) => {
     const { options } = context;
     
-    printInfo('🔄 Claude-Flow System Restart');
+    printInfo('🔄 flowx System Restart');
     console.log('─'.repeat(50));
 
     try {
@@ -124,8 +124,8 @@ export const restartCommand: CLICommand = {
       const systemStatus = await getSystemStatus();
       
       if (!systemStatus.isRunning && !options.force) {
-        printWarning('Claude-Flow is not currently running');
-        printInfo('Use "claude-flow start" to start the system');
+        printWarning('flowx is not currently running');
+        printInfo('Use "flowx start" to start the system');
         return;
       }
 
@@ -155,7 +155,7 @@ export const restartCommand: CLICommand = {
         await performPostRestartHealthChecks(options);
       }
 
-      printSuccess('✓ Claude-Flow restarted successfully');
+      printSuccess('✓ flowx restarted successfully');
 
     } catch (error) {
       printError(`Failed to restart system: ${error instanceof Error ? error.message : String(error)}`);
@@ -276,11 +276,11 @@ async function restartSpecificService(serviceName: string, options: any): Promis
 async function restartDaemon(context: CLIContext): Promise<void> {
   const { options } = context;
   
-  printInfo('Restarting Claude-Flow daemon...');
+  printInfo('Restarting flowx daemon...');
   
   try {
     // Stop daemon
-    const pidData = await fs.readFile('.claude-flow.pid', 'utf8');
+    const pidData = await fs.readFile('.flowx.pid', 'utf8');
     const { pid } = JSON.parse(pidData);
     
     if (options.verbose) {
@@ -476,7 +476,7 @@ interface SwarmInfo {
 
 async function getSystemStatus(): Promise<SystemStatus> {
   try {
-    const pidData = await fs.readFile('.claude-flow.pid', 'utf8');
+    const pidData = await fs.readFile('.flowx.pid', 'utf8');
     const { pid, startTime } = JSON.parse(pidData);
     
     try {
@@ -491,7 +491,7 @@ async function getSystemStatus(): Promise<SystemStatus> {
         uptime: Date.now() - startTime
       };
     } catch {
-      await fs.unlink('.claude-flow.pid').catch(() => {});
+      await fs.unlink('.flowx.pid').catch(() => {});
       return {
         isRunning: false,
         services: [],
@@ -567,8 +567,8 @@ async function backupConfiguration(verbose: boolean): Promise<void> {
     
     // Backup configuration files
     const configFiles = [
-      '.claude-flow.config.tson',
-      'claude-flow.yml',
+      '.flowx.config.tson',
+      'flowx.yml',
       'config/default.tson'
     ];
     
@@ -709,13 +709,13 @@ async function performSystemRecovery(options: any): Promise<void> {
   
   // Kill any remaining processes
   try {
-    await exec('pkill -f claude-flow').catch(() => {});
+    await exec('pkill -f flowx').catch(() => {});
   } catch {
     // Ignore errors
   }
   
   // Clean up PID files
-  await fs.unlink('.claude-flow.pid').catch(() => {});
+  await fs.unlink('.flowx.pid').catch(() => {});
   
   // Wait before attempting restart
   await new Promise(resolve => setTimeout(resolve, 5000));
@@ -891,7 +891,7 @@ async function startDaemonProcess(options: any): Promise<void> {
     config: options.config || 'default'
   };
   
-  await fs.writeFile('.claude-flow.pid', JSON.stringify(pidData, null, 2));
+  await fs.writeFile('.flowx.pid', JSON.stringify(pidData, null, 2));
   
   if (options.verbose) {
     printInfo(`Started daemon (PID: ${pid})`);
@@ -920,7 +920,7 @@ async function restartSwarm(swarmId: string, options: any): Promise<void> {
 // Health check functions
 
 async function checkDaemonHealth(): Promise<void> {
-  const pidData = await fs.readFile('.claude-flow.pid', 'utf8');
+  const pidData = await fs.readFile('.flowx.pid', 'utf8');
   const { pid } = JSON.parse(pidData);
   process.kill(pid, 0); // Throws if process doesn't exist
 }

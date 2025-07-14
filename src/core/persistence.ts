@@ -2,8 +2,8 @@
  * Persistence layer for Claude-Flow using SQLite
  */
 
-// @ts-ignore - sql.ts doesn't have proper type definitions
-import initSqlJs from 'sql.ts';
+// @ts-ignore - sql.js doesn't have proper type definitions
+import initSqlJs from 'sql.js';
 import { join } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";

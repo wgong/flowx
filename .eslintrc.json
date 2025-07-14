@@ -8,5 +8,70 @@
     "eslint:recommended",
     "plugin:@typescript-eslint/recommended"
   ],
-  "rules": {}
+  "env": {
+    "node": true,
+    "es2022": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "rules": {
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/no-unused-vars": "off",
+    "@typescript-eslint/no-var-requires": "off",
+    "@typescript-eslint/ban-ts-comment": "off",
+    "@typescript-eslint/ban-types": "off",
+    "no-case-declarations": "off",
+    "no-undef": "off",
+    "no-prototype-builtins": "off",
+    "no-control-regex": "off",
+    "prefer-const": "off",
+    "no-useless-escape": "off",
+    "no-empty": "off",
+    "no-useless-catch": "off",
+    "no-dupe-else-if": "off",
+    "no-async-promise-executor": "off",
+    "no-ex-assign": "off",
+    "no-inner-declarations": "off"
+  },
+  "overrides": [
+    {
+      "files": ["src/ui/**/*.js", "src/ui/**/*.ts"],
+      "env": {
+        "browser": true,
+        "node": false
+      },
+      "globals": {
+        "console": "readonly",
+        "document": "readonly",
+        "window": "readonly",
+        "setTimeout": "readonly",
+        "setInterval": "readonly",
+        "clearTimeout": "readonly",
+        "clearInterval": "readonly",
+        "localStorage": "readonly",
+        "alert": "readonly",
+        "prompt": "readonly",
+        "process": "readonly",
+        "module": "readonly"
+      },
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/no-unused-vars": "off",
+        "no-undef": "off"
+      }
+    },
+    {
+      "files": ["tests/**/*.ts", "tests/**/*.js"],
+      "env": {
+        "jest": true,
+        "node": true
+      },
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/no-unused-vars": "off"
+      }
+    }
+  ]
 }

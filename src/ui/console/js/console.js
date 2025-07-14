@@ -3,10 +3,10 @@
  * Coordinates all components of the Claude Code Console
  */
 
-import { WebSocketClient } from "./websocket-client.js";
-import { TerminalEmulator } from "./terminal-emulator.js";
-import { CommandHandler } from "./command-handler.js";
-import { SettingsManager } from "./settings.js";
+import { WebSocketClient } from './websocket-client.js';
+import { TerminalEmulator } from './terminal-emulator.js';
+import { CommandHandler } from './command-handler.js';
+import { SettingsManager } from './settings.js';
 
 class ClaudeCodeConsole {
   constructor() {
@@ -137,7 +137,7 @@ class ClaudeCodeConsole {
     this.wsClient.on('connected', () => {
       this.updateConnectionStatus(true, false);
       this.terminal.writeSuccess('Connected to Claude Code server');
-      this.terminal.setPrompt('flowx>');
+      this.terminal.setPrompt('claude-flow>');
     });
     
     this.wsClient.on('disconnected', (info) => {
@@ -328,9 +328,9 @@ class ClaudeCodeConsole {
       this.handleStreamingOutput(message.params);
     }
     
-    // Handle FlowX notifications
-    if (message.method && message.method.startsWith('flowx/')) {
-      this.handleFlowXNotification(message);
+    // Handle Claude Flow notifications
+    if (message.method && message.method.startsWith('claude-flow/')) {
+      this.handleClaudeFlowNotification(message);
     }
   }
   
@@ -357,6 +357,10 @@ class ClaudeCodeConsole {
         this.handleLogMessage(params);
         break;
         
+      case 'connection/established':
+        this.handleConnectionEstablished(params);
+        break;
+        
       default:
         console.log('Unhandled notification:', method, params);
     }
@@ -379,26 +383,26 @@ class ClaudeCodeConsole {
   }
   
   /**
-   * Handle FlowX notifications
+   * Handle Claude Flow notifications
    */
-  handleFlowXNotification(message) {
+  handleClaudeFlowNotification(message) {
     const { method, params } = message;
     
     switch (method) {
-      case 'flowx/started':
-        this.terminal.writeSuccess(`FlowX started in ${params.mode} mode`);
+      case 'claude-flow/started':
+        this.terminal.writeSuccess(`Claude Flow started in ${params.mode} mode`);
         break;
         
-      case 'flowx/stopped':
-        this.terminal.writeInfo('FlowX stopped');
+      case 'claude-flow/stopped':
+        this.terminal.writeInfo('Claude Flow stopped');
         break;
         
-      case 'flowx/error':
-        this.terminal.writeError(`FlowX error: ${params.message}`);
+      case 'claude-flow/error':
+        this.terminal.writeError(`Claude Flow error: ${params.message}`);
         break;
         
       default:
-        this.terminal.writeInfo(`FlowX: ${method} - ${JSON.stringify(params)}`);
+        this.terminal.writeInfo(`Claude Flow: ${method} - ${JSON.stringify(params)}`);
     }
   }
   
@@ -442,6 +446,16 @@ class ClaudeCodeConsole {
                   params.level === 'warn' ? 'warning' : 'info';
       this.terminal.write(`[${params.level.toUpperCase()}] ${params.message}`, type);
     }
+  }
+
+  /**
+   * Handle connection established notification
+   */
+  handleConnectionEstablished(params) {
+    // Log connection details without cluttering the terminal
+    console.log('Connection established:', params);
+    // Optionally show a brief success message
+    // this.terminal.writeSuccess(`Connected to ${params.server} v${params.version}`);
   }
   
   /**

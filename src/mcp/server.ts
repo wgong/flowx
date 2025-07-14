@@ -29,6 +29,9 @@ import { AuthManager, IAuthManager } from "./auth.ts";
 import { LoadBalancer, ILoadBalancer, RequestQueue } from "./load-balancer.ts";
 import { createFlowXTools, FlowXToolContext } from "./flowx-tools.ts";
 import { createSwarmTools, SwarmToolContext } from "./swarm-tools.ts";
+import { createFilesystemTools } from "./tools/filesystem/index.ts";
+import { createWebTools } from "./tools/web/index.ts";
+import { createDatabaseTools } from "./tools/database/index.ts";
 import { platform, arch } from 'node:os';
 import { performance } from 'node:perf_hooks';
 
@@ -537,7 +540,14 @@ export class MCPServer implements IMCPServer {
 
     // Register Claude-Flow specific tools if orchestrator is available
     if (this.orchestrator) {
-      const claudeFlowTools = createFlowXTools(this.logger);
+      const claudeFlowTools = createFlowXTools(
+        this.orchestrator,
+        this.swarmCoordinator,
+        this.agentManager,
+        this.resourceManager,
+        this.messagebus,
+        this.monitor
+      );
       
       for (const tool of claudeFlowTools) {
         // Wrap the handler to inject orchestrator context
@@ -586,6 +596,27 @@ export class MCPServer implements IMCPServer {
     } else {
       this.logger.warn('Swarm components not available - Swarm tools not registered');
     }
+    
+    // Register Filesystem Tools
+    const filesystemTools = createFilesystemTools(this.logger);
+    for (const tool of filesystemTools) {
+      this.registerTool(tool);
+    }
+    this.logger.info('Registered Filesystem tools', { count: filesystemTools.length });
+    
+    // Register Web Tools
+    const webTools = createWebTools(this.logger);
+    for (const tool of webTools) {
+      this.registerTool(tool);
+    }
+    this.logger.info('Registered Web tools', { count: webTools.length });
+    
+    // Register Database Tools
+    const databaseTools = createDatabaseTools(this.logger);
+    for (const tool of databaseTools) {
+      this.registerTool(tool);
+    }
+    this.logger.info('Registered Database tools', { count: databaseTools.length });
   }
 
   private errorToMCPError(error: unknown): MCPError {

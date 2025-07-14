@@ -145,6 +145,12 @@ export class AgentFactory {
       devops: ['performance_optimization', 'system_monitoring']
     };
     
+    // Validate that the agent type exists in baseCapabilities
+    if (!baseCapabilities[type]) {
+      this.logger.error('Invalid agent type provided', { type, availableTypes: Object.keys(baseCapabilities) });
+      throw new Error(`Invalid agent type: ${type}. Valid types: ${Object.keys(baseCapabilities).join(', ')}`);
+    }
+    
     const capabilities = [...baseCapabilities[type]];
     
     // Add enhanced capabilities if requested

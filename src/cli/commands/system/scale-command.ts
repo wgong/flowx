@@ -55,14 +55,14 @@ export const scaleCommand: CLICommand = {
   name: 'scale',
   description: 'Dynamic agent scaling and resource management',
   category: 'System',
-  usage: 'claude-flow scale [subcommand] [OPTIONS]',
+  usage: 'flowx scale [subcommand] [OPTIONS]',
   examples: [
-    'claude-flow scale up 5',
-    'claude-flow scale down 2',
-    'claude-flow scale auto --target-utilization 75',
-    'claude-flow scale status',
-    'claude-flow scale policy create --name "peak-hours" --min 3 --max 10',
-    'claude-flow scale metrics --watch'
+    'flowx scale up 5',
+    'flowx scale down 2',
+    'flowx scale auto --target-utilization 75',
+    'flowx scale status',
+    'flowx scale policy create --name "peak-hours" --min 3 --max 10',
+    'flowx scale metrics --watch'
   ],
   options: [
     {
@@ -171,7 +171,7 @@ let autoScalingEnabled = false;
 let currentScalingPolicy: ScalingPolicy | null = null;
 let scalingInterval: NodeJS.Timeout | null = null;
 let metricsHistory: ScalingMetrics[] = [];
-let scalingActions: ScalingAction[] = [];
+const scalingActions: ScalingAction[] = [];
 
 async function getAgentProcessManager(): Promise<AgentProcessManager> {
   if (!agentProcessManager) {
@@ -207,7 +207,7 @@ async function scaleUp(context: CLIContext): Promise<void> {
   
   const targetCount = parseInt(args[0]);
   if (!targetCount || targetCount < 1) {
-    printError('Target agent count is required. Example: claude-flow scale up 5');
+    printError('Target agent count is required. Example: flowx scale up 5');
     return;
   }
 
@@ -286,7 +286,7 @@ async function scaleDown(context: CLIContext): Promise<void> {
   
   const targetCount = parseInt(args[0]);
   if (!targetCount || targetCount < 1) {
-    printError('Target agent count to remove is required. Example: claude-flow scale down 2');
+    printError('Target agent count to remove is required. Example: flowx scale down 2');
     return;
   }
 
@@ -424,7 +424,7 @@ async function enableManualScaling(context: CLIContext): Promise<void> {
     }
 
     printSuccess('✅ Manual scaling enabled');
-    printInfo('Use "claude-flow scale up/down" commands to manually adjust agent count');
+    printInfo('Use "flowx scale up/down" commands to manually adjust agent count');
 
   } catch (error) {
     printError(`Failed to enable manual scaling: ${error instanceof Error ? error.message : String(error)}`);

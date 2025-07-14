@@ -22,7 +22,11 @@ describe('SparcTaskExecutor', () => {
 
   beforeEach(() => {
     // Setup mocks
-    mockLogger = new Logger() as jest.Mocked<Logger>;
+    mockLogger = new Logger({
+    level: 'debug',
+    format: 'json',
+    destination: 'console'
+  }) as jest.Mocked<Logger>;
     mockLogger.info = jest.fn();
     mockLogger.error = jest.fn();
 

@@ -47,10 +47,10 @@ jest.mock('../../../src/hive-mind/neural/neural-integration', () => {
   return {
     NeuralIntegration: jest.fn().mockImplementation(() => {
       return {
-        learnFromTaskCompletion: jest.fn().mockResolvedValue(undefined),
-        learnCoordinationPattern: jest.fn().mockResolvedValue(undefined),
+        learnFromTaskCompletion: jest.fn().mockImplementation(async () => {}),
+        learnCoordinationPattern: jest.fn().mockImplementation(async () => {}),
         getObservedPatterns: jest.fn().mockReturnValue([]),
-        shutdown: jest.fn().mockResolvedValue(undefined)
+        shutdown: jest.fn().mockImplementation(async () => {})
       };
     })
   };
@@ -58,22 +58,25 @@ jest.mock('../../../src/hive-mind/neural/neural-integration', () => {
 
 // Mock the database manager
 jest.mock('../../../src/hive-mind/database/database-manager', () => {
-  return {
-    DatabaseManager: jest.fn().mockImplementation(() => {
-      return {
-        initialize: jest.fn().mockResolvedValue(undefined),
-        shutdown: jest.fn().mockResolvedValue(undefined),
-        execute: jest.fn(),
-        query: jest.fn(),
-        transaction: jest.fn(),
-        getDatabaseStats: jest.fn().mockReturnValue({
-          totalTables: 12,
-          totalRecords: 150,
-          lastBackup: '2024-01-15T10:30:00Z',
-          status: 'healthy'
-        })
-      };
+  const mockInstance = {
+    initialize: jest.fn().mockImplementation(async () => {}),
+    shutdown: jest.fn().mockImplementation(async () => {}),
+    execute: jest.fn(),
+    query: jest.fn(),
+    transaction: jest.fn(),
+    getDatabaseStats: jest.fn().mockReturnValue({
+      totalTables: 12,
+      totalRecords: 150,
+      lastBackup: '2024-01-15T10:30:00Z',
+      status: 'healthy'
     })
+  };
+
+  const DatabaseManagerClass = jest.fn().mockImplementation(() => mockInstance) as any;
+  DatabaseManagerClass.getInstance = jest.fn().mockResolvedValue(mockInstance);
+
+  return {
+    DatabaseManager: DatabaseManagerClass
   };
 });
 
@@ -90,7 +93,7 @@ jest.mock('../../../src/hive-mind/consensus/consensus-engine', () => {
           avgParticipation: 0.85,
           avgConfidence: 0.78
         }),
-        shutdown: jest.fn().mockResolvedValue(undefined)
+        shutdown: jest.fn().mockImplementation(async () => {})
       };
     })
   };
@@ -102,7 +105,7 @@ jest.mock('../../../src/hive-mind/tasks/task-executor', () => {
     TaskExecutor: jest.fn().mockImplementation(() => {
       return {
         start: jest.fn(),
-        stop: jest.fn().mockResolvedValue(undefined),
+        stop: jest.fn().mockImplementation(async () => {}),
         submitTask: jest.fn(),
         getMetrics: jest.fn().mockReturnValue({
           totalSubmitted: 50,
@@ -110,7 +113,7 @@ jest.mock('../../../src/hive-mind/tasks/task-executor', () => {
           totalFailed: 5,
           averageExecutionTime: 3500
         }),
-        shutdown: jest.fn().mockResolvedValue(undefined)
+        shutdown: jest.fn().mockImplementation(async () => {})
       };
     })
   };
@@ -122,7 +125,7 @@ jest.mock('../../../src/hive-mind/utilities/resource-manager', () => {
     ResourceManager: jest.fn().mockImplementation(() => {
       return {
         start: jest.fn(),
-        stop: jest.fn().mockResolvedValue(undefined),
+        stop: jest.fn().mockImplementation(async () => {}),
         getResourceMetrics: jest.fn().mockReturnValue({
           memoryUsageMB: 512,
           cpuPercent: 25,
@@ -133,8 +136,8 @@ jest.mock('../../../src/hive-mind/utilities/resource-manager', () => {
           lastCleanup: new Date()
         }),
         isHealthy: jest.fn().mockReturnValue(true),
-        gracefulShutdown: jest.fn().mockResolvedValue(undefined),
-        shutdown: jest.fn().mockResolvedValue(undefined)  // Added shutdown method
+        gracefulShutdown: jest.fn().mockImplementation(async () => {}),
+        shutdown: jest.fn().mockImplementation(async () => {})  // Added shutdown method
       };
     })
   };
@@ -145,16 +148,19 @@ jest.mock('../../../src/hive-mind/agents/agent-factory', () => {
   return {
     AgentFactory: jest.fn().mockImplementation(() => {
       return {
-        createAgent: jest.fn().mockImplementation((swarmId, options) => ({
-          id: `agent-${Date.now()}`,
-          name: options.name || 'test-agent',
-          type: options.type || 'tester',
-          swarmId,
-          capabilities: ['testing', 'analysis'],
-          healthScore: 1.0,
-          performanceRating: 1.0
-        })),
-        shutdown: jest.fn().mockResolvedValue(undefined)
+        createAgent: jest.fn().mockImplementation((...args: any[]) => {
+          const [swarmId, options] = args;
+          return {
+            id: `agent-${Date.now()}`,
+            name: options?.name || 'test-agent',
+            type: options?.type || 'tester',
+            swarmId,
+            capabilities: ['testing', 'analysis'],
+            healthScore: 1.0,
+            performanceRating: 1.0
+          };
+        }),
+        shutdown: jest.fn().mockImplementation(async () => {})
       };
     })
   };
@@ -163,22 +169,31 @@ jest.mock('../../../src/hive-mind/agents/agent-factory', () => {
 // Import the rest of the modules after mocking
 import { NeuralIntegration } from '../../../src/hive-mind/neural/neural-integration';
 import { HiveMind } from '../../../src/hive-mind/core/hive-mind';
+import { Logger } from '../../../src/core/logger';
 
 describe('Hive Mind Integration Tests', () => {
   let hiveMind: HiveMind;
   let neuralEngine: NeuralPatternEngine;
   let neuralIntegration: NeuralIntegration;
   let eventBus: ReturnType<typeof EventBus.getInstance>;
+  let logger: Logger;
 
   beforeAll(async () => {
     // Get event bus instance
     eventBus = EventBus.getInstance();
     
+    // Create logger
+    logger = new Logger({
+    level: 'debug',
+    format: 'json',
+    destination: 'console'
+  });
+    
     // Create a neural pattern engine
     neuralEngine = new NeuralPatternEngine();
 
-    // Create neural integration
-    neuralIntegration = new NeuralIntegration();
+    // Create neural integration with proper config
+    neuralIntegration = new NeuralIntegration(neuralEngine, logger);
 
     // Initialize Hive Mind
     hiveMind = new HiveMind({
@@ -199,9 +214,6 @@ describe('Hive Mind Integration Tests', () => {
 
   describe('Event Handling', () => {
     it('should process task completion events', () => {
-      // Set up spy on neural integration
-      jest.spyOn(neuralIntegration, 'learnFromTaskCompletion');
-
       // Create a mock task completion event
       const taskEvent = {
         task: {
@@ -240,9 +252,6 @@ describe('Hive Mind Integration Tests', () => {
     });
 
     it('should process coordination pattern events', () => {
-      // Set up spy on neural integration
-      jest.spyOn(neuralIntegration, 'learnCoordinationPattern');
-
       // Create a mock coordination pattern event
       const patternEvent = {
         pattern: 'hierarchical',

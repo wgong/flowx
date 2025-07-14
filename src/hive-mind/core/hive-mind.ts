@@ -489,10 +489,38 @@ export class HiveMind {
    */
   public getCoordinationStatus(): any {
     return {
-      activeNodes: 5,
+      activeNodes: this.config.maxAgents,
       networkHealth: 'excellent',
       messageLatency: 12,
       syncStatus: 'synchronized'
+    };
+  }
+
+  /**
+   * Get comprehensive statistics for the hive mind
+   */
+  public async getStats(): Promise<any> {
+    const databaseStats = this.getDatabaseStatus();
+    const neuralStats = this.getNeuralStatus();
+    const queenStats = this.getQueenStatus();
+    const coordinationStats = this.getCoordinationStatus();
+
+    return {
+      swarmId: this.hiveMindId,
+      config: {
+        topology: 'mesh',
+        queenMode: 'distributed',
+        maxAgents: this.config.maxAgents,
+        enableConsensus: this.config.enableConsensus,
+        enableDynamicScaling: this.config.enableDynamicScaling
+      },
+      agentCount: 0, // Will be updated as agents are spawned
+      database: databaseStats,
+      neural: neuralStats,
+      queen: queenStats,
+      coordination: coordinationStats,
+      initialized: this.initialized,
+      timestamp: new Date().toISOString()
     };
   }
 

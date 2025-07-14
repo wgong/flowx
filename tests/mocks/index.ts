@@ -173,25 +173,25 @@ export class MockEventBus implements IEventBus {
 export class MockLogger implements ILogger {
   private logs: Array<{ level: string; message: string; data?: any }> = [];
 
-  debug(message: string, data?: unknown): void {
+  debug = createSpy((message: string, data?: unknown): void => {
     this.logs.push({ level: 'debug', message, data });
-  }
+  });
 
-  info(message: string, data?: unknown): void {
+  info = createSpy((message: string, data?: unknown): void => {
     this.logs.push({ level: 'info', message, data });
-  }
+  });
 
-  warn(message: string, data?: unknown): void {
+  warn = createSpy((message: string, data?: unknown): void => {
     this.logs.push({ level: 'warn', message, data });
-  }
+  });
 
-  error(message: string, error?: unknown): void {
+  error = createSpy((message: string, error?: unknown): void => {
     this.logs.push({ level: 'error', message, data: error });
-  }
+  });
 
-  async configure(config: any): Promise<void> {
+  configure = createSpy(async (config: any): Promise<void> => {
     // No-op for mock
-  }
+  });
 
   getLogs(): Array<{ level: string; message: string; data?: any }> {
     return [...this.logs];

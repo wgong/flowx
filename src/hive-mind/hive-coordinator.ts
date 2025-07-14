@@ -352,7 +352,7 @@ export class HiveCoordinator extends EventEmitter {
       const uptime = Date.now() - this.startTime;
       
       // Get agent statistics
-      let agentStats = {
+      const agentStats = {
         total: 0,
         active: 0,
         byType: {} as Record<AgentType, number>
@@ -366,7 +366,7 @@ export class HiveCoordinator extends EventEmitter {
       }
       
       // Get task statistics
-      let taskStats = {
+      const taskStats = {
         total: 0,
         pending: 0,
         active: 0,
@@ -396,13 +396,13 @@ export class HiveCoordinator extends EventEmitter {
       }
       
       // Memory statistics are placeholder in this implementation
-      let memoryStats = {
+      const memoryStats = {
         usage: 0,
         entries: 0
       };
       
       // Performance statistics
-      let performanceStats = {
+      const performanceStats = {
         averageTaskTime: this.taskExecutor?.getMetrics().averageExecutionTime || 0,
         successRate: taskStats.total > 0 ? 
           taskStats.completed / taskStats.total : 0,

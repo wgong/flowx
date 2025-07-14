@@ -41,7 +41,10 @@ jest.mock('node:fs/promises', () => ({
   unlink: jest.fn().mockResolvedValue(undefined),
   rmdir: jest.fn().mockResolvedValue(undefined),
   access: jest.fn().mockImplementation(() => Promise.resolve()),
-  mkdtemp: jest.fn().mockResolvedValue('/tmp/test-dir'),
+  mkdtemp: jest.fn().mockImplementation(async (prefix) => {
+    const { mkdtemp: realMkdtemp } = require('fs').promises;
+    return realMkdtemp(prefix);
+  }),
   rm: jest.fn().mockResolvedValue(undefined),
 }));
 
@@ -58,7 +61,10 @@ jest.mock('fs/promises', () => ({
   unlink: jest.fn().mockResolvedValue(undefined),
   rmdir: jest.fn().mockResolvedValue(undefined),
   access: jest.fn().mockImplementation(() => Promise.resolve()),
-  mkdtemp: jest.fn().mockResolvedValue('/tmp/test-dir'),
+  mkdtemp: jest.fn().mockImplementation(async (prefix) => {
+    const { mkdtemp: realMkdtemp } = require('fs').promises;
+    return realMkdtemp(prefix);
+  }),
   rm: jest.fn().mockResolvedValue(undefined),
 }));
 

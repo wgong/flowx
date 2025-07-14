@@ -189,7 +189,11 @@ describe('MCP Integration Tests', () => {
   let config: MCPConfig;
 
   beforeEach(async () => {
-    logger = new Logger();
+    logger = new Logger({
+    level: 'debug',
+    format: 'json',
+    destination: 'console'
+  });
     await logger.configure({
       level: 'debug',
       format: 'text',

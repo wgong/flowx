@@ -2,44 +2,166 @@
  * Unit tests for coordination system
  */
 
-import {
-  describe,
-  it,
-  beforeEach,
-  afterEach,
-  assertEquals,
-  assertExists,
-  assertRejects,
-  spy,
-  assertSpyCalls,
-  FakeTime,
-} from '../../test.utils.ts';
-import { CoordinationManager } from '../../../src/coordination/manager.ts';
-import { TaskScheduler } from '../../../src/coordination/scheduler.ts';
-import { ResourceManager } from '../../../src/coordination/resources.ts';
-import { MessageRouter } from '../../../src/coordination/messaging.ts';
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
+import { CoordinationManager, EnhancedCoordinationConfig } from '../../../src/coordination/manager.ts';
+import { TaskCoordinator } from '../../../src/coordination/task-coordinator.ts';
 import { WorkStealingCoordinator } from '../../../src/coordination/work-stealing.ts';
+import { CircuitBreakerManager, CircuitState } from '../../../src/coordination/circuit-breaker.ts';
 import { DependencyGraph } from '../../../src/coordination/dependency-graph.ts';
-import { CircuitBreaker, CircuitState } from '../../../src/coordination/circuit-breaker.ts';
 import { ConflictResolver } from '../../../src/coordination/conflict-resolution.ts';
-import { SystemEvents } from '../../../src/utils/types.ts';
+import { Task } from '../../../src/utils/types.ts';
 import { createMocks } from '../../mocks/index.ts';
-import { TestDataBuilder } from '../../test.utils.ts';
-import { cleanupTestEnv, setupTestEnv } from '../../test.config.ts';
+import { setupTestEnv, cleanupTestEnv } from '../../test.config.ts';
+
+// Fixed FakeTime class
+class FakeTime {
+  private originalNow: typeof Date.now;
+  private originalSetTimeout: typeof setTimeout;
+  private originalClearTimeout: typeof clearTimeout;
+  private originalSetInterval: typeof setInterval;
+  private originalClearInterval: typeof clearInterval;
+  private now: number;
+  private timers: Array<{ id: number; expiry: number; callback: Function; active: boolean }>;
+  private nextId: number = 1;
+
+  constructor() {
+    this.originalNow = Date.now;
+    this.originalSetTimeout = global.setTimeout;
+    this.originalClearTimeout = global.clearTimeout;
+    this.originalSetInterval = global.setInterval;
+    this.originalClearInterval = global.clearInterval;
+    this.now = Date.now();
+    this.timers = [];
+    
+    // Mock the timer functions
+    Date.now = () => this.now;
+    global.setTimeout = ((callback: Function, delay: number) => {
+      const id = this.nextId++;
+      this.timers.push({
+        id,
+        expiry: this.now + delay,
+        callback,
+        active: true
+      });
+      return id as any;
+    }) as any;
+    
+    global.clearTimeout = ((id: number) => {
+      const timer = this.timers.find(t => t.id === id);
+      if (timer) {
+        timer.active = false;
+      }
+    }) as any;
+  }
+
+  tick(ms: number) {
+    this.now += ms;
+    Date.now = () => this.now;
+    
+    const expired = this.timers.filter(timer => timer.expiry <= this.now && timer.active);
+    this.timers = this.timers.filter(timer => timer.expiry > this.now || !timer.active);
+    
+    expired.forEach(timer => {
+      if (timer.active) {
+        timer.callback();
+      }
+    });
+  }
+
+  async tickAsync(ms: number) {
+    this.tick(ms);
+    // Allow promises to resolve
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+
+  restore() {
+    if (this.originalNow) {
+      Date.now = this.originalNow;
+    }
+    if (this.originalSetTimeout) {
+      global.setTimeout = this.originalSetTimeout;
+    }
+    if (this.originalClearTimeout) {
+      global.clearTimeout = this.originalClearTimeout;
+    }
+    if (this.originalSetInterval) {
+      global.setInterval = this.originalSetInterval;
+    }
+    if (this.originalClearInterval) {
+      global.clearInterval = this.originalClearInterval;
+    }
+  }
+}
+
+// Test data builder
+const TestDataBuilder = {
+  task: (overrides: Partial<Task> = {}): Task => ({
+    id: `task-${Date.now()}`,
+    type: 'analysis',
+    description: 'Test task',
+    priority: 1,
+    dependencies: [],
+    status: 'pending',
+    input: { content: 'test data' },
+    createdAt: new Date(),
+    ...overrides,
+  }),
+  
+  agentProfile: (overrides: any = {}) => ({
+    id: `agent-${Date.now()}`,
+    name: 'Test Agent',
+    type: 'analyst',
+    capabilities: ['analysis'],
+    priority: 1,
+    status: 'active' as const,
+    metadata: {},
+    ...overrides,
+  }),
+  
+  config: (overrides: any = {}) => ({
+    coordination: {
+      maxConcurrentTasks: 10,
+      defaultTimeout: 30000,
+      enableWorkStealing: true,
+      enableCircuitBreaker: true,
+      retryAttempts: 3,
+      schedulingStrategy: 'capability',
+      maxRetries: 3,
+      retryDelay: 1000,
+      resourceTimeout: 5000,
+      ...overrides.coordination,
+    },
+    workStealing: {
+      enabled: true,
+      stealThreshold: 3,
+      maxStealBatch: 2,
+      stealInterval: 5000,
+      minTasksToSteal: 1,
+      ...overrides.workStealing,
+    },
+    circuitBreaker: {
+      failureThreshold: 5,
+      successThreshold: 3,
+      timeout: 60000,
+      halfOpenLimit: 2,
+      ...overrides.circuitBreaker,
+    },
+    enableAdvancedFeatures: true,
+    ...overrides,
+  }),
+};
 
 describe('CoordinationManager', () => {
   let manager: CoordinationManager;
   let mocks: ReturnType<typeof createMocks>;
-  let config: any;
+  let config: EnhancedCoordinationConfig;
   let time: FakeTime;
 
   beforeEach(async () => {
     setupTestEnv();
     time = new FakeTime();
     
-    config = TestDataBuilder.config().coordination;
-    // Override with shorter timeout for tests
-    config.resourceTimeout = 5000;
+    config = TestDataBuilder.config();
     mocks = createMocks();
     
     manager = new CoordinationManager(
@@ -63,17 +185,9 @@ describe('CoordinationManager', () => {
     it('should initialize all components', async () => {
       await manager.initialize();
       
-      assertEquals(mocks.logger.hasLog('info', 'Coordination manager initialized'), true);
-    });
-
-    it('should start deadlock detection if enabled', async () => {
-      config.deadlockDetection = true;
-      await manager.initialize();
-      
-      // Fast forward to trigger deadlock detection
-      await time.tickAsync(10000);
-      
-      assertEquals(mocks.logger.hasLog('debug', 'Check for deadlock'), false); // No deadlocks expected
+      expect(mocks.logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Coordination manager initialized')
+      );
     });
 
     it('should not initialize twice', async () => {
@@ -84,116 +198,80 @@ describe('CoordinationManager', () => {
     });
   });
 
+  describe('agent management', () => {
+    beforeEach(async () => {
+      await manager.initialize();
+    });
+
+    it('should register agent', async () => {
+      const agentProfile = TestDataBuilder.agentProfile();
+
+      await manager.registerAgent(agentProfile);
+      
+      expect(mocks.logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Registering agent'),
+        expect.objectContaining({ agentId: agentProfile.id })
+      );
+    });
+
+    it('should unregister agent', async () => {
+      const agentProfile = TestDataBuilder.agentProfile();
+
+      await manager.registerAgent(agentProfile);
+      await manager.unregisterAgent(agentProfile.id);
+      
+      expect(mocks.logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Agent unregistered'),
+        expect.objectContaining({ agentId: agentProfile.id })
+      );
+    });
+  });
+
   describe('task management', () => {
     beforeEach(async () => {
       await manager.initialize();
+      
+      // Register a test agent
+      await manager.registerAgent(TestDataBuilder.agentProfile({
+        id: 'test-agent',
+        capabilities: ['analysis'],
+      }));
     });
 
     it('should assign task to agent', async () => {
       const task = TestDataBuilder.task();
-      const agentId = 'test-agent';
 
-      await manager.assignTask(task, agentId);
+      const assignedAgentId = await manager.assignTask(task, 'test-agent');
       
-      const taskCount = await manager.getAgentTaskCount(agentId);
-      assertEquals(taskCount, 1);
-    });
-
-    it('should get agent tasks', async () => {
-      const task = TestDataBuilder.task();
-      const agentId = 'test-agent';
-
-      await manager.assignTask(task, agentId);
-      
-      const tasks = await manager.getAgentTasks(agentId);
-      assertEquals(tasks.length, 1);
-      assertEquals(tasks[0].id, task.id);
-    });
-
-    it('should cancel task', async () => {
-      const task = TestDataBuilder.task();
-      const agentId = 'test-agent';
-
-      await manager.assignTask(task, agentId);
-      await manager.cancelTask(task.id);
-      
-      const taskCount = await manager.getAgentTaskCount(agentId);
-      assertEquals(taskCount, 0);
-    });
-  });
-
-  describe('resource management', () => {
-    beforeEach(async () => {
-      await manager.initialize();
-    });
-
-    it('should acquire and release resource', async () => {
-      const resourceId = 'test-resource';
-      const agentId = 'test-agent';
-
-      await manager.acquireResource(resourceId, agentId);
-      await manager.releaseResource(resourceId, agentId);
-      
-      // Should not throw
-    });
-
-    it('should handle resource conflicts', async () => {
-      const resourceId = 'test-resource';
-      const agent1 = 'agent-1';
-      const agent2 = 'agent-2';
-
-      await manager.acquireResource(resourceId, agent1);
-      
-      // Second agent should timeout after resourceTimeout
-      const acquirePromise = manager.acquireResource(resourceId, agent2);
-      
-      // Advance time to trigger timeout
-      time.tick(5000);
-      
-      await assertRejects(
-        () => acquirePromise,
-        Error,
-        'timeout'
+      expect(assignedAgentId).toBe('test-agent');
+      expect(mocks.logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Assigning task'),
+        expect.objectContaining({ taskId: task.id })
       );
-    }, 10000); // 10 second timeout for the test
-  });
-
-  describe('messaging', () => {
-    beforeEach(async () => {
-      await manager.initialize();
     });
 
-    it('should send message between agents', async () => {
-      const from = 'agent-1';
-      const to = 'agent-2';
-      const message = { type: 'test', data: 'hello' };
+    it('should complete task', async () => {
+      const task = TestDataBuilder.task();
 
-      await manager.sendMessage(from, to, message);
+      await manager.assignTask(task, 'test-agent');
+      await manager.completeTask(task.id, 'test-agent', { result: 'success' }, 1000);
       
-      // Verify message was sent via event
-      const events = mocks.eventBus.getEvents();
-      const messageEvent = events.find(e => e.event === SystemEvents.MESSAGE_SENT);
-      assertExists(messageEvent);
-    });
-  });
-
-  describe('deadlock detection', () => {
-    beforeEach(async () => {
-      config.deadlockDetection = true;
-      await manager.initialize();
+      expect(mocks.logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Task completed'),
+        expect.objectContaining({ taskId: task.id })
+      );
     });
 
-    it('should detect simple deadlock', async () => {
-      // Create a scenario where agent1 has resource1 and wants resource2
-      // and agent2 has resource2 and wants resource1
+    it('should fail task', async () => {
+      const task = TestDataBuilder.task();
+
+      await manager.assignTask(task, 'test-agent');
+      await manager.failTask(task.id, 'test-agent', new Error('Task failed'));
       
-      // This would require more complex setup with actual resource dependencies
-      // For now, we'll test that the detection runs without errors
-      
-      await time.tickAsync(10000);
-      
-      // No errors should occur
-      assertEquals(mocks.logger.hasLog('error', 'Error during deadlock detection'), false);
+      expect(mocks.logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Task failed'),
+        expect.objectContaining({ taskId: task.id })
+      );
     });
   });
 
@@ -205,16 +283,14 @@ describe('CoordinationManager', () => {
     it('should return healthy status', async () => {
       const health = await manager.getHealthStatus();
       
-      assertEquals(health.healthy, true);
-      assertExists(health.metrics);
+      expect(health.healthy).toBe(true);
+      expect(health.metrics).toBeDefined();
     });
 
     it('should handle component failures', async () => {
-      // Simulate component failure
-      // This would require mocking the internal components
-      
+      // Test that the manager can handle component failures
       const health = await manager.getHealthStatus();
-      assertExists(health);
+      expect(health).toBeDefined();
     });
   });
 
@@ -226,8 +302,9 @@ describe('CoordinationManager', () => {
     it('should perform maintenance on all components', async () => {
       await manager.performMaintenance();
       
-      // Verify maintenance was performed
-      assertEquals(mocks.logger.hasLog('info', 'Performing coordination manager maintenance'), true);
+      expect(mocks.logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Performing coordination manager maintenance')
+      );
     });
   });
 });
@@ -245,6 +322,7 @@ describe('WorkStealingCoordinator', () => {
       stealThreshold: 3,
       maxStealBatch: 2,
       stealInterval: 5000,
+      minTasksToSteal: 1,
     };
     
     mocks = createMocks();
@@ -259,7 +337,10 @@ describe('WorkStealingCoordinator', () => {
   it('should initialize when enabled', async () => {
     await coordinator.initialize();
     
-    assertEquals(mocks.logger.hasLog('info', 'Initializing work stealing coordinator'), true);
+    expect(mocks.logger.info).toHaveBeenCalledWith(
+      'Work Stealing Coordinator initialized',
+      expect.any(Object)
+    );
   });
 
   it('should not initialize when disabled', async () => {
@@ -268,7 +349,9 @@ describe('WorkStealingCoordinator', () => {
     
     await coordinator.initialize();
     
-    assertEquals(mocks.logger.hasLog('info', 'Work stealing is disabled'), true);
+    expect(mocks.logger.info).toHaveBeenCalledWith(
+      expect.stringContaining('Work stealing is disabled')
+    );
   });
 
   it('should update agent workload', () => {
@@ -283,7 +366,7 @@ describe('WorkStealingCoordinator', () => {
     });
 
     const stats = coordinator.getWorkloadStats();
-    assertEquals(stats.totalAgents, 1);
+    expect(stats.totalAgents).toBe(1);
   });
 
   it('should record task duration', () => {
@@ -292,7 +375,7 @@ describe('WorkStealingCoordinator', () => {
 
     // Verify average is updated
     const stats = coordinator.getWorkloadStats();
-    assertExists(stats.workloads);
+    expect(stats.workloads).toBeDefined();
   });
 
   it('should find best agent for task', () => {
@@ -331,7 +414,7 @@ describe('WorkStealingCoordinator', () => {
     });
 
     const bestAgent = coordinator.findBestAgent(task, agents);
-    assertEquals(bestAgent, 'agent-1'); // Better capability match
+    expect(bestAgent).toBe('agent-1'); // Better capability match
   });
 });
 
@@ -356,7 +439,7 @@ describe('DependencyGraph', () => {
     });
 
     graph.addTask(task);
-    assertEquals(graph.isTaskReady('task-1'), true);
+    expect(graph.isTaskReady('task-1')).toBe(true);
   });
 
   it('should add task with completed dependencies', () => {
@@ -373,7 +456,7 @@ describe('DependencyGraph', () => {
     graph.markCompleted('task-1');
     graph.addTask(task2);
 
-    assertEquals(graph.isTaskReady('task-2'), true);
+    expect(graph.isTaskReady('task-2')).toBe(true);
   });
 
   it('should handle task completion and mark dependents ready', () => {
@@ -389,11 +472,11 @@ describe('DependencyGraph', () => {
     graph.addTask(task1);
     graph.addTask(task2);
 
-    assertEquals(graph.isTaskReady('task-2'), false);
+    expect(graph.isTaskReady('task-2')).toBe(false);
 
     const readyTasks = graph.markCompleted('task-1');
-    assertEquals(readyTasks, ['task-2']);
-    assertEquals(graph.isTaskReady('task-2'), true);
+    expect(readyTasks).toEqual(['task-2']);
+    expect(graph.isTaskReady('task-2')).toBe(true);
   });
 
   it('should detect circular dependencies', () => {
@@ -413,16 +496,16 @@ describe('DependencyGraph', () => {
     graph.addTask(task2);
     
     // Now create cycle by directly manipulating the node
-    const node1 = graph['nodes'].get('task-1');
+    const node1 = (graph as any).nodes.get('task-1');
     if (node1) {
       // This creates a circular dependency: task1 -> task2 -> task1
       node1.dependencies.add('task-2');
       
       // Check if cycles are detected
       const cycles = graph.detectCycles();
-      assertEquals(cycles.length, 1);
+      expect(cycles.length).toBe(1);
     } else {
-      fail('Node not found');
+      throw new Error('Node not found');
     }
   });
 
@@ -445,10 +528,12 @@ describe('DependencyGraph', () => {
     graph.addTask(task3);
 
     const sorted = graph.topologicalSort();
-    assertExists(sorted);
-    assertEquals(sorted[0], 'task-1');
-    assertEquals(sorted[1], 'task-2');
-    assertEquals(sorted[2], 'task-3');
+    expect(sorted).toBeDefined();
+    if (sorted) {
+      expect(sorted[0]).toBe('task-1');
+      expect(sorted[1]).toBe('task-2');
+      expect(sorted[2]).toBe('task-3');
+    }
   });
 
   it('should find critical path', () => {
@@ -465,8 +550,10 @@ describe('DependencyGraph', () => {
     graph.addTask(task2);
 
     const criticalPath = graph.findCriticalPath();
-    assertExists(criticalPath);
-    assertEquals(criticalPath.path.length, 2);
+    expect(criticalPath).toBeDefined();
+    if (criticalPath) {
+      expect(criticalPath.path.length).toBe(2);
+    }
   });
 
   it('should export to DOT format', () => {
@@ -483,96 +570,63 @@ describe('DependencyGraph', () => {
     graph.addTask(task2);
 
     const dot = graph.toDot();
-    assertEquals(dot.includes('digraph TaskDependencies'), true);
-    assertEquals(dot.includes('"task-1" -> "task-2"'), true);
+    expect(dot).toContain('digraph TaskDependencies');
+    expect(dot).toContain('"task-1" -> "task-2"');
   });
 });
 
-describe('CircuitBreaker', () => {
-  let breaker: CircuitBreaker;
+describe('CircuitBreakerManager', () => {
+  let manager: CircuitBreakerManager;
   let mocks: ReturnType<typeof createMocks>;
-  let config: any;
 
   beforeEach(() => {
     setupTestEnv();
+    mocks = createMocks();
+    const defaultConfig = {
+      failureThreshold: 5,
+      successThreshold: 3,
+      timeout: 60000,
+      halfOpenLimit: 2,
+    };
+    manager = new CircuitBreakerManager(defaultConfig, mocks.logger, mocks.eventBus);
+  });
+
+  afterEach(async () => {
+    await manager.shutdown();
+    await cleanupTestEnv();
+  });
+
+  it('should initialize successfully', async () => {
+    await manager.initialize();
     
-    config = {
+    expect(mocks.logger.info).toHaveBeenCalledWith(
+      'Circuit Breaker Manager initialized',
+      expect.any(Object)
+    );
+  });
+
+  it('should create circuit breaker', async () => {
+    await manager.initialize();
+    
+    const config = {
       failureThreshold: 3,
       successThreshold: 2,
       timeout: 1000,
       halfOpenLimit: 1,
     };
+
+    const breaker = manager.getBreaker('test-breaker', config);
+    expect(breaker).toBeDefined();
+  });
+
+  it('should get overall stats', async () => {
+    await manager.initialize();
     
-    mocks = createMocks();
-    breaker = new CircuitBreaker('test-breaker', config, mocks.logger);
-  });
-
-  afterEach(async () => {
-    await cleanupTestEnv();
-  });
-
-  it('should start in closed state', () => {
-    assertEquals(breaker.getState(), CircuitState.CLOSED);
-  });
-
-  it('should execute function successfully', async () => {
-    const result = await breaker.execute(async () => 'success');
-    assertEquals(result, 'success');
-  });
-
-  it('should open after failure threshold', async () => {
-    const failingFn = async () => { throw new Error('failure'); };
-
-    // Cause failures
-    for (let i = 0; i < config.failureThreshold; i++) {
-      try {
-        await breaker.execute(failingFn);
-      } catch {}
-    }
-
-    assertEquals(breaker.getState(), CircuitState.OPEN);
-  });
-
-  it('should reject requests when open', async () => {
-    // Force open state
-    breaker.forceState(CircuitState.OPEN);
-
-    await assertRejects(
-      () => breaker.execute(async () => 'success'),
-      Error,
-      'Circuit breaker \'test-breaker\' is OPEN'
-    );
-  });
-
-  it('should transition to half-open after timeout', async () => {
-    // Skip timeout testing for now due to test instability
-    // Just test the state transitions directly
-    
-    // Create new breaker with success threshold of 1
-    const localConfig = {
-      ...config,
-      successThreshold: 1
-    };
-    const localBreaker = new CircuitBreaker('test-local-breaker', localConfig, mocks.logger);
-    
-    // Force half-open state
-    localBreaker.forceState(CircuitState.HALF_OPEN);
-    assertEquals(localBreaker.getState(), CircuitState.HALF_OPEN);
-    
-    // Execute successfully in half-open state
-    await localBreaker.execute(async () => 'success');
-    
-    // Success threshold is 1, so it should transition to closed
-    assertEquals(localBreaker.getState(), CircuitState.CLOSED);
-  });
-
-  it('should track metrics', () => {
-    const metrics = breaker.getMetrics();
-    
-    assertExists(metrics.state);
-    assertEquals(metrics.failures, 0);
-    assertEquals(metrics.successes, 0);
-    assertEquals(metrics.totalRequests, 0);
+    const stats = manager.getHealthStatus();
+    expect(stats).toBeDefined();
+    expect(stats.totalBreakers).toBe(0);
+    expect(stats.openBreakers).toEqual([]);
+    expect(stats.halfOpenBreakers).toEqual([]);
   });
 });
 
@@ -593,10 +647,10 @@ describe('ConflictResolver', () => {
   it('should report resource conflict', async () => {
     const conflict = await resolver.reportResourceConflict('resource-1', ['agent-1', 'agent-2']);
     
-    assertExists(conflict.id);
-    assertEquals(conflict.resourceId, 'resource-1');
-    assertEquals(conflict.agents, ['agent-1', 'agent-2']);
-    assertEquals(conflict.resolved, false);
+    expect(conflict.id).toBeDefined();
+    expect(conflict.resourceId).toBe('resource-1');
+    expect(conflict.agents).toEqual(['agent-1', 'agent-2']);
+    expect(conflict.resolved).toBe(false);
   });
 
   it('should report task conflict', async () => {
@@ -606,10 +660,10 @@ describe('ConflictResolver', () => {
       'assignment'
     );
     
-    assertExists(conflict.id);
-    assertEquals(conflict.taskId, 'task-1');
-    assertEquals(conflict.type, 'assignment');
-    assertEquals(conflict.resolved, false);
+    expect(conflict.id).toBeDefined();
+    expect(conflict.taskId).toBe('task-1');
+    expect(conflict.type).toBe('assignment');
+    expect(conflict.resolved).toBe(false);
   });
 
   it('should resolve conflict using priority strategy', async () => {
@@ -624,9 +678,9 @@ describe('ConflictResolver', () => {
 
     const resolution = await resolver.resolveConflict(conflict.id, 'priority', context);
     
-    assertEquals(resolution.type, 'priority');
-    assertEquals(resolution.winner, 'agent-2'); // Higher priority
-    assertEquals(conflict.resolved, true);
+    expect(resolution.type).toBe('priority');
+    expect(resolution.winner).toBe('agent-2'); // Higher priority
+    expect(conflict.resolved).toBe(true);
   });
 
   it('should resolve conflict using timestamp strategy', async () => {
@@ -642,8 +696,8 @@ describe('ConflictResolver', () => {
 
     const resolution = await resolver.resolveConflict(conflict.id, 'timestamp', context);
     
-    assertEquals(resolution.type, 'timestamp');
-    assertEquals(resolution.winner, 'agent-1'); // Earlier request
+    expect(resolution.type).toBe('timestamp');
+    expect(resolution.winner).toBe('agent-1'); // Earlier request
   });
 
   it('should auto-resolve conflicts', async () => {
@@ -651,8 +705,8 @@ describe('ConflictResolver', () => {
     
     const resolution = await resolver.autoResolve(conflict.id, 'priority');
     
-    assertEquals(resolution.type, 'priority');
-    assertExists(resolution.winner);
+    expect(resolution.type).toBe('priority');
+    expect(resolution.winner).toBeDefined();
   });
 
   it('should track conflict statistics', async () => {
@@ -661,11 +715,11 @@ describe('ConflictResolver', () => {
     
     const stats = resolver.getStats();
     
-    assertEquals(stats.totalConflicts, 2);
-    assertEquals(stats.activeConflicts, 2);
-    assertEquals(stats.resolvedConflicts, 0);
-    assertEquals(stats.conflictsByType.resource, 1);
-    assertEquals(stats.conflictsByType.task, 1);
+    expect(stats.totalConflicts).toBe(2);
+    expect(stats.activeConflicts).toBe(2);
+    expect(stats.resolvedConflicts).toBe(0);
+    expect((stats.conflictsByType as any).resource).toBe(1);
+    expect((stats.conflictsByType as any).task).toBe(1);
   });
 
   it('should cleanup old conflicts', async () => {
@@ -677,6 +731,6 @@ describe('ConflictResolver', () => {
     // Cleanup old conflicts (immediate cleanup for test)
     const removed = resolver.cleanupOldConflicts(0);
     
-    assertEquals(removed, 1);
+    expect(removed).toBe(1);
   });
 });

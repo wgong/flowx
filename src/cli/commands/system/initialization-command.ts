@@ -13,13 +13,13 @@ export const initCommand: CLICommand = {
   name: 'init',
   description: 'Initialize a new Claude Flow project',
   category: 'System',
-  usage: 'claude-flow init [PROJECT_NAME] [OPTIONS]',
+  usage: 'flowx init [PROJECT_NAME] [OPTIONS]',
   examples: [
-    'claude-flow init my-project',
-    'claude-flow init my-project --template basic',
-    'claude-flow init --interactive',
-    'claude-flow init --sparc --advanced',
-    'claude-flow init --batch --config batch-config.tson'
+    'flowx init my-project',
+    'flowx init my-project --template basic',
+    'flowx init --interactive',
+    'flowx init --sparc --advanced',
+    'flowx init --batch --config batch-config.tson'
   ],
   arguments: [
     {
@@ -137,7 +137,7 @@ export const initCommand: CLICommand = {
       printSuccess(`Successfully initialized Claude Flow project: ${projectName}`);
       printInfo(`Next steps:`);
       console.log(`  cd ${projectName}`);
-      console.log(`  claude-flow start`);
+      console.log(`  flowx start`);
 
     } catch (error) {
       printError(`Initialization failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -163,9 +163,9 @@ interface InitializationConfig {
 async function getProjectName(interactive: boolean): Promise<string> {
   if (interactive) {
     // In a real implementation, this would use a prompt library
-    return 'claude-flow-project';
+    return 'flowx-project';
   }
-  return 'claude-flow-project';
+  return 'flowx-project';
 }
 
 async function validateProjectDirectory(projectPath: string, force: boolean): Promise<void> {
@@ -187,7 +187,7 @@ async function validateProjectDirectory(projectPath: string, force: boolean): Pr
 }
 
 async function getInitializationConfig(options: any, projectName: string): Promise<InitializationConfig> {
-  let config: InitializationConfig = {
+  const config: InitializationConfig = {
     projectName,
     template: options.template || 'basic',
     sparc: options.sparc || false,
@@ -244,7 +244,7 @@ async function createProjectStructure(projectPath: string, config: Initializatio
     'examples',
     'tests',
     'config',
-    '.claude-flow'
+    '.flowx'
   ];
 
   // Add template-specific directories
@@ -277,23 +277,23 @@ async function createBasicFiles(projectPath: string, config: InitializationConfi
     description: 'Claude Flow project',
     main: 'src/index.ts',
     scripts: {
-      start: 'claude-flow start',
-      dev: 'claude-flow start --dev',
+      start: 'flowx start',
+      dev: 'flowx start --dev',
       test: 'npm run test:unit && npm run test:integration',
       'test:unit': 'jest tests/unit',
       'test:integration': 'jest tests/integration',
-      build: 'claude-flow build',
-      deploy: 'claude-flow deploy'
+      build: 'flowx build',
+      deploy: 'flowx deploy'
     },
     dependencies: {
-      '@claude-flow/core': '^1.0.0'
+      '@flowx/core': '^1.0.0'
     },
     devDependencies: {
       '@types/node': '^20.0.0',
       'jest': '^29.0.0',
       'typescript': '^5.0.0'
     },
-    keywords: ['claude-flow', 'ai', 'automation'],
+    keywords: ['flowx', 'ai', 'automation'],
     author: '',
     license: 'MIT'
   };
@@ -340,8 +340,8 @@ build/
 .env.local
 *.log
 .DS_Store
-.claude-flow/cache/
-.claude-flow/logs/
+.flowx/cache/
+.flowx/logs/
 `;
 
   await writeFile(join(projectPath, '.gitignore'), gitignore);
@@ -419,7 +419,7 @@ This directory contains ${mode} related files and templates.
 ## Usage
 
 \`\`\`bash
-claude-flow sparc ${mode} --help
+flowx sparc ${mode} --help
 \`\`\`
 `;
     await writeFile(join(projectPath, `sparc/modes/${mode}.md`), modeContent);
@@ -543,11 +543,11 @@ async function createConfigurationFiles(projectPath: string, config: Initializat
     },
     logging: {
       level: 'info',
-      file: '.claude-flow/logs/app.log'
+      file: '.flowx/logs/app.log'
     },
     memory: {
       backend: 'sqlite',
-      path: '.claude-flow/memory.db'
+      path: '.flowx/memory.db'
     }
   };
 
@@ -566,7 +566,7 @@ async function createConfigurationFiles(projectPath: string, config: Initializat
   }
 
   await writeFile(
-    join(projectPath, 'claude-flow.config.tson'),
+    join(projectPath, 'flowx.config.tson'),
     JSON.stringify(claudeFlowConfig, null, 2)
   );
 
@@ -579,7 +579,7 @@ LOG_LEVEL=info
 
 # Memory
 MEMORY_BACKEND=sqlite
-MEMORY_PATH=.claude-flow/memory.db
+MEMORY_PATH=.flowx/memory.db
 
 # API Keys (set your actual keys)
 # ANTHROPIC_API_KEY=your_key_here
@@ -654,7 +654,7 @@ async function validateInitialization(projectPath: string): Promise<void> {
 
   const requiredFiles = [
     'package.tson',
-    'claude-flow.config.tson',
+    'flowx.config.tson',
     'README.md',
     '.gitignore',
     'tsconfig.tson'

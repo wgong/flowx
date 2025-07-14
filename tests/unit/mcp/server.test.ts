@@ -25,7 +25,7 @@ describe('MCPServer', () => {
       destination: 'console'
     });
 
-    eventBus = EventBus.getInstance(false);
+    eventBus = EventBus.getInstance();
 
     config = {
       transport: 'stdio',

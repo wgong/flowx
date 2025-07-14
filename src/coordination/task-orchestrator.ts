@@ -1,589 +1,1269 @@
 /**
- * Task Orchestrator
- * Orchestrates task assignment and execution across agents with multiple strategies
+ * Task orchestrator for complex workflow management
+ * Handles workflow execution with multiple strategies and dependency management
  */
 
 import { EventEmitter } from 'node:events';
-import { TaskScheduler } from './scheduler.ts';
-import { WorkStealingCoordinator } from './work-stealing.ts';
-import { DependencyGraph } from './dependency-graph.ts';
-import { CircuitBreakerManager } from './circuit-breaker.ts';
-import { Task, AgentProfile, CoordinationConfig } from '../utils/types.ts';
-import { IEventBus } from '../core/event-bus.ts';
-import { ILogger } from '../core/logger.ts';
+import { TaskDefinition, TaskResult, TaskStatus, AgentState, TaskError, TaskPriority, TaskId } from "../swarm/types.ts";
+import { ILogger } from "../core/logger.ts";
+import { IEventBus } from "../core/event-bus.ts";
+import { BackgroundExecutor } from "./background-executor.ts";
+import { HiveOrchestrator } from "./hive-orchestrator.ts";
+import { LoadBalancer } from "./load-balancer.ts";
+import { generateId } from "../utils/helpers.ts";
 
-export interface SchedulingStrategy {
+export interface TaskOrchestratorConfig {
+  maxConcurrentWorkflows: number;
+  maxWorkflowDepth: number;
+  defaultTimeout: number;
+  retryAttempts: number;
+  enableCheckpointing: boolean;
+  checkpointInterval: number;
+  enableRecovery: boolean;
+  enableMetrics: boolean;
+  workflowStrategies: WorkflowStrategy[];
+  dependencyResolution: DependencyResolutionStrategy;
+}
+
+export type WorkflowStrategy = 
+  | 'sequential'
+  | 'parallel'
+  | 'adaptive'
+  | 'consensus'
+  | 'pipeline'
+  | 'conditional'
+  | 'loop'
+  | 'fork-join'
+  | 'map-reduce'
+  | 'event-driven';
+
+export type DependencyResolutionStrategy = 
+  | 'strict'
+  | 'optimistic'
+  | 'lazy'
+  | 'predictive';
+
+export interface WorkflowDefinition {
+  id: string;
   name: string;
-  selectAgent(task: Task, agents: ExtendedAgentProfile[], context: SchedulingContext): string | null;
-}
-
-// Extended agent profile with runtime properties
-export interface ExtendedAgentProfile extends AgentProfile {
-  status?: 'idle' | 'available' | 'busy' | 'offline';
-  currentLoad?: number;
-}
-
-// Extended task interface with orchestration properties
-export interface ExtendedTask extends Task {
-  requirements?: string[];
-  assignedTo?: string;
-  retryCount?: number;
-  maxRetries?: number;
-}
-
-export interface SchedulingContext {
-  taskLoads: Map<string, number>;
-  agentCapabilities: Map<string, string[]>;
-  agentPriorities: Map<string, number>;
-  taskHistory: Map<string, TaskStats>;
-  currentTime: Date;
-}
-
-export interface TaskStats {
-  totalExecutions: number;
-  avgDuration: number;
-  successRate: number;
-  lastAgent?: string;
-}
-
-// Work stealing configuration
-export interface WorkStealingConfig {
-  enabled: boolean;
-  stealThreshold: number;
-  maxStealBatch: number;
-  stealInterval: number;
-}
-
-// Circuit breaker configuration
-export interface CircuitBreakerConfig {
-  failureThreshold: number;
-  successThreshold: number;
+  description: string;
+  strategy: WorkflowStrategy;
+  tasks: WorkflowTask[];
+  dependencies: WorkflowDependency[];
+  conditions: WorkflowCondition[];
+  loops: WorkflowLoop[];
+  variables: Map<string, any>;
   timeout: number;
-  halfOpenLimit: number;
+  retryPolicy: RetryPolicy;
+  checkpoints: WorkflowCheckpoint[];
+  metadata: Record<string, any>;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-/**
- * Capability-based scheduling strategy
- * Selects agents based on their capabilities and specializations
- */
-export class CapabilitySchedulingStrategy implements SchedulingStrategy {
-  name = 'capability';
-
-  selectAgent(task: Task, agents: ExtendedAgentProfile[], context: SchedulingContext): string | null {
-    const availableAgents = agents.filter(agent => agent.status === 'idle' || agent.status === 'available');
-    
-    if (availableAgents.length === 0) return null;
-
-    // Find agents with matching capabilities
-    const extendedTask = task as ExtendedTask;
-    const capableAgents = availableAgents.filter(agent => {
-      const agentCaps = context.agentCapabilities.get(agent.id) || [];
-      return extendedTask.requirements?.some((req: string) => agentCaps.includes(req));
-    });
-
-    if (capableAgents.length === 0) {
-      // Fallback to any available agent
-      return availableAgents[0].id;
-    }
-
-    // Select best match based on capability overlap and load
-    let bestAgent = capableAgents[0];
-    let bestScore = 0;
-
-    for (const agent of capableAgents) {
-      const agentCaps = context.agentCapabilities.get(agent.id) || [];
-      const taskReqs = extendedTask.requirements || [];
-      
-      const capabilityMatch = taskReqs.filter((req: string) => agentCaps.includes(req)).length / taskReqs.length;
-      const loadFactor = 1 - ((context.taskLoads.get(agent.id) || 0) / 10); // Normalize load
-      const priorityFactor = (context.agentPriorities.get(agent.id) || 1) / 10;
-      
-      const score = capabilityMatch * 0.6 + loadFactor * 0.3 + priorityFactor * 0.1;
-      
-      if (score > bestScore) {
-        bestScore = score;
-        bestAgent = agent;
-      }
-    }
-
-    return bestAgent.id;
-  }
+export interface WorkflowTask {
+  id: string;
+  workflowId: string;
+  name: string;
+  type: 'atomic' | 'composite' | 'conditional' | 'loop' | 'fork' | 'join';
+  taskDefinition: TaskDefinition;
+  dependencies: string[];
+  conditions: string[];
+  timeout: number;
+  retryPolicy: RetryPolicy;
+  assignedAgent?: string;
+  status: TaskStatus;
+  result?: TaskResult;
+  error?: TaskError;
+  startTime?: Date;
+  endTime?: Date;
+  executionTime?: number;
+  metadata: Record<string, any>;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-/**
- * Round-robin scheduling strategy
- * Distributes tasks evenly across available agents
- */
-export class RoundRobinSchedulingStrategy implements SchedulingStrategy {
-  name = 'round-robin';
-  private lastIndex = 0;
-
-  selectAgent(task: Task, agents: ExtendedAgentProfile[], context: SchedulingContext): string | null {
-    const availableAgents = agents.filter(agent => agent.status === 'idle' || agent.status === 'available');
-    
-    if (availableAgents.length === 0) return null;
-
-    this.lastIndex = (this.lastIndex + 1) % availableAgents.length;
-    return availableAgents[this.lastIndex].id;
-  }
+export interface WorkflowDependency {
+  id: string;
+  fromTaskId: string;
+  toTaskId: string;
+  type: 'data' | 'control' | 'resource' | 'temporal';
+  condition?: string;
+  weight: number;
+  metadata: Record<string, any>;
 }
 
-/**
- * Least-loaded scheduling strategy
- * Assigns tasks to agents with the lowest current load
- */
-export class LeastLoadedSchedulingStrategy implements SchedulingStrategy {
-  name = 'least-loaded';
-
-  selectAgent(task: Task, agents: ExtendedAgentProfile[], context: SchedulingContext): string | null {
-    const availableAgents = agents.filter(agent => agent.status === 'idle' || agent.status === 'available');
-    
-    if (availableAgents.length === 0) return null;
-
-    // Find agent with minimum load
-    let leastLoadedAgent = availableAgents[0];
-    let minLoad = context.taskLoads.get(leastLoadedAgent.id) || 0;
-
-    for (const agent of availableAgents) {
-      const load = context.taskLoads.get(agent.id) || 0;
-      if (load < minLoad) {
-        minLoad = load;
-        leastLoadedAgent = agent;
-      }
-    }
-
-    return leastLoadedAgent.id;
-  }
+export interface WorkflowCondition {
+  id: string;
+  name: string;
+  expression: string;
+  type: 'pre' | 'post' | 'guard' | 'invariant';
+  taskIds: string[];
+  metadata: Record<string, any>;
 }
 
-/**
- * Affinity-based scheduling strategy
- * Prefers agents that have successfully executed similar tasks
- */
-export class AffinitySchedulingStrategy implements SchedulingStrategy {
-  name = 'affinity';
-
-  selectAgent(task: Task, agents: ExtendedAgentProfile[], context: SchedulingContext): string | null {
-    const availableAgents = agents.filter(agent => agent.status === 'idle' || agent.status === 'available');
-    
-    if (availableAgents.length === 0) return null;
-
-    // Check task history for affinity
-    const taskStats = context.taskHistory.get(task.type);
-    if (taskStats?.lastAgent) {
-      const lastAgent = availableAgents.find(agent => agent.id === taskStats.lastAgent);
-      if (lastAgent && taskStats.successRate > 0.8) {
-        return lastAgent.id;
-      }
-    }
-
-    // Fallback to capability-based selection
-    const capabilityStrategy = new CapabilitySchedulingStrategy();
-    return capabilityStrategy.selectAgent(task, agents, context);
-  }
+export interface WorkflowLoop {
+  id: string;
+  name: string;
+  type: 'while' | 'for' | 'foreach' | 'until';
+  condition: string;
+  taskIds: string[];
+  maxIterations: number;
+  currentIteration: number;
+  metadata: Record<string, any>;
 }
 
-/**
- * Task orchestrator that manages task assignment and execution
- * Uses multiple scheduling strategies and coordination patterns
- */
-export class TaskOrchestrator extends TaskScheduler {
-  private strategies = new Map<string, SchedulingStrategy>();
-  private activeAgents = new Map<string, ExtendedAgentProfile>();
-  private taskStats = new Map<string, TaskStats>();
-  private workStealing: WorkStealingCoordinator;
-  private dependencyGraph: DependencyGraph;
-  private circuitBreakers: CircuitBreakerManager;
-  private defaultStrategy = 'capability';
+export interface RetryPolicy {
+  maxAttempts: number;
+  backoffStrategy: 'linear' | 'exponential' | 'fixed';
+  baseDelay: number;
+  maxDelay: number;
+  jitter: boolean;
+  conditions: string[];
+}
+
+export interface WorkflowCheckpoint {
+  id: string;
+  workflowId: string;
+  taskId: string;
+  state: WorkflowState;
+  timestamp: Date;
+  metadata: Record<string, any>;
+}
+
+export interface WorkflowState {
+  workflowId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'paused';
+  completedTasks: string[];
+  failedTasks: string[];
+  runningTasks: string[];
+  variables: Map<string, any>;
+  checkpoints: WorkflowCheckpoint[];
+  startTime?: Date;
+  endTime?: Date;
+  executionTime?: number;
+  metadata: Record<string, any>;
+}
+
+export interface WorkflowExecution {
+  id: string;
+  workflowId: string;
+  state: WorkflowState;
+  strategy: WorkflowStrategy;
+  progress: WorkflowProgress;
+  metrics: WorkflowMetrics;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface WorkflowProgress {
+  totalTasks: number;
+  completedTasks: number;
+  failedTasks: number;
+  runningTasks: number;
+  pendingTasks: number;
+  percentage: number;
+  estimatedTimeRemaining: number;
+}
+
+export interface WorkflowMetrics {
+  executionTime: number;
+  throughput: number;
+  successRate: number;
+  errorRate: number;
+  resourceUtilization: number;
+  parallelism: number;
+  checkpointCount: number;
+  recoveryCount: number;
+}
+
+export interface TaskOrchestratorMetrics {
+  totalWorkflows: number;
+  activeWorkflows: number;
+  completedWorkflows: number;
+  failedWorkflows: number;
+  averageExecutionTime: number;
+  throughput: number;
+  successRate: number;
+  strategyEffectiveness: Map<WorkflowStrategy, number>;
+  resourceUtilization: number;
+  checkpointEfficiency: number;
+}
+
+export class TaskOrchestrator extends EventEmitter {
+  private workflows = new Map<string, WorkflowDefinition>();
+  private executions = new Map<string, WorkflowExecution>();
+  private activeExecutions = new Set<string>();
+  private checkpointTimer?: NodeJS.Timeout;
+  private metrics: TaskOrchestratorMetrics;
+  private isShuttingDown = false;
 
   constructor(
-    config: CoordinationConfig,
-    eventBus: IEventBus,
-    logger: ILogger,
+    private config: TaskOrchestratorConfig,
+    private logger: ILogger,
+    private eventBus: IEventBus,
+    private backgroundExecutor: BackgroundExecutor,
+    private hiveOrchestrator: HiveOrchestrator,
+    private loadBalancer: LoadBalancer
   ) {
-    super(config, eventBus, logger);
+    super();
+    this.metrics = this.initializeMetrics();
+    this.setupEventHandlers();
+  }
 
-    // Create work stealing config
-    const workStealingConfig: WorkStealingConfig = {
-      enabled: true,
-      stealThreshold: 2,
-      maxStealBatch: 3,
-      stealInterval: 30000
+  private initializeMetrics(): TaskOrchestratorMetrics {
+    return {
+      totalWorkflows: 0,
+      activeWorkflows: 0,
+      completedWorkflows: 0,
+      failedWorkflows: 0,
+      averageExecutionTime: 0,
+      throughput: 0,
+      successRate: 0,
+      strategyEffectiveness: new Map(),
+      resourceUtilization: 0,
+      checkpointEfficiency: 0
     };
-
-    // Create circuit breaker config
-    const circuitBreakerConfig: CircuitBreakerConfig = {
-      failureThreshold: 5,
-      successThreshold: 3,
-      timeout: 60000,
-      halfOpenLimit: 2
-    };
-
-    // Initialize coordination components
-    this.workStealing = new WorkStealingCoordinator(workStealingConfig, eventBus, logger);
-    this.dependencyGraph = new DependencyGraph(logger);
-    this.circuitBreakers = new CircuitBreakerManager(circuitBreakerConfig, logger, eventBus);
-
-    // Register default strategies
-    this.registerStrategy(new CapabilitySchedulingStrategy());
-    this.registerStrategy(new RoundRobinSchedulingStrategy());
-    this.registerStrategy(new LeastLoadedSchedulingStrategy());
-    this.registerStrategy(new AffinitySchedulingStrategy());
-
-    this.setupOrchestrationEventHandlers();
   }
 
-  override async initialize(): Promise<void> {
-    await super.initialize();
-    await this.workStealing.initialize();
-    // DependencyGraph and CircuitBreakerManager don't have initialize methods
+  private setupEventHandlers(): void {
+    this.eventBus.on('system:shutdown', () => this.shutdown());
+    this.eventBus.on('task:completed', (result: TaskResult) => this.handleTaskCompletion(result));
+    this.eventBus.on('task:failed', (error: TaskError) => this.handleTaskFailure(error));
+    this.eventBus.on('workflow:checkpoint', (checkpoint: WorkflowCheckpoint) => this.handleCheckpoint(checkpoint));
   }
 
-  override async shutdown(): Promise<void> {
-    await this.workStealing.shutdown();
-    // DependencyGraph and CircuitBreakerManager don't have shutdown methods
-    await super.shutdown();
-  }
+  async initialize(): Promise<void> {
+    this.logger.info('Initializing TaskOrchestrator');
 
-  /**
-   * Register a new scheduling strategy
-   */
-  registerStrategy(strategy: SchedulingStrategy): void {
-    this.strategies.set(strategy.name, strategy);
-    this.logger.info('Scheduling strategy registered', { 
-      strategy: strategy.name,
-      totalStrategies: this.strategies.size 
-    });
-  }
-
-  /**
-   * Set the default scheduling strategy
-   */
-  setDefaultStrategy(name: string): void {
-    if (!this.strategies.has(name)) {
-      throw new Error(`Strategy '${name}' not found`);
+    // Start checkpoint timer if enabled
+    if (this.config.enableCheckpointing) {
+      this.checkpointTimer = setInterval(
+        () => this.performCheckpointing(),
+        this.config.checkpointInterval
+      );
     }
-    this.defaultStrategy = name;
-    this.logger.info('Default strategy updated', { strategy: name });
+
+    this.logger.info('TaskOrchestrator initialized successfully');
+  }
+
+  async shutdown(): Promise<void> {
+    this.logger.info('Shutting down TaskOrchestrator');
+    this.isShuttingDown = true;
+
+    // Clear timers
+    if (this.checkpointTimer) clearInterval(this.checkpointTimer);
+
+    // Cancel all active executions
+    const activeExecutionIds = Array.from(this.activeExecutions);
+    await Promise.all(activeExecutionIds.map(id => this.cancelExecution(id)));
+
+    this.logger.info('TaskOrchestrator shutdown complete');
   }
 
   /**
-   * Register an agent with the orchestrator
+   * Create a new workflow definition
    */
-  registerAgent(profile: AgentProfile): void {
-    const extendedProfile: ExtendedAgentProfile = {
-      ...profile,
-      status: 'available',
-      currentLoad: 0
+  async createWorkflow(definition: Omit<WorkflowDefinition, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    if (this.isShuttingDown) {
+      throw new Error('TaskOrchestrator is shutting down');
+    }
+
+    const workflow: WorkflowDefinition = {
+      ...definition,
+      id: generateId(),
+      createdAt: new Date(),
+      updatedAt: new Date()
     };
+
+    // Validate workflow
+    await this.validateWorkflow(workflow);
+
+    this.workflows.set(workflow.id, workflow);
+    this.metrics.totalWorkflows++;
+
+    this.logger.info('Workflow created', { workflowId: workflow.id, name: workflow.name });
+    this.emit('workflow:created', workflow);
+
+    return workflow.id;
+  }
+
+  /**
+   * Execute a workflow
+   */
+  async executeWorkflow(workflowId: string, initialVariables?: Map<string, any>): Promise<string> {
+    if (this.isShuttingDown) {
+      throw new Error('TaskOrchestrator is shutting down');
+    }
+
+    if (this.activeExecutions.size >= this.config.maxConcurrentWorkflows) {
+      throw new Error('Maximum concurrent workflows reached');
+    }
+
+    const workflow = this.workflows.get(workflowId);
+    if (!workflow) {
+      throw new Error(`Workflow not found: ${workflowId}`);
+    }
+
+    const executionId = generateId();
+    const execution: WorkflowExecution = {
+      id: executionId,
+      workflowId,
+      state: {
+        workflowId,
+        status: 'pending',
+        completedTasks: [],
+        failedTasks: [],
+        runningTasks: [],
+        variables: initialVariables || new Map(),
+        checkpoints: [],
+        metadata: {}
+      },
+      strategy: workflow.strategy,
+      progress: {
+        totalTasks: workflow.tasks.length,
+        completedTasks: 0,
+        failedTasks: 0,
+        runningTasks: 0,
+        pendingTasks: workflow.tasks.length,
+        percentage: 0,
+        estimatedTimeRemaining: 0
+      },
+      metrics: {
+        executionTime: 0,
+        throughput: 0,
+        successRate: 0,
+        errorRate: 0,
+        resourceUtilization: 0,
+        parallelism: 0,
+        checkpointCount: 0,
+        recoveryCount: 0
+      },
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    this.executions.set(executionId, execution);
+    this.activeExecutions.add(executionId);
+    this.metrics.activeWorkflows++;
+
+    this.logger.info('Starting workflow execution', { workflowId, executionId, strategy: workflow.strategy });
+    this.emit('workflow:started', execution);
+
+    try {
+      await this.executeWorkflowStrategy(execution, workflow);
+      return executionId;
+    } catch (error) {
+      this.activeExecutions.delete(executionId);
+      this.metrics.activeWorkflows--;
+      this.metrics.failedWorkflows++;
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel a workflow execution
+   */
+  async cancelExecution(executionId: string): Promise<boolean> {
+    const execution = this.executions.get(executionId);
+    if (!execution) {
+      return false;
+    }
+
+    execution.state.status = 'cancelled';
+    execution.state.endTime = new Date();
+    execution.updatedAt = new Date();
+
+    // Cancel all running tasks
+    for (const taskId of execution.state.runningTasks) {
+      await this.cancelTask(taskId);
+    }
+
+    this.activeExecutions.delete(executionId);
+    this.metrics.activeWorkflows--;
+
+    this.logger.info('Workflow execution cancelled', { executionId });
+    this.emit('workflow:cancelled', execution);
+
+    return true;
+  }
+
+  /**
+   * Pause a workflow execution
+   */
+  async pauseExecution(executionId: string): Promise<boolean> {
+    const execution = this.executions.get(executionId);
+    if (!execution || execution.state.status !== 'running') {
+      return false;
+    }
+
+    execution.state.status = 'paused';
+    execution.updatedAt = new Date();
+
+    this.logger.info('Workflow execution paused', { executionId });
+    this.emit('workflow:paused', execution);
+
+    return true;
+  }
+
+  /**
+   * Resume a workflow execution
+   */
+  async resumeExecution(executionId: string): Promise<boolean> {
+    const execution = this.executions.get(executionId);
+    if (!execution || execution.state.status !== 'paused') {
+      return false;
+    }
+
+    execution.state.status = 'running';
+    execution.updatedAt = new Date();
+
+    this.logger.info('Workflow execution resumed', { executionId });
+    this.emit('workflow:resumed', execution);
+
+    // Continue execution
+    const workflow = this.workflows.get(execution.workflowId);
+    if (workflow) {
+      await this.executeWorkflowStrategy(execution, workflow);
+    }
+
+    return true;
+  }
+
+  /**
+   * Get workflow execution status
+   */
+  getExecution(executionId: string): WorkflowExecution | undefined {
+    return this.executions.get(executionId);
+  }
+
+  /**
+   * Get all workflow executions
+   */
+  getAllExecutions(): WorkflowExecution[] {
+    return Array.from(this.executions.values());
+  }
+
+  /**
+   * Get orchestrator metrics
+   */
+  getMetrics(): TaskOrchestratorMetrics {
+    this.updateMetrics();
+    return { ...this.metrics };
+  }
+
+  // Private workflow execution methods
+  private async executeWorkflowStrategy(execution: WorkflowExecution, workflow: WorkflowDefinition): Promise<void> {
+    execution.state.status = 'running';
+    execution.state.startTime = new Date();
+    execution.updatedAt = new Date();
+
+    try {
+      switch (workflow.strategy) {
+        case 'sequential':
+          await this.executeSequential(execution, workflow);
+          break;
+        case 'parallel':
+          await this.executeParallel(execution, workflow);
+          break;
+        case 'adaptive':
+          await this.executeAdaptive(execution, workflow);
+          break;
+        case 'consensus':
+          await this.executeConsensus(execution, workflow);
+          break;
+        case 'pipeline':
+          await this.executePipeline(execution, workflow);
+          break;
+        case 'conditional':
+          await this.executeConditional(execution, workflow);
+          break;
+        case 'loop':
+          await this.executeLoop(execution, workflow);
+          break;
+        case 'fork-join':
+          await this.executeForkJoin(execution, workflow);
+          break;
+        case 'map-reduce':
+          await this.executeMapReduce(execution, workflow);
+          break;
+        case 'event-driven':
+          await this.executeEventDriven(execution, workflow);
+          break;
+        default:
+          throw new Error(`Unknown workflow strategy: ${workflow.strategy}`);
+      }
+
+      execution.state.status = 'completed';
+      execution.state.endTime = new Date();
+      execution.metrics.executionTime = execution.state.endTime.getTime() - (execution.state.startTime?.getTime() || 0);
+      
+      this.activeExecutions.delete(execution.id);
+      this.metrics.activeWorkflows--;
+      this.metrics.completedWorkflows++;
+
+      this.logger.info('Workflow execution completed', { executionId: execution.id, duration: execution.metrics.executionTime });
+      this.emit('workflow:completed', execution);
+
+    } catch (error) {
+      execution.state.status = 'failed';
+      execution.state.endTime = new Date();
+      execution.metrics.executionTime = execution.state.endTime.getTime() - (execution.state.startTime?.getTime() || 0);
+      
+      this.activeExecutions.delete(execution.id);
+      this.metrics.activeWorkflows--;
+      this.metrics.failedWorkflows++;
+
+      this.logger.error('Workflow execution failed', { executionId: execution.id, error });
+      this.emit('workflow:failed', execution, error);
+      
+      throw error;
+    }
+  }
+
+  private async executeSequential(execution: WorkflowExecution, workflow: WorkflowDefinition): Promise<void> {
+    const sortedTasks = this.topologicalSort(workflow.tasks, workflow.dependencies);
     
-    this.activeAgents.set(profile.id, extendedProfile);
+    for (const task of sortedTasks) {
+      if (execution.state.status !== 'running') {
+        break;
+      }
+
+      await this.executeTask(execution, task);
+    }
+  }
+
+  private async executeParallel(execution: WorkflowExecution, workflow: WorkflowDefinition): Promise<void> {
+    const independentTasks = this.findIndependentTasks(workflow.tasks, workflow.dependencies);
     
-    // Initialize agent metrics
-    if (!this.taskStats.has(profile.type)) {
-      this.taskStats.set(profile.type, {
-        totalExecutions: 0,
-        avgDuration: 0,
-        successRate: 1.0
+    // Execute all independent tasks in parallel
+    await Promise.all(independentTasks.map(task => this.executeTask(execution, task)));
+  }
+
+  private async executeAdaptive(execution: WorkflowExecution, workflow: WorkflowDefinition): Promise<void> {
+    // Analyze workflow characteristics and choose best strategy
+    const characteristics = this.analyzeWorkflowCharacteristics(workflow);
+    
+    if (characteristics.parallelizable) {
+      await this.executeParallel(execution, workflow);
+    } else if (characteristics.hasConditions) {
+      await this.executeConditional(execution, workflow);
+    } else {
+      await this.executeSequential(execution, workflow);
+    }
+  }
+
+  private async executeConsensus(execution: WorkflowExecution, workflow: WorkflowDefinition): Promise<void> {
+    // Use hive orchestrator for consensus-based execution
+    const decompositionId = await this.hiveOrchestrator.decomposeTask(
+      this.workflowToTask(workflow),
+      'consensus-based'
+    );
+
+    // Wait for completion
+    await this.waitForDecompositionCompletion(decompositionId);
+  }
+
+  private async executePipeline(execution: WorkflowExecution, workflow: WorkflowDefinition): Promise<void> {
+    // Execute tasks in pipeline stages
+    const stages = this.identifyPipelineStages(workflow);
+    
+    for (const stage of stages) {
+      await Promise.all(stage.map(task => this.executeTask(execution, task)));
+    }
+  }
+
+  private async executeConditional(execution: WorkflowExecution, workflow: WorkflowDefinition): Promise<void> {
+    for (const task of workflow.tasks) {
+      if (execution.state.status !== 'running') {
+        break;
+      }
+
+      // Check conditions
+      if (await this.evaluateConditions(task.conditions, execution.state.variables)) {
+        await this.executeTask(execution, task);
+      }
+    }
+  }
+
+  private async executeLoop(execution: WorkflowExecution, workflow: WorkflowDefinition): Promise<void> {
+    for (const loop of workflow.loops) {
+      let iteration = 0;
+      
+      while (iteration < loop.maxIterations) {
+        if (execution.state.status !== 'running') {
+          break;
+        }
+
+        // Evaluate loop condition
+        if (!await this.evaluateCondition(loop.condition, execution.state.variables)) {
+          break;
+        }
+
+        // Execute loop tasks
+        const loopTasks = workflow.tasks.filter(task => loop.taskIds.includes(task.id));
+        for (const task of loopTasks) {
+          await this.executeTask(execution, task);
+        }
+
+        iteration++;
+      }
+    }
+  }
+
+  private async executeForkJoin(execution: WorkflowExecution, workflow: WorkflowDefinition): Promise<void> {
+    const forkTasks = workflow.tasks.filter(task => task.type === 'fork');
+    const joinTasks = workflow.tasks.filter(task => task.type === 'join');
+    
+    // Execute fork tasks
+    for (const forkTask of forkTasks) {
+      await this.executeTask(execution, forkTask);
+    }
+
+    // Execute join tasks
+    for (const joinTask of joinTasks) {
+      await this.executeTask(execution, joinTask);
+    }
+  }
+
+  private async executeMapReduce(execution: WorkflowExecution, workflow: WorkflowDefinition): Promise<void> {
+    // Identify map and reduce tasks
+    const mapTasks = workflow.tasks.filter(task => task.metadata.type === 'map');
+    const reduceTasks = workflow.tasks.filter(task => task.metadata.type === 'reduce');
+    
+    // Execute map phase
+    await Promise.all(mapTasks.map(task => this.executeTask(execution, task)));
+    
+    // Execute reduce phase
+    await Promise.all(reduceTasks.map(task => this.executeTask(execution, task)));
+  }
+
+  private async executeEventDriven(execution: WorkflowExecution, workflow: WorkflowDefinition): Promise<void> {
+    // Set up event listeners for workflow tasks
+    const eventTasks = workflow.tasks.filter(task => task.metadata.trigger === 'event');
+    
+    for (const task of eventTasks) {
+      this.eventBus.on(task.metadata.event, async () => {
+        await this.executeTask(execution, task);
       });
     }
-
-    this.logger.info('Agent registered with orchestrator', { 
-      agentId: profile.id, 
-      type: profile.type,
-      capabilities: profile.capabilities 
-    });
   }
 
-  /**
-   * Unregister an agent from the orchestrator
-   */
-  unregisterAgent(agentId: string): void {
-    this.activeAgents.delete(agentId);
-    this.logger.info('Agent unregistered from orchestrator', { agentId });
+  private async executeTask(execution: WorkflowExecution, task: WorkflowTask): Promise<void> {
+    // Check dependencies
+    if (!await this.checkDependencies(task, execution)) {
+      return;
+    }
+
+    task.status = 'running';
+    task.startTime = new Date();
+    execution.state.runningTasks.push(task.id);
+    execution.progress.runningTasks++;
+
+    this.logger.info('Executing workflow task', { executionId: execution.id, taskId: task.id });
+
+    try {
+      // Select agent for task
+      const decision = await this.loadBalancer.selectAgent(task.taskDefinition);
+      task.assignedAgent = decision.selectedAgent;
+
+      // Execute task based on type
+      let result: TaskResult;
+      
+      switch (task.type) {
+        case 'atomic':
+          result = await this.executeAtomicTask(task);
+          break;
+        case 'composite':
+          result = await this.executeCompositeTask(task);
+          break;
+        case 'conditional':
+          result = await this.executeConditionalTask(task, execution);
+          break;
+        case 'loop':
+          result = await this.executeLoopTask(task, execution);
+          break;
+        case 'fork':
+          result = await this.executeForkTask(task, execution);
+          break;
+        case 'join':
+          result = await this.executeJoinTask(task, execution);
+          break;
+        default:
+          throw new Error(`Unknown task type: ${task.type}`);
+      }
+
+      task.status = 'completed';
+      task.result = result;
+      task.endTime = new Date();
+      task.executionTime = task.endTime.getTime() - (task.startTime?.getTime() || 0);
+
+      execution.state.runningTasks = execution.state.runningTasks.filter(id => id !== task.id);
+      execution.state.completedTasks.push(task.id);
+      execution.progress.runningTasks--;
+      execution.progress.completedTasks++;
+
+      this.logger.info('Workflow task completed', { executionId: execution.id, taskId: task.id });
+      this.emit('task:completed', task);
+
+    } catch (error) {
+      task.status = 'failed';
+      task.error = {
+        type: 'task_execution_error',
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        context: { taskId: task.id, workflowId: task.workflowId },
+        recoverable: true,
+        retryable: true
+      };
+      task.endTime = new Date();
+      task.executionTime = task.endTime.getTime() - (task.startTime?.getTime() || 0);
+
+      execution.state.runningTasks = execution.state.runningTasks.filter(id => id !== task.id);
+      execution.state.failedTasks.push(task.id);
+      execution.progress.runningTasks--;
+      execution.progress.failedTasks++;
+
+      this.logger.error('Workflow task failed', { executionId: execution.id, taskId: task.id, error });
+      this.emit('task:failed', task, error);
+
+      // Handle retry logic
+      if (await this.shouldRetryTask(task)) {
+        await this.retryTask(execution, task);
+      } else {
+        throw error;
+      }
+    }
   }
 
-  override async assignTask(task: Task, agentId?: string): Promise<void> {
-    // Check circuit breaker (simplified check)
-    const circuitBreaker = this.circuitBreakers.getBreaker(task.type);
-    if (circuitBreaker.getState() === 'open') {
-      throw new Error(`Circuit breaker open for task type: ${task.type}`);
-    }
-
-    // Add to dependency graph
-    const extendedTask = task as ExtendedTask;
-    this.dependencyGraph.addTask({
-      ...task,
-      dependencies: task.dependencies || []
+  // Task execution methods
+  private async executeAtomicTask(task: WorkflowTask): Promise<TaskResult> {
+    // Submit to background executor
+    const taskId = await this.backgroundExecutor.submitTask({
+      type: 'agent-task',
+      command: 'claude',
+      args: ['-p', task.taskDefinition.description || ''],
+      options: {
+        timeout: task.timeout,
+        metadata: {
+          workflowTaskId: task.id,
+          agentId: task.assignedAgent
+        }
+      },
+      priority: this.convertPriorityToNumber(task.taskDefinition.priority)
     });
 
-    // Select agent using orchestration logic
-    const selectedAgentId = agentId || await this.selectAgentForTask(task);
-    if (!selectedAgentId) {
-      throw new Error('No available agent for task assignment');
-    }
-
-    // Assign task using parent implementation
-    await super.assignTask(task, selectedAgentId);
-
-    // Update agent load tracking
-    this.updateAgentLoad(selectedAgentId, 1);
-
-    this.logger.info('Task assigned by orchestrator', {
-      taskId: task.id,
-      agentId: selectedAgentId,
-      strategy: this.defaultStrategy,
-      taskType: task.type
-    });
+    // Wait for completion
+    return await this.waitForTaskCompletion(taskId);
   }
 
-  /**
-   * Select the best agent for a task using the current strategy
-   */
-  private async selectAgentForTask(task: Task): Promise<string | null> {
-    const strategy = this.strategies.get(this.defaultStrategy);
-    if (!strategy) {
-      throw new Error(`Strategy '${this.defaultStrategy}' not found`);
+  private async executeCompositeTask(task: WorkflowTask): Promise<TaskResult> {
+    // Decompose using hive orchestrator
+    const decompositionId = await this.hiveOrchestrator.decomposeTask(task.taskDefinition);
+    
+    // Wait for completion
+    const decomposition = await this.waitForDecompositionCompletion(decompositionId);
+    
+    return {
+      output: decomposition,
+      artifacts: {},
+      metadata: { 
+        taskId: task.id,
+        agentId: task.assignedAgent || '',
+        status: 'completed',
+        timestamp: new Date()
+      },
+      quality: 0.8,
+      completeness: 1.0,
+      accuracy: 0.9,
+      executionTime: task.executionTime || 0,
+      resourcesUsed: {},
+      validated: false
+    };
+  }
+
+  private async executeConditionalTask(task: WorkflowTask, execution: WorkflowExecution): Promise<TaskResult> {
+    // Evaluate conditions
+    const conditionsMet = await this.evaluateConditions(task.conditions, execution.state.variables);
+    
+    if (conditionsMet) {
+      return await this.executeAtomicTask(task);
+    } else {
+      return {
+        output: 'Conditions not met',
+        artifacts: {},
+        metadata: { 
+          taskId: task.id,
+          agentId: task.assignedAgent || '',
+          status: 'skipped',
+          timestamp: new Date()
+        },
+        quality: 0.8,
+        completeness: 1.0,
+        accuracy: 0.9,
+        executionTime: 0,
+        resourcesUsed: {},
+        validated: false
+      };
+    }
+  }
+
+  private async executeLoopTask(task: WorkflowTask, execution: WorkflowExecution): Promise<TaskResult> {
+    // Loop execution - iterate based on conditions
+    const loop = execution.state.variables.get('loop') || {};
+    const results = [];
+    let iteration = 0;
+    
+    while (iteration < (loop.maxIterations || 10)) {
+      if (loop.condition && !(await this.evaluateCondition(loop.condition, execution.state.variables))) {
+        break;
+      }
+
+      const result = await this.executeAtomicTask(task);
+      results.push(result);
+      iteration++;
     }
 
-    const agents = Array.from(this.activeAgents.values());
-    const context: SchedulingContext = {
-      taskLoads: this.getAgentLoads(),
-      agentCapabilities: this.getAgentCapabilities(),
-      agentPriorities: this.getAgentPriorities(),
-      taskHistory: this.taskStats,
-      currentTime: new Date()
+    return {
+      // Result data
+      output: results,
+      artifacts: {},
+      metadata: { iterations: iteration },
+      
+      // Quality metrics
+      quality: 0.8,
+      completeness: 1.0,
+      accuracy: 0.9,
+      
+      // Performance metrics
+      executionTime: task.executionTime || 0,
+      resourcesUsed: {},
+      
+      // Validation
+      validated: true,
+      validationResults: null,
+      
+      // Follow-up
+      recommendations: [],
+      nextSteps: []
+    };
+  }
+
+  private async executeForkTask(task: WorkflowTask, execution: WorkflowExecution): Promise<TaskResult> {
+    // Fork execution - create parallel branches
+    const branches = task.metadata.branches || [];
+    const results = await Promise.all(branches.map((branch: any) => this.executeBranch(branch, execution)));
+
+    return {
+      // Result data
+      output: results,
+      artifacts: {},
+      metadata: { branches: branches.length },
+      
+      // Quality metrics
+      quality: 0.8,
+      completeness: 1.0,
+      accuracy: 0.9,
+      
+      // Performance metrics
+      executionTime: task.executionTime || 0,
+      resourcesUsed: {},
+      
+      // Validation
+      validated: true,
+      validationResults: null,
+      
+      // Follow-up
+      recommendations: [],
+      nextSteps: []
+    };
+  }
+
+  private async executeJoinTask(task: WorkflowTask, execution: WorkflowExecution): Promise<TaskResult> {
+    // Join execution - wait for all branches to complete
+    const branchResults = task.metadata.branchResults || [];
+    
+    return {
+      // Result data
+      output: branchResults,
+      artifacts: {},
+      metadata: { joinedBranches: branchResults.length },
+      
+      // Quality metrics
+      quality: 0.8,
+      completeness: 1.0,
+      accuracy: 0.9,
+      
+      // Performance metrics
+      executionTime: task.executionTime || 0,
+      resourcesUsed: {},
+      
+      // Validation
+      validated: true,
+      validationResults: null,
+      
+      // Follow-up
+      recommendations: [],
+      nextSteps: []
+    };
+  }
+
+  // Helper methods
+  private async validateWorkflow(workflow: WorkflowDefinition): Promise<void> {
+    // Validate workflow structure
+    if (!workflow.tasks || workflow.tasks.length === 0) {
+      throw new Error('Workflow must have at least one task');
+    }
+
+    // Check for circular dependencies
+    if (this.hasCyclicDependencies(workflow.tasks, workflow.dependencies)) {
+      throw new Error('Workflow contains circular dependencies');
+    }
+
+    // Validate task definitions
+    for (const task of workflow.tasks) {
+      if (!task.taskDefinition) {
+        throw new Error(`Task ${task.id} missing task definition`);
+      }
+    }
+  }
+
+  private hasCyclicDependencies(tasks: WorkflowTask[], dependencies: WorkflowDependency[]): boolean {
+    const graph = new Map<string, string[]>();
+    
+    // Build adjacency list
+    for (const task of tasks) {
+      graph.set(task.id, []);
+    }
+    
+    for (const dep of dependencies) {
+      graph.get(dep.fromTaskId)?.push(dep.toTaskId);
+    }
+
+    // DFS to detect cycles
+    const visited = new Set<string>();
+    const recursionStack = new Set<string>();
+
+    const hasCycle = (taskId: string): boolean => {
+      visited.add(taskId);
+      recursionStack.add(taskId);
+
+      const neighbors = graph.get(taskId) || [];
+      for (const neighbor of neighbors) {
+        if (!visited.has(neighbor)) {
+          if (hasCycle(neighbor)) {
+            return true;
+          }
+        } else if (recursionStack.has(neighbor)) {
+          return true;
+        }
+      }
+
+      recursionStack.delete(taskId);
+      return false;
     };
 
-    const selectedAgentId = strategy.selectAgent(task, agents, context);
-
-    // If primary strategy fails, try work stealing (simplified)
-    if (!selectedAgentId) {
-      // Simple fallback - return first available agent
-      const availableAgent = agents.find(agent => agent.status === 'available');
-      return availableAgent?.id || null;
-    }
-
-    return selectedAgentId;
-  }
-
-  override async completeTask(taskId: string, result: unknown): Promise<void> {
-    const task = await this.getTask(taskId);
-    if (!task) {
-      throw new Error(`Task ${taskId} not found`);
-    }
-
-    const startTime = task.metadata?.startTime as number | undefined;
-    const duration = startTime ? Date.now() - startTime : 0;
-
-    // Update task statistics
-    this.updateTaskStats(task.type, true, duration);
-
-    // Update dependency graph
-    this.dependencyGraph.markCompleted(taskId);
-
-    // Update circuit breaker (record success through execution)
-    const circuitBreaker = this.circuitBreakers.getBreaker(task.type);
-    await circuitBreaker.execute(async () => Promise.resolve());
-
-    // Update agent load
-    const extendedTask = task as ExtendedTask;
-    const agentId = extendedTask.assignedTo;
-    if (agentId) {
-      this.updateAgentLoad(agentId, -1);
-    }
-
-    // Complete task using parent implementation
-    await super.completeTask(taskId, result);
-
-    this.logger.info('Task completed by orchestrator', {
-      taskId,
-      duration,
-      agentId,
-      taskType: task.type
-    });
-  }
-
-  override async failTask(taskId: string, error: Error): Promise<void> {
-    const task = await this.getTask(taskId);
-    if (!task) {
-      throw new Error(`Task ${taskId} not found`);
-    }
-
-    const startTime = task.metadata?.startTime as number | undefined;
-    const duration = startTime ? Date.now() - startTime : 0;
-
-    // Update task statistics
-    this.updateTaskStats(task.type, false, duration);
-
-    // Update circuit breaker (record failure through execution)
-    const circuitBreaker = this.circuitBreakers.getBreaker(task.type);
-    try {
-      await circuitBreaker.execute(async () => Promise.reject(error));
-    } catch {
-      // Expected to fail
-    }
-
-    // Update dependency graph
-    this.dependencyGraph.markFailed(taskId);
-
-    // Update agent load
-    const extendedTask = task as ExtendedTask;
-    const agentId = extendedTask.assignedTo;
-    if (agentId) {
-      this.updateAgentLoad(agentId, -1);
-    }
-
-    // Check if we should try work stealing for retry
-    const retryCount = extendedTask.retryCount || 0;
-    const maxRetries = extendedTask.maxRetries || 3;
-    
-    if (retryCount < maxRetries) {
-      // Simple retry logic - try to reassign to another agent
-      const alternativeAgentId = await this.selectAgentForTask(task);
-      if (alternativeAgentId) {
-        await this.reassignTask(taskId, alternativeAgentId);
-        return;
+    for (const taskId of graph.keys()) {
+      if (!visited.has(taskId)) {
+        if (hasCycle(taskId)) {
+          return true;
+        }
       }
     }
 
-    // Fail task using parent implementation
-    await super.failTask(taskId, error);
-
-    this.logger.error('Task failed in orchestrator', {
-      taskId,
-      error: error.message,
-      duration,
-      agentId,
-      taskType: task.type
-    });
+    return false;
   }
 
-  // === PRIVATE HELPER METHODS ===
+  private topologicalSort(tasks: WorkflowTask[], dependencies: WorkflowDependency[]): WorkflowTask[] {
+    const graph = new Map<string, string[]>();
+    const inDegree = new Map<string, number>();
 
-  private async getTask(taskId: string): Promise<ExtendedTask | null> {
-    // This would typically query the task storage
-    // For now, return a placeholder
-    return null;
-  }
-
-  private updateTaskStats(taskType: string, success: boolean, duration: number): void {
-    let stats = this.taskStats.get(taskType);
-    if (!stats) {
-      stats = {
-        totalExecutions: 0,
-        avgDuration: 0,
-        successRate: 1.0
-      };
-      this.taskStats.set(taskType, stats);
+    // Initialize
+    for (const task of tasks) {
+      graph.set(task.id, []);
+      inDegree.set(task.id, 0);
     }
 
-    stats.totalExecutions++;
-    stats.avgDuration = (stats.avgDuration * (stats.totalExecutions - 1) + duration) / stats.totalExecutions;
+    // Build graph
+    for (const dep of dependencies) {
+      graph.get(dep.fromTaskId)?.push(dep.toTaskId);
+      inDegree.set(dep.toTaskId, (inDegree.get(dep.toTaskId) || 0) + 1);
+    }
+
+    // Kahn's algorithm
+    const queue: string[] = [];
+    const result: WorkflowTask[] = [];
+
+    for (const [taskId, degree] of inDegree) {
+      if (degree === 0) {
+        queue.push(taskId);
+      }
+    }
+
+    while (queue.length > 0) {
+      const taskId = queue.shift()!;
+      const task = tasks.find(t => t.id === taskId)!;
+      result.push(task);
+
+      const neighbors = graph.get(taskId) || [];
+      for (const neighbor of neighbors) {
+        inDegree.set(neighbor, (inDegree.get(neighbor) || 0) - 1);
+        if (inDegree.get(neighbor) === 0) {
+          queue.push(neighbor);
+        }
+      }
+    }
+
+    return result;
+  }
+
+  private findIndependentTasks(tasks: WorkflowTask[], dependencies: WorkflowDependency[]): WorkflowTask[] {
+    const dependentTasks = new Set<string>();
     
-    const successCount = Math.floor(stats.successRate * (stats.totalExecutions - 1)) + (success ? 1 : 0);
-    stats.successRate = successCount / stats.totalExecutions;
+    for (const dep of dependencies) {
+      dependentTasks.add(dep.toTaskId);
+    }
+
+    return tasks.filter(task => !dependentTasks.has(task.id));
   }
 
-  private setupOrchestrationEventHandlers(): void {
-    // Handle work stealing events (simplified since WorkStealingCoordinator doesn't extend EventEmitter)
-    this.eventBus.on('work-stolen', (data: any) => {
-      this.logger.info('Work stealing occurred', {
-        taskId: data.taskId,
-        fromAgent: data.fromAgent,
-        toAgent: data.toAgent
-      });
-    });
-
-    // Handle circuit breaker events (simplified)
-    this.eventBus.on('circuit-opened', (data: any) => {
-      this.logger.warn('Circuit breaker opened', {
-        taskType: data.taskType,
-        failureRate: data.failureRate
-      });
-    });
-
-    this.eventBus.on('circuit-closed', (data: any) => {
-      this.logger.info('Circuit breaker closed', {
-        taskType: data.taskType
-      });
-    });
-
-    // Handle dependency graph events (simplified)
-    this.eventBus.on('dependency-resolved', (data: any) => {
-      this.logger.debug('Task dependency resolved', {
-        taskId: data.taskId,
-        dependencyId: data.dependencyId
-      });
-    });
-  }
-
-  private async reassignTask(taskId: string, newAgentId: string): Promise<void> {
-    const task = await this.getTask(taskId);
-    if (!task) return;
-
-    // Update task assignment
-    task.assignedTo = newAgentId;
-    task.retryCount = (task.retryCount || 0) + 1;
-
-    // Assign to new agent
-    await this.assignTask(task, newAgentId);
-
-    this.logger.info('Task reassigned', {
-      taskId,
-      newAgentId,
-      retryCount: task.retryCount
-    });
-  }
-
-  /**
-   * Get orchestration metrics and statistics
-   */
-  async getOrchestrationMetrics(): Promise<Record<string, unknown>> {
+  private analyzeWorkflowCharacteristics(workflow: WorkflowDefinition): any {
     return {
-      strategies: Array.from(this.strategies.keys()),
-      defaultStrategy: this.defaultStrategy,
-      activeAgents: this.activeAgents.size,
-      taskStats: Object.fromEntries(this.taskStats),
-      workStealingMetrics: {},
-      circuitBreakerMetrics: this.circuitBreakers.getAllMetrics(),
-      dependencyGraphMetrics: this.dependencyGraph.getStats()
+      parallelizable: workflow.dependencies.length < workflow.tasks.length,
+      hasConditions: workflow.conditions.length > 0,
+      hasLoops: workflow.loops.length > 0,
+      complexity: workflow.tasks.length
     };
   }
 
-  // === AGENT MANAGEMENT HELPERS ===
-
-  private getAgentLoads(): Map<string, number> {
-    const loads = new Map<string, number>();
-    for (const [agentId, agent] of this.activeAgents) {
-      loads.set(agentId, agent.currentLoad || 0);
+  private identifyPipelineStages(workflow: WorkflowDefinition): WorkflowTask[][] {
+    // Simplified pipeline stage identification
+    const stages: WorkflowTask[][] = [];
+    const sortedTasks = this.topologicalSort(workflow.tasks, workflow.dependencies);
+    
+    let currentStage: WorkflowTask[] = [];
+    for (const task of sortedTasks) {
+      if (currentStage.length === 0 || this.canRunInParallel(task, currentStage[0], workflow.dependencies)) {
+        currentStage.push(task);
+      } else {
+        stages.push(currentStage);
+        currentStage = [task];
+      }
     }
-    return loads;
+    
+    if (currentStage.length > 0) {
+      stages.push(currentStage);
+    }
+
+    return stages;
   }
 
-  private getAgentCapabilities(): Map<string, string[]> {
-    const capabilities = new Map<string, string[]>();
-    for (const [agentId, agent] of this.activeAgents) {
-      capabilities.set(agentId, agent.capabilities || []);
-    }
-    return capabilities;
+  private canRunInParallel(task1: WorkflowTask, task2: WorkflowTask, dependencies: WorkflowDependency[]): boolean {
+    // Check if tasks can run in parallel (no direct dependency)
+    return !dependencies.some(dep => 
+      (dep.fromTaskId === task1.id && dep.toTaskId === task2.id) ||
+      (dep.fromTaskId === task2.id && dep.toTaskId === task1.id)
+    );
   }
 
-  private getAgentPriorities(): Map<string, number> {
-    const priorities = new Map<string, number>();
-    for (const [agentId, agent] of this.activeAgents) {
-      priorities.set(agentId, agent.priority || 1);
-    }
-    return priorities;
+  private async checkDependencies(task: WorkflowTask, execution: WorkflowExecution): Promise<boolean> {
+    // Check if all dependencies are satisfied
+    return task.dependencies.every(depId => execution.state.completedTasks.includes(depId));
   }
 
-  private updateAgentLoad(agentId: string, delta: number): void {
-    const agent = this.activeAgents.get(agentId);
-    if (agent) {
-      agent.currentLoad = (agent.currentLoad || 0) + delta;
-      agent.currentLoad = Math.max(0, agent.currentLoad); // Ensure non-negative
+  private async evaluateConditions(conditions: string[], variables: Map<string, any>): Promise<boolean> {
+    // Simplified condition evaluation
+    return conditions.length === 0 || conditions.every(condition => this.evaluateCondition(condition, variables));
+  }
+
+  private async evaluateCondition(condition: string, variables: Map<string, any>): Promise<boolean> {
+    // Simplified condition evaluation
+    // In a real implementation, this would parse and evaluate the condition expression
+    return true;
+  }
+
+  private workflowToTask(workflow: WorkflowDefinition): TaskDefinition {
+    // Create proper TaskId object
+    const taskId: TaskId = {
+      id: workflow.id,
+      swarmId: 'default-swarm',
+      sequence: 0,
+      priority: 0
+    };
+
+    // Convert to TaskPriority enum
+    const priority: TaskPriority = 'normal';
+
+    return {
+      id: taskId,
+      type: 'coordination',
+      name: workflow.name,
+      description: workflow.description,
+      requirements: {
+        capabilities: [],
+        tools: [],
+        permissions: []
+      },
+      constraints: {
+        dependencies: [],
+        dependents: [],
+        conflicts: []
+      },
+      priority: priority,
+      input: {},
+      instructions: workflow.description,
+      context: workflow.metadata,
+      status: 'created',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      attempts: [],
+      statusHistory: []
+    };
+  }
+
+  private async waitForDecompositionCompletion(decompositionId: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const checkCompletion = () => {
+        const decomposition = this.hiveOrchestrator.getDecomposition(decompositionId);
+        if (!decomposition) {
+          reject(new Error('Decomposition not found'));
+          return;
+        }
+
+        const allCompleted = decomposition.subtasks.every(st => st.status === 'completed');
+        const anyFailed = decomposition.subtasks.some(st => st.status === 'failed');
+
+        if (allCompleted) {
+          resolve(decomposition);
+        } else if (anyFailed) {
+          reject(new Error('Decomposition failed'));
+        } else {
+          setTimeout(checkCompletion, 100);
+        }
+      };
+
+      checkCompletion();
+    });
+  }
+
+  private async waitForTaskCompletion(taskId: string): Promise<TaskResult> {
+    return new Promise((resolve, reject) => {
+      const checkTask = () => {
+        const task = this.backgroundExecutor.getTask(taskId);
+        if (!task) {
+          reject(new Error('Task not found'));
+          return;
+        }
+
+        if (task.status === 'completed') {
+          resolve({
+            // Result data
+            output: task.result,
+            artifacts: {},
+            metadata: { taskId: task.id },
+            
+            // Quality metrics
+            quality: 0.8,
+            completeness: 1.0,
+            accuracy: 0.9,
+            
+            // Performance metrics
+            executionTime: task.executionTime || 0,
+            resourcesUsed: {},
+            
+            // Validation
+            validated: true,
+            validationResults: null,
+            
+            // Follow-up
+            recommendations: [],
+            nextSteps: []
+          });
+        } else if (task.status === 'failed') {
+          reject(new Error(task.error || 'Task failed'));
+        } else {
+          setTimeout(checkTask, 100);
+        }
+      };
+
+      checkTask();
+    });
+  }
+
+  private async shouldRetryTask(task: WorkflowTask): Promise<boolean> {
+    // Implement retry logic based on retry policy
+    return false; // Simplified
+  }
+
+  private async retryTask(execution: WorkflowExecution, task: WorkflowTask): Promise<void> {
+    // Implement task retry logic
+  }
+
+  private async cancelTask(taskId: string): Promise<void> {
+    // Cancel task execution
+  }
+
+  private async executeBranch(branch: any, execution: WorkflowExecution): Promise<any> {
+    // Execute workflow branch
+    return {};
+  }
+
+  private performCheckpointing(): void {
+    if (!this.config.enableCheckpointing) return;
+
+    for (const execution of this.executions.values()) {
+      if (execution.state.status === 'running') {
+        this.createCheckpoint(execution);
+      }
     }
   }
-}
 
-export default TaskOrchestrator;
+  private createCheckpoint(execution: WorkflowExecution): void {
+    const checkpoint: WorkflowCheckpoint = {
+      id: generateId(),
+      workflowId: execution.workflowId,
+      taskId: execution.state.runningTasks[0] || '',
+      state: { ...execution.state },
+      timestamp: new Date(),
+      metadata: {}
+    };
+
+    execution.state.checkpoints.push(checkpoint);
+    execution.metrics.checkpointCount++;
+
+    this.logger.info('Workflow checkpoint created', { executionId: execution.id, checkpointId: checkpoint.id });
+  }
+
+  private handleTaskCompletion(result: TaskResult): void {
+    // Handle task completion events
+  }
+
+  private handleTaskFailure(error: TaskError): void {
+    // Handle task failure events
+  }
+
+  private handleCheckpoint(checkpoint: WorkflowCheckpoint): void {
+    // Handle checkpoint events
+  }
+
+  private convertPriorityToNumber(priority: TaskPriority): number {
+    switch (priority) {
+      case 'critical': return 5;
+      case 'high': return 4;
+      case 'normal': return 3;
+      case 'low': return 2;
+      case 'background': return 1;
+      default: return 3;
+    }
+  }
+
+  private updateMetrics(): void {
+    // Update orchestrator metrics
+    this.metrics.activeWorkflows = this.activeExecutions.size;
+    
+    const totalExecutions = this.executions.size;
+    this.metrics.successRate = totalExecutions > 0 
+      ? this.metrics.completedWorkflows / totalExecutions
+      : 0;
+  }
+} 

@@ -2,26 +2,80 @@
  * Coordination System Exports
  */
 
-export { TaskScheduler } from "./scheduler.ts";
-export { CoordinationManager } from "./manager.ts";
-export { MessageCoordinator } from "./message-coordinator.ts";
-export { MessageRouter } from "./messaging.ts";
-export { WorkStealingCoordinator } from "./work-stealing.ts";
-export { SwarmCoordinator } from '../swarm/coordinator.ts';
-export { SwarmMonitor } from "./swarm-monitor.ts";
-export { DependencyGraph } from "./dependency-graph.ts";
-export { TaskOrchestrator } from "./task-orchestrator.ts";
-export { TaskExecutionEngine } from "./task-execution-engine.ts";
-export { CircuitBreakerManager } from "./circuit-breaker.ts";
-export { ConflictResolver } from "./conflict-resolution.ts";
-export { ResourceManager } from "./resources.ts";
-export { LoadBalancer } from "./load-balancer.ts";
-export { CoordinationMetricsCollector } from "./metrics.ts";
-export { BackgroundExecutor } from "./background-executor.ts";
+// Core coordination components
+export { CoordinationManager } from './manager.ts';
+export { TaskCoordinator } from './task-coordinator.ts';
+export { WorkStealingCoordinator } from './work-stealing.ts';
+export { CircuitBreakerManager } from './circuit-breaker.ts';
+export { TaskExecutionEngine } from './task-execution-engine.ts';
 
-// Backward compatibility aliases
-export { TaskOrchestrator as IntelligentTaskScheduler } from "./task-orchestrator.ts";
-export { TaskExecutionEngine as AdvancedTaskExecutor } from "./task-execution-engine.ts";
+// Advanced coordination components
+export { BackgroundExecutor } from './background-executor.ts';
+export { HiveOrchestrator } from './hive-orchestrator.ts';
+export { LoadBalancer } from './load-balancer.ts';
+export { TaskOrchestrator } from './task-orchestrator.ts';
 
-// Types
-export type { CoordinationConfig, Task, Resource, AgentProfile } from "../utils/types.ts";
+// Types and interfaces
+export type {
+  BackgroundTaskConfig,
+  BackgroundTaskDefinition,
+  BackgroundExecutorMetrics
+} from './background-executor.ts';
+
+export type {
+  HiveOrchestratorConfig,
+  DecompositionStrategy,
+  CoordinationStrategy,
+  TaskDecomposition,
+  SubTask,
+  TaskRequirement,
+  TaskDependency,
+  AgentTopology,
+  AgentNode,
+  ConsensusVote,
+  ConsensusResult,
+  HiveOrchestratorMetrics
+} from './hive-orchestrator.ts';
+
+export type {
+  LoadBalancerConfig,
+  LoadBalancingStrategy,
+  AgentLoad,
+  LoadPrediction,
+  LoadBalancingDecision,
+  LoadBalancerMetrics
+} from './load-balancer.ts';
+
+export type {
+  TaskOrchestratorConfig,
+  WorkflowStrategy,
+  WorkflowDefinition,
+  WorkflowTask,
+  WorkflowExecution,
+  WorkflowState,
+  WorkflowProgress,
+  TaskOrchestratorMetrics
+} from './task-orchestrator.ts';
+
+// Core coordination types
+export type {
+  EnhancedCoordinationConfig,
+  ICoordinationManager
+} from './manager.ts';
+
+export type {
+  CoordinationConfig,
+  SchedulingStrategy
+} from './task-coordinator.ts';
+
+export type {
+  WorkStealingConfig
+} from './work-stealing.ts';
+
+export type {
+  CircuitBreakerConfig
+} from './circuit-breaker.ts';
+
+export type {
+  TaskExecutorConfig
+} from './task-execution-engine.ts';

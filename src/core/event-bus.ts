@@ -143,15 +143,25 @@ export class TypedEventBus extends EventEmitter implements IEventBus {
     let processedData = data;
     
     if (data && typeof data === 'object') {
-      // For large objects, only keep a summary
-      const dataSize = JSON.stringify(data).length;
-      if (dataSize > 1000) {
-        // For large data, just keep keys and type info
+      try {
+        // Use a safe JSON stringify that handles circular references
+        const dataSize = this.safeStringify(data).length;
+        if (dataSize > 1000) {
+          // For large data, just keep keys and type info
+          processedData = {
+            __summary: true,
+            __type: data.constructor ? data.constructor.name : typeof data,
+            __keys: Object.keys(data),
+            __size: dataSize
+          };
+        }
+      } catch (error) {
+        // If we can't stringify (circular refs, etc), create a simple summary
         processedData = {
           __summary: true,
           __type: data.constructor ? data.constructor.name : typeof data,
           __keys: Object.keys(data),
-          __size: dataSize
+          __error: 'Cannot serialize (circular reference)'
         };
       }
     }
@@ -164,6 +174,22 @@ export class TypedEventBus extends EventEmitter implements IEventBus {
     
     // Clean old events regularly based on both size limit and age
     this.cleanEventHistory();
+  }
+
+  /**
+   * Safe JSON stringify that handles circular references
+   */
+  private safeStringify(obj: any): string {
+    const seen = new WeakSet();
+    return JSON.stringify(obj, (key, val) => {
+      if (val != null && typeof val === 'object') {
+        if (seen.has(val)) {
+          return '[Circular]';
+        }
+        seen.add(val);
+      }
+      return val;
+    });
   }
   
   /**

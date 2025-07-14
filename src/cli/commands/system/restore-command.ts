@@ -66,14 +66,14 @@ export const restoreCommand: CLICommand = {
   name: 'restore',
   description: 'Restore system from backups with real data integration',
   category: 'System',
-  usage: 'claude-flow restore <subcommand> [OPTIONS]',
+  usage: 'flowx restore <subcommand> [OPTIONS]',
   examples: [
-    'claude-flow restore from backup-123 --components database,config',
-    'claude-flow restore from backup-123 --dry-run',
-    'claude-flow restore list --format table',
-    'claude-flow restore status restore-456',
-    'claude-flow restore verify backup-123',
-    'claude-flow restore rollback restore-456'
+    'flowx restore from backup-123 --components database,config',
+    'flowx restore from backup-123 --dry-run',
+    'flowx restore list --format table',
+    'flowx restore status restore-456',
+    'flowx restore verify backup-123',
+    'flowx restore rollback restore-456'
   ],
   subcommands: [
     {
@@ -849,7 +849,7 @@ async function checkForExistingData(components: string[]): Promise<boolean> {
         break;
       case 'config':
         // Check for existing config files
-        const configFiles = ['claude-flow.tson', 'claude-flow.yaml', '.claude-flow.tson'];
+        const configFiles = ['flowx.tson', 'flowx.yaml', '.flowx.tson'];
         if (configFiles.some(f => existsSync(f))) return true;
         break;
       case 'logs':

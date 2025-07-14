@@ -2,57 +2,80 @@
  * Coordination manager for task scheduling and resource management
  */
 
-import { Task, CoordinationConfig, SystemEvents } from "../utils/types.ts";
-import { IEventBus } from "../core/event-bus.ts";
-import { ILogger } from "../core/logger.ts";
-import { CoordinationError, DeadlockError } from "../utils/errors.ts";
-import { TaskScheduler } from "./scheduler.ts";
-import { ResourceManager } from "./resources.ts";
-import { MessageRouter } from "./messaging.ts";
-import { TaskOrchestrator } from "./task-orchestrator.ts";
-import { ConflictResolver } from "./conflict-resolution.ts";
-import { CoordinationMetricsCollector } from "./metrics.ts";
+import { EventEmitter } from 'events';
+import type { IEventBus } from '../core/event-bus.js';
+import type { ILogger } from '../core/logger.js';
+import type { Task, AgentProfile } from '../core/types.js';
+import { TaskCoordinator, CoordinationConfig } from './task-coordinator.js';
+import { WorkStealingCoordinator, WorkStealingConfig } from './work-stealing.js';
+import { CircuitBreakerManager, CircuitBreakerConfig } from './circuit-breaker.js';
 
 export interface ICoordinationManager {
   initialize(): Promise<void>;
   shutdown(): Promise<void>;
-  assignTask(task: Task, agentId: string): Promise<void>;
+  registerAgent(profile: AgentProfile): Promise<void>;
+  unregisterAgent(agentId: string): Promise<void>;
+  assignTask(task: Task, agentId?: string, strategy?: string): Promise<string>;
+  completeTask(taskId: string, agentId: string, result: unknown, duration: number): Promise<void>;
+  failTask(taskId: string, agentId: string, error: Error): Promise<void>;
+  getHealthStatus(): Promise<{ 
+    healthy: boolean; 
+    error?: string; 
+    metrics?: Record<string, number>;
+  }>;
+  getCoordinationMetrics(): Promise<Record<string, unknown>>;
+  performMaintenance(): Promise<void>;
   getAgentTaskCount(agentId: string): Promise<number>;
   getAgentTasks(agentId: string): Promise<Task[]>;
-  cancelTask(taskId: string, reason?: string): Promise<void>;
-  acquireResource(resourceId: string, agentId: string): Promise<void>;
-  releaseResource(resourceId: string, agentId: string): Promise<void>;
-  sendMessage(from: string, to: string, message: unknown): Promise<void>;
-  getHealthStatus(): Promise<{ healthy: boolean; error?: string; metrics?: Record<string, number> }>;
-  performMaintenance(): Promise<void>;
-  getCoordinationMetrics(): Promise<Record<string, unknown>>;
-  enableAdvancedScheduling(): void;
-  reportConflict(type: 'resource' | 'task', id: string, agents: string[]): Promise<void>;
+  cancelTask(taskId: string): Promise<void>;
 }
 
-/**
- * Coordination manager implementation
- */
-export class CoordinationManager implements ICoordinationManager {
-  private scheduler: TaskScheduler;
-  private resourceManager: ResourceManager;
-  private messageRouter: MessageRouter;
-  private conflictResolver: ConflictResolver;
-  private metricsCollector: CoordinationMetricsCollector;
+export interface EnhancedCoordinationConfig {
+  coordination: CoordinationConfig;
+  workStealing: WorkStealingConfig;
+  circuitBreaker: CircuitBreakerConfig;
+  enableAdvancedFeatures: boolean;
+}
+
+export class CoordinationManager extends EventEmitter implements ICoordinationManager {
+  private scheduler: TaskCoordinator;
+  private workStealer: WorkStealingCoordinator;
+  private circuitBreakers: CircuitBreakerManager;
   private initialized = false;
-  private deadlockCheckInterval?: ReturnType<typeof setInterval>;
-  private advancedSchedulingEnabled = false;
 
   constructor(
-    private config: CoordinationConfig,
+    private config: EnhancedCoordinationConfig,
     private eventBus: IEventBus,
     private logger: ILogger,
   ) {
-    this.scheduler = new TaskScheduler(config, eventBus, logger);
-    this.resourceManager = new ResourceManager(config, eventBus, logger);
-    this.messageRouter = new MessageRouter(config, eventBus, logger);
-    this.conflictResolver = new ConflictResolver(logger, eventBus);
-    this.metricsCollector = new CoordinationMetricsCollector(logger, eventBus);
+    super();
+    
+    // Initialize components
+    this.scheduler = new TaskCoordinator(
+      this.config.coordination,
+      this.eventBus,
+      this.logger
+    );
+    
+    this.workStealer = new WorkStealingCoordinator(
+      {
+        enabled: true,
+        stealThreshold: 2,
+        maxStealBatch: 3,
+        stealInterval: 30000,
+        minTasksToSteal: 1
+      },
+      this.eventBus,
+      this.logger
+    );
+    
+    this.circuitBreakers = new CircuitBreakerManager(
+      this.config.circuitBreaker,
+      this.logger,
+      this.eventBus
+    );
+    
+    this.setupEventHandlers();
   }
 
   async initialize(): Promise<void> {
@@ -60,30 +83,19 @@ export class CoordinationManager implements ICoordinationManager {
       return;
     }
 
-    this.logger.info('Initializing coordination manager...');
+    this.logger.info('Initializing coordination manager');
 
     try {
-      // Initialize components
+      // Initialize all components
       await this.scheduler.initialize();
-      await this.resourceManager.initialize();
-      await this.messageRouter.initialize();
-      
-      // Start metrics collection
-      this.metricsCollector.start();
-
-      // Start deadlock detection if enabled
-      if (this.config.deadlockDetection) {
-        this.startDeadlockDetection();
-      }
-
-      // Set up event handlers
-      this.setupEventHandlers();
+      await this.workStealer.initialize();
+      await this.circuitBreakers.initialize();
 
       this.initialized = true;
-      this.logger.info('Coordination manager initialized');
+      this.logger.info('Coordination manager initialized successfully');
     } catch (error) {
       this.logger.error('Failed to initialize coordination manager', error);
-      throw new CoordinationError('Coordination manager initialization failed', { error });
+      throw error;
     }
   }
 
@@ -92,70 +104,133 @@ export class CoordinationManager implements ICoordinationManager {
       return;
     }
 
-    this.logger.info('Shutting down coordination manager...');
+    this.logger.info('Shutting down coordination manager');
 
     try {
-      // Stop deadlock detection
-      if (this.deadlockCheckInterval) {
-        clearInterval(this.deadlockCheckInterval);
-      }
-
-      // Stop metrics collection
-      this.metricsCollector.stop();
-      
-      // Shutdown components
-      await Promise.all([
-        this.scheduler.shutdown(),
-        this.resourceManager.shutdown(),
-        this.messageRouter.shutdown(),
-      ]);
+      // Shutdown all components
+      await this.scheduler.shutdown();
+      await this.workStealer.shutdown();
+      await this.circuitBreakers.shutdown();
 
       this.initialized = false;
-      this.logger.info('Coordination manager shutdown complete');
+      this.removeAllListeners();
+      this.logger.info('Coordination manager shut down successfully');
     } catch (error) {
       this.logger.error('Error during coordination manager shutdown', error);
       throw error;
     }
   }
 
-  async assignTask(task: Task, agentId: string): Promise<void> {
-    if (!this.initialized) {
-      throw new CoordinationError('Coordination manager not initialized');
-    }
-
-    await this.scheduler.assignTask(task, agentId);
+  async registerAgent(profile: AgentProfile): Promise<void> {
+    this.logger.info('Registering agent with coordination manager', { agentId: profile.id });
+    
+    // Register with scheduler
+    this.scheduler.registerAgent(profile);
+    
+    // Register with work stealer
+    this.workStealer.registerAgent(profile);
+    
+    this.logger.info('Agent registered successfully', { agentId: profile.id });
   }
 
-  async getAgentTaskCount(agentId: string): Promise<number> {
-    if (!this.initialized) {
-      throw new CoordinationError('Coordination manager not initialized');
-    }
-
-    return this.scheduler.getAgentTaskCount(agentId);
+  async unregisterAgent(agentId: string): Promise<void> {
+    this.logger.info('Unregistering agent from coordination manager', { agentId });
+    
+    // Unregister from scheduler
+    this.scheduler.unregisterAgent(agentId);
+    
+    // Unregister from work stealer
+    this.workStealer.unregisterAgent(agentId);
+    
+    this.logger.info('Agent unregistered successfully', { agentId });
   }
 
-  async acquireResource(resourceId: string, agentId: string): Promise<void> {
-    if (!this.initialized) {
-      throw new CoordinationError('Coordination manager not initialized');
-    }
+  async assignTask(task: Task, agentId?: string, strategy?: string): Promise<string> {
+    this.logger.info('Assigning task via coordination manager', { 
+      taskId: task.id, 
+      agentId, 
+      strategy 
+    });
 
-    await this.resourceManager.acquire(resourceId, agentId);
+    try {
+      // Use scheduler to assign task
+      const assignedAgentId = await this.scheduler.assignTask(task, agentId, strategy);
+      
+      // Update work stealer with new task assignment
+      this.workStealer.updateAgentWorkload(assignedAgentId, {
+        agentId: assignedAgentId,
+        taskCount: this.scheduler.getAgentTaskCount(assignedAgentId),
+        avgTaskDuration: 0, // Will be updated on completion
+        cpuUsage: 0, // Would be updated by monitoring
+        memoryUsage: 0, // Would be updated by monitoring
+        priority: 1,
+        capabilities: []
+      });
+
+      return assignedAgentId;
+    } catch (error) {
+      this.logger.error('Failed to assign task', { taskId: task.id, error });
+      throw error;
+    }
   }
 
-  async releaseResource(resourceId: string, agentId: string): Promise<void> {
-    if (!this.initialized) {
-      throw new CoordinationError('Coordination manager not initialized');
-    }
+  async completeTask(taskId: string, agentId: string, result: unknown, duration: number): Promise<void> {
+    this.logger.info('Completing task via coordination manager', { 
+      taskId, 
+      agentId, 
+      duration 
+    });
 
-    await this.resourceManager.release(resourceId, agentId);
+    try {
+      // Complete task in scheduler
+      await this.scheduler.completeTask(taskId, result, duration);
+      
+      // Record task duration for work stealing
+      this.workStealer.recordTaskDuration(agentId, duration);
+      
+      // Update workload
+      this.workStealer.updateAgentWorkload(agentId, {
+        agentId,
+        taskCount: this.scheduler.getAgentTaskCount(agentId),
+        avgTaskDuration: duration,
+        cpuUsage: 0,
+        memoryUsage: 0,
+        priority: 1,
+        capabilities: []
+      });
+
+    } catch (error) {
+      this.logger.error('Failed to complete task', { taskId, error });
+      throw error;
+    }
   }
 
-  async sendMessage(from: string, to: string, message: unknown): Promise<void> {
-    if (!this.initialized) {
-      throw new CoordinationError('Coordination manager not initialized');
-    }
+  async failTask(taskId: string, agentId: string, error: Error): Promise<void> {
+    this.logger.info('Failing task via coordination manager', { 
+      taskId, 
+      agentId, 
+      error: error.message 
+    });
 
-    await this.messageRouter.send(from, to, message);
+    try {
+      // Fail task in scheduler
+      await this.scheduler.failTask(taskId, error);
+      
+      // Update workload
+      this.workStealer.updateAgentWorkload(agentId, {
+        agentId,
+        taskCount: this.scheduler.getAgentTaskCount(agentId),
+        avgTaskDuration: 0,
+        cpuUsage: 0,
+        memoryUsage: 0,
+        priority: 1,
+        capabilities: []
+      });
+
+    } catch (taskError) {
+      this.logger.error('Failed to fail task', { taskId, error: taskError });
+      throw taskError;
+    }
   }
 
   async getHealthStatus(): Promise<{ 
@@ -164,36 +239,28 @@ export class CoordinationManager implements ICoordinationManager {
     metrics?: Record<string, number>;
   }> {
     try {
-      const [schedulerHealth, resourceHealth, messageHealth] = await Promise.all([
-        this.scheduler.getHealthStatus(),
-        this.resourceManager.getHealthStatus(),
-        this.messageRouter.getHealthStatus(),
-      ]);
+      const schedulerHealth = await this.scheduler.getHealthStatus();
+      const workStealerStats = this.workStealer.getWorkloadStats();
+      const circuitBreakerStats = this.circuitBreakers.getOverallStats();
 
+      const healthy = schedulerHealth.healthy;
       const metrics = {
         ...schedulerHealth.metrics,
-        ...resourceHealth.metrics,
-        ...messageHealth.metrics,
+        totalAgents: Number(workStealerStats.totalAgents) || 0,
+        activeAgents: Number(workStealerStats.activeAgents) || 0,
+        stealOperations: Number(workStealerStats.stealOperations) || 0,
+        successfulSteals: Number(workStealerStats.successfulSteals) || 0,
+        failedSteals: Number(workStealerStats.failedSteals) || 0,
+        circuitBreakers: circuitBreakerStats.totalBreakers,
+        openCircuitBreakers: circuitBreakerStats.openBreakers,
+        halfOpenCircuitBreakers: circuitBreakerStats.halfOpenBreakers,
       };
 
-      const healthy = schedulerHealth.healthy && 
-                     resourceHealth.healthy && 
-                     messageHealth.healthy;
-
-      const errors = [
-        schedulerHealth.error,
-        resourceHealth.error,
-        messageHealth.error,
-      ].filter(Boolean);
-
-      const status: { healthy: boolean; error?: string; metrics?: Record<string, number> } = {
+      return {
         healthy,
         metrics,
+        error: schedulerHealth.error,
       };
-      if (errors.length > 0) {
-        status.error = errors.join('; ');
-      }
-      return status;
     } catch (error) {
       return {
         healthy: false,
@@ -202,270 +269,132 @@ export class CoordinationManager implements ICoordinationManager {
     }
   }
 
-  private setupEventHandlers(): void {
-    // Handle task events
-    this.eventBus.on(SystemEvents.TASK_COMPLETED, async (data: unknown) => {
-      const { taskId, result } = data as { taskId: string; result: unknown };
-      try {
-        await this.scheduler.completeTask(taskId, result);
-      } catch (error) {
-        this.logger.error('Error handling task completion', { taskId, error });
-      }
-    });
-
-    this.eventBus.on(SystemEvents.TASK_FAILED, async (data: unknown) => {
-      const { taskId, error } = data as { taskId: string; error: Error };
-      try {
-        await this.scheduler.failTask(taskId, error);
-      } catch (err) {
-        this.logger.error('Error handling task failure', { taskId, error: err });
-      }
-    });
-
-    // Handle agent termination
-    this.eventBus.on(SystemEvents.AGENT_TERMINATED, async (data: unknown) => {
-      const { agentId } = data as { agentId: string };
-      try {
-        // Release all resources held by the agent
-        await this.resourceManager.releaseAllForAgent(agentId);
-        
-        // Cancel all tasks assigned to the agent
-        await this.scheduler.cancelAgentTasks(agentId);
-      } catch (error) {
-        this.logger.error('Error handling agent termination', { agentId, error });
-      }
-    });
-  }
-
-  private startDeadlockDetection(): void {
-    this.deadlockCheckInterval = setInterval(async () => {
-      try {
-        const deadlock = await this.detectDeadlock();
-        
-        if (deadlock) {
-          this.logger.error('Deadlock detected', deadlock);
-          
-          // Emit deadlock event
-          this.eventBus.emit(SystemEvents.DEADLOCK_DETECTED, deadlock);
-          
-          // Attempt to resolve deadlock
-          await this.resolveDeadlock(deadlock);
-        }
-      } catch (error) {
-        this.logger.error('Error during deadlock detection', error);
-      }
-    }, 10000); // Check every 10 seconds
-  }
-
-  private async detectDeadlock(): Promise<{ 
-    agents: string[]; 
-    resources: string[];
-  } | null> {
-    // Get resource allocation graph
-    const allocations = await this.resourceManager.getAllocations();
-    const waitingFor = await this.resourceManager.getWaitingRequests();
-
-    // Build dependency graph
-    const graph = new Map<string, Set<string>>();
-    
-    // Add edges for resources agents are waiting for
-    for (const [agentId, resources] of waitingFor) {
-      if (!graph.has(agentId)) {
-        graph.set(agentId, new Set());
-      }
-      
-      // Find who owns these resources
-      for (const resource of resources) {
-        const owner = allocations.get(resource);
-        if (owner && owner !== agentId) {
-          graph.get(agentId)!.add(owner);
-        }
-      }
-    }
-
-    // Detect cycles using DFS
-    const visited = new Set<string>();
-    const recursionStack = new Set<string>();
-    const cycle: string[] = [];
-
-    const hasCycle = (node: string): boolean => {
-      visited.add(node);
-      recursionStack.add(node);
-
-      const neighbors = graph.get(node) || new Set();
-      for (const neighbor of neighbors) {
-        if (!visited.has(neighbor)) {
-          if (hasCycle(neighbor)) {
-            cycle.unshift(node);
-            return true;
-          }
-        } else if (recursionStack.has(neighbor)) {
-          cycle.unshift(node);
-          cycle.unshift(neighbor);
-          return true;
-        }
-      }
-
-      recursionStack.delete(node);
-      return false;
-    };
-
-    // Check for cycles
-    for (const node of graph.keys()) {
-      if (!visited.has(node) && hasCycle(node)) {
-        // Extract unique agents in cycle
-        const agents = Array.from(new Set(cycle));
-        
-        // Find resources involved
-        const resources: string[] = [];
-        for (const agent of agents) {
-          const waiting = waitingFor.get(agent) || [];
-          resources.push(...waiting);
-        }
-
-        return {
-          agents,
-          resources: Array.from(new Set(resources)),
-        };
-      }
-    }
-
-    return null;
-  }
-
-  private async resolveDeadlock(deadlock: { 
-    agents: string[]; 
-    resources: string[];
-  }): Promise<void> {
-    this.logger.warn('Attempting to resolve deadlock', deadlock);
-
-    // Simple resolution: release resources from the lowest priority agent
-    // In a real implementation, use more sophisticated strategies
-    
+  async getCoordinationMetrics(): Promise<Record<string, unknown>> {
     try {
-      // Find the agent with the lowest priority or least work done
-      const agentToPreempt = deadlock.agents[0]; // Simplified
-      
-      // Release all resources held by this agent
-      await this.resourceManager.releaseAllForAgent(agentToPreempt);
-      
-      // Reschedule the agent's tasks
-      await this.scheduler.rescheduleAgentTasks(agentToPreempt);
-      
-      this.logger.info('Deadlock resolved by preempting agent', { 
-        agentId: agentToPreempt,
-      });
+      const schedulerMetrics = await this.scheduler.getSchedulingMetrics();
+      const workStealerStats = this.workStealer.getWorkloadStats();
+      const circuitBreakerStats = this.circuitBreakers.getOverallStats();
+
+      return {
+        scheduler: schedulerMetrics,
+        workStealing: workStealerStats,
+        circuitBreakers: circuitBreakerStats,
+        timestamp: new Date().toISOString(),
+      };
     } catch (error) {
-      throw new DeadlockError(
-        'Failed to resolve deadlock',
-        deadlock.agents,
-        deadlock.resources,
-      );
+      this.logger.error('Failed to get coordination metrics', error);
+      return {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      };
     }
-  }
-
-  async getAgentTasks(agentId: string): Promise<Task[]> {
-    if (!this.initialized) {
-      throw new CoordinationError('Coordination manager not initialized');
-    }
-
-    return this.scheduler.getAgentTasks(agentId);
-  }
-
-  async cancelTask(taskId: string, reason?: string): Promise<void> {
-    if (!this.initialized) {
-      throw new CoordinationError('Coordination manager not initialized');
-    }
-
-    await this.scheduler.cancelTask(taskId, reason || 'User requested cancellation');
   }
 
   async performMaintenance(): Promise<void> {
-    if (!this.initialized) {
-      return;
-    }
-
     this.logger.info('Performing coordination manager maintenance');
 
     try {
-      await Promise.all([
-        this.scheduler.performMaintenance(),
-        this.resourceManager.performMaintenance(),
-        this.messageRouter.performMaintenance(),
-      ]);
-      
-      // Clean up old conflicts
-      this.conflictResolver.cleanupOldConflicts(24 * 60 * 60 * 1000); // 24 hours
-      
+      // Perform maintenance on all components
+      await this.scheduler.performMaintenance();
+      await this.workStealer.performMaintenance();
+      await this.circuitBreakers.performMaintenance();
+
       this.logger.info('Coordination manager maintenance completed');
     } catch (error) {
       this.logger.error('Error during coordination manager maintenance', error);
+      throw error;
     }
   }
 
-  async getCoordinationMetrics(): Promise<Record<string, unknown>> {
-    const baseMetrics = await this.getHealthStatus();
-    const coordinationMetrics = this.metricsCollector.getCurrentMetrics();
-    const conflictStats = this.conflictResolver.getStats();
-    
-    return {
-      ...baseMetrics.metrics,
-      coordination: coordinationMetrics,
-      conflicts: conflictStats,
-      advancedScheduling: this.advancedSchedulingEnabled,
-    };
+  async getAgentTaskCount(agentId: string): Promise<number> {
+    // Get task count for specific agent from scheduler
+    return this.scheduler.getAgentTaskCount(agentId);
   }
 
-  enableAdvancedScheduling(): void {
-    if (this.advancedSchedulingEnabled) {
-      return;
-    }
-
-    this.logger.info('Enabling advanced scheduling features');
-    
-    // Replace basic scheduler with advanced one
-    const taskOrchestrator = this.createTaskOrchestrator();
-    this.advancedSchedulingEnabled = true;
+  async getAgentTasks(agentId: string): Promise<Task[]> {
+    // Get tasks assigned to specific agent from scheduler
+    return await this.scheduler.getAgentTasks(agentId);
   }
 
-  async reportConflict(
-    type: 'resource' | 'task',
-    id: string,
-    agents: string[],
-  ): Promise<void> {
-    this.logger.warn('Conflict reported', { type, id, agents });
+  async cancelTask(taskId: string): Promise<void> {
+    // Cancel a specific task through scheduler
+    await this.scheduler.cancelTask(taskId, 'Cancelled by coordination manager');
+  }
 
-    let conflict;
-    if (type === 'resource') {
-      conflict = await this.conflictResolver.reportResourceConflict(id, agents);
-    } else {
-      conflict = await this.conflictResolver.reportTaskConflict(id, agents, 'assignment');
-    }
+  setSchedulingStrategy(strategy: string): void {
+    // Set the scheduling strategy for the scheduler
+    this.scheduler.setDefaultStrategy(strategy);
+  }
 
-    // Auto-resolve using default strategy
-    try {
-      await this.conflictResolver.autoResolve(conflict.id);
-    } catch (error) {
-      this.logger.error('Failed to auto-resolve conflict', { 
-        conflictId: conflict.id,
-        error,
-      });
-    }
+  getWorkStealingCoordinator(): WorkStealingCoordinator {
+    // Return the work stealing coordinator
+    return this.workStealer;
+  }
+
+  getCircuitBreakerManager(): CircuitBreakerManager {
+    // Return the circuit breaker manager
+    return this.circuitBreakers;
+  }
+
+  private setupEventHandlers(): void {
+    // Handle task assignment events
+    this.eventBus.on('task:assigned', (data: any) => {
+      this.logger.debug('Task assigned event received', data);
+    });
+
+    // Handle task completion events
+    this.eventBus.on('task:completed', (data: any) => {
+      this.logger.debug('Task completed event received', data);
+    });
+
+    // Handle task failure events
+    this.eventBus.on('task:failed', (data: any) => {
+      this.logger.debug('Task failed event received', data);
+    });
+
+    // Handle work stealing events
+    this.eventBus.on('work-stealing:steal-attempt', (data: any) => {
+      this.logger.debug('Work stealing attempt', data);
+    });
+
+    // Handle circuit breaker events
+    this.eventBus.on('circuit-breaker:state-change', (data: any) => {
+      this.logger.debug('Circuit breaker state change', data);
+    });
   }
 
   /**
-   * Create task orchestrator for intelligent scheduling
+   * Factory method to create a coordination manager with default configuration
    */
-  private createTaskOrchestrator(): TaskOrchestrator {
-    const taskOrchestrator = new TaskOrchestrator(
-      this.config,
-      this.eventBus,
-      this.logger,
-    );
-    
-    this.scheduler = taskOrchestrator;
-    
-    this.logger.info('Task orchestrator created');
-    return taskOrchestrator;
+  static createDefault(eventBus: IEventBus, logger: ILogger): CoordinationManager {
+    const defaultConfig: EnhancedCoordinationConfig = {
+      coordination: {
+        maxConcurrentTasks: 10,
+        defaultTimeout: 30000,
+        enableWorkStealing: true,
+        enableCircuitBreaker: true,
+        retryAttempts: 3,
+        schedulingStrategy: 'capability',
+        maxRetries: 3,
+        retryDelay: 1000,
+        resourceTimeout: 30000,
+      },
+      workStealing: {
+        enabled: true,
+        stealThreshold: 3,
+        maxStealBatch: 2,
+        stealInterval: 10000,
+        minTasksToSteal: 1,
+      },
+      circuitBreaker: {
+        failureThreshold: 5,
+        successThreshold: 3,
+        timeout: 60000,
+        halfOpenLimit: 2,
+      },
+      enableAdvancedFeatures: true,
+    };
+
+    return new CoordinationManager(defaultConfig, eventBus, logger);
   }
 }

@@ -55,14 +55,14 @@ export const healthCommand: CLICommand = {
   name: 'health',
   description: 'System health monitoring and diagnostics',
   category: 'System',
-  usage: 'claude-flow health [subcommand] [OPTIONS]',
+  usage: 'flowx health [subcommand] [OPTIONS]',
   examples: [
-    'claude-flow health',
-    'claude-flow health check --verbose',
-    'claude-flow health services',
-    'claude-flow health agents',
-    'claude-flow health memory',
-    'claude-flow health report --format json'
+    'flowx health',
+    'flowx health check --verbose',
+    'flowx health services',
+    'flowx health agents',
+    'flowx health memory',
+    'flowx health report --format json'
   ],
   options: [
     {
@@ -337,7 +337,7 @@ async function generateHealthReport(context: CLIContext): Promise<void> {
       health: systemHealth,
       recommendations: generateRecommendations(systemHealth),
       metadata: {
-        generatedBy: 'claude-flow health report',
+        generatedBy: 'flowx health report',
         checkDuration: 0
       }
     };
@@ -592,7 +592,7 @@ async function checkFileSystemHealth(): Promise<HealthCheckResult> {
   
   try {
     // Check file system access
-    const testDir = path.join(process.cwd(), '.claude-flow');
+    const testDir = path.join(process.cwd(), '.flowx');
     
     try {
       await fs.access(testDir);

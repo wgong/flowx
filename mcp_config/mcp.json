@@ -1,38 +1,16 @@
 {
   "mcpServers": {
-    "claude-flow": {
-      "command": "npx",
+    "flowx": {
+      "command": "node",
       "args": [
-        "-y",
-        "claude-flow",
+        "./cli.js",
         "mcp",
         "serve"
       ],
       "env": {
-        "CLAUDE_FLOW_LOG_LEVEL": "info",
-        "CLAUDE_FLOW_MCP_PORT": "3000"
-      },
-      "capabilities": {
-        "tools": true,
-        "prompts": false,
-        "resources": false
-      }
-    },
-    "claude-flow-advanced": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "claude-flow",
-        "mcp",
-        "serve",
-        "--config",
-        "./claude-flow.config.json"
-      ],
-      "env": {
-        "CLAUDE_FLOW_LOG_LEVEL": "debug",
-        "CLAUDE_FLOW_MCP_TRANSPORT": "stdio",
-        "CLAUDE_FLOW_MEMORY_BACKEND": "sqlite",
-        "CLAUDE_FLOW_TERMINAL_POOL_SIZE": "10"
+        "FLOWX_LOG_LEVEL": "info",
+        "FLOWX_MCP_PORT": "3000",
+        "FLOWX_MCP_TRANSPORT": "stdio"
       },
       "capabilities": {
         "tools": true,
@@ -40,11 +18,32 @@
         "resources": true
       }
     },
-    "claude-flow-minimal": {
-      "command": "npx",
+    "flowx-debug": {
+      "command": "node",
       "args": [
-        "-y",
-        "claude-flow@latest",
+        "./cli.js",
+        "mcp",
+        "serve",
+        "--log-level",
+        "debug",
+        "--verbose"
+      ],
+      "env": {
+        "FLOWX_LOG_LEVEL": "debug",
+        "FLOWX_MCP_TRANSPORT": "stdio",
+        "FLOWX_MEMORY_BACKEND": "sqlite",
+        "FLOWX_TERMINAL_POOL_SIZE": "10"
+      },
+      "capabilities": {
+        "tools": true,
+        "prompts": true,
+        "resources": true
+      }
+    },
+    "flowx-minimal": {
+      "command": "node",
+      "args": [
+        "./cli.js",
         "mcp",
         "serve",
         "--minimal"
@@ -63,6 +62,15 @@
     "logDirectory": "./logs"
   },
   "tools": {
+    "hive-mind": {
+      "description": "Hive-mind collective intelligence system",
+      "commands": [
+        "create",
+        "spawn",
+        "status",
+        "shutdown"
+      ]
+    },
     "agent": {
       "description": "Manage AI agents",
       "commands": [
@@ -111,19 +119,19 @@
   "examples": {
     "basic": {
       "description": "Basic MCP server setup",
-      "command": "npx -y claude-flow mcp serve"
+      "command": "node ./cli.js mcp serve"
     },
     "withConfig": {
       "description": "MCP server with custom configuration",
-      "command": "npx -y claude-flow mcp serve --config ./my-config.json"
+      "command": "node ./cli.js mcp serve --config ./my-config.json"
     },
     "debugMode": {
       "description": "MCP server in debug mode",
-      "command": "npx -y claude-flow mcp serve --log-level debug --verbose"
+      "command": "node ./cli.js mcp serve --log-level debug --verbose"
     },
     "httpTransport": {
       "description": "MCP server with HTTP transport",
-      "command": "npx -y claude-flow mcp serve --transport http --port 8080"
+      "command": "node ./cli.js mcp serve --transport http --port 8080"
     }
   }
 }

@@ -16,7 +16,7 @@ import { stopCommand } from '../commands/system/stop-command.ts';
 import { restartCommand } from '../commands/system/restart-command.ts';
 import { sparcCommand } from '../commands/system/sparc-command.ts';
 import { batchCommand } from '../commands/system/batch-command.ts';
-import { taskCommand } from '../commands/tasks/unified-task-command-simple.ts';
+import { taskCommand } from '../commands/tasks/task-command.ts';
 import { workflowCommand } from '../commands/system/workflow-command.ts';
 import { migrationCommand } from '../commands/system/migration-command.ts';
 import { uiCommand } from '../commands/system/ui-command.ts';
@@ -30,15 +30,26 @@ import { restoreCommand } from '../commands/system/restore-command.ts';
 import { daemonCommand } from '../commands/system/daemon-command.ts';
 import { servicesCommand } from '../commands/system/services-command.ts';
 import { systemCommand } from '../commands/system/system-command.ts';
+import { runCommand } from '../commands/system/run-command.ts';
+
+// MCP Commands
+import { mcpCommand } from '../commands/system/mcp-command.ts';
 
 // Agent Commands
 import { agentCommand } from '../commands/agents/agent-management-command.ts';
+import { spawnCommand } from '../commands/agents/spawn-command.ts';
+import { killCommand } from '../commands/agents/kill-command.ts';
+import { execCommand } from '../commands/agents/exec-command.ts';
 
 // Swarm Commands
 import { swarmCommand } from '../commands/swarm/swarm-management-command.ts';
 
 // Memory Commands
 import { memoryCommand } from '../commands/memory/memory-management-command.ts';
+
+// Data Commands
+import { queryCommand } from '../commands/data/query-command.ts';
+import { analyzeCommand } from '../commands/data/analyze-command.ts';
 
 // Hive-Mind Commands
 import { hiveMindCommand } from '../commands/hive-mind/hive-mind-command.ts';
@@ -73,15 +84,26 @@ export const commandRegistry = new Map<string, CLICommand>([
   ['daemon', daemonCommand],
   ['services', servicesCommand],
   ['system', systemCommand],
+  ['run', runCommand],
+
+  // MCP Commands
+  ['mcp', mcpCommand],
 
   // Agent Commands
   ['agent', agentCommand],
+  ['spawn', spawnCommand],
+  ['kill', killCommand],
+  ['exec', execCommand],
 
   // Swarm Commands
   ['swarm', swarmCommand],
 
   // Memory Commands
   ['memory', memoryCommand],
+
+  // Data Commands
+  ['query', queryCommand],
+  ['analyze', analyzeCommand],
 
   // Hive-Mind Commands
   ['hive-mind', hiveMindCommand]
@@ -98,7 +120,8 @@ const aliases = new Map<string, string>([
   ['svc', 'services'],
   ['service', 'services'],
   ['sys', 'system'],
-  ['systemctl', 'services']
+  ['systemctl', 'services'],
+  ['tasks', 'task']
 ]);
 
 /**

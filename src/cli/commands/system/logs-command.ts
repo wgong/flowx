@@ -1,6 +1,6 @@
 /**
  * Logs Command
- * Real-time log aggregation and monitoring for Claude-Flow
+ * Real-time log aggregation and monitoring for flowx
  */
 
 import type { CLICommand, CLIContext } from '../../interfaces/index.ts';
@@ -34,17 +34,17 @@ interface LogsOptions {
 
 export const logsCommand: CLICommand = {
   name: 'logs',
-  description: 'View and manage Claude-Flow logs',
+  description: 'View and manage flowx logs',
   category: 'System',
-  usage: 'claude-flow logs [OPTIONS]',
+  usage: 'flowx logs [OPTIONS]',
   examples: [
-    'claude-flow logs',
-    'claude-flow logs --follow',
-    'claude-flow logs --level error',
-    'claude-flow logs --component SwarmCoordinator',
-    'claude-flow logs --lines 100 --format json',
-    'claude-flow logs --grep "task completed"',
-    'claude-flow logs --since "2024-01-01" --until "2024-01-02"'
+    'flowx logs',
+    'flowx logs --follow',
+    'flowx logs --level error',
+    'flowx logs --component SwarmCoordinator',
+    'flowx logs --lines 100 --format json',
+    'flowx logs --grep "task completed"',
+    'flowx logs --since "2024-01-01" --until "2024-01-02"'
   ],
   options: [
     {
@@ -167,7 +167,7 @@ async function showLogs(context: CLIContext): Promise<void> {
   const { options } = context;
   
   try {
-    printInfo('📋 Claude-Flow Logs');
+    printInfo('📋 flowx Logs');
     console.log('─'.repeat(60));
     
     // Get log entries
@@ -175,7 +175,7 @@ async function showLogs(context: CLIContext): Promise<void> {
     
     if (logs.length === 0) {
       printWarning('No log entries found');
-      printInfo('Try adjusting your filters or check if Claude-Flow is running');
+      printInfo('Try adjusting your filters or check if flowx is running');
       return;
     }
     
@@ -261,8 +261,8 @@ async function getLogEntries(options: LogsOptions): Promise<LogEntry[]> {
 async function getLogSources(): Promise<Array<{ name: string; path: string; type: 'file' | 'system' }>> {
   const sources = [];
   
-  // Claude-Flow specific logs
-  const claudeFlowLogDir = path.join(process.cwd(), '.claude-flow', 'logs');
+  // flowx specific logs
+  const claudeFlowLogDir = path.join(process.cwd(), '.flowx', 'logs');
   try {
     const files = await fs.readdir(claudeFlowLogDir);
     for (const file of files) {
@@ -283,7 +283,7 @@ async function getLogSources(): Promise<Array<{ name: string; path: string; type
   const systemLogPaths = [
     '/var/log/system.log',
     '/var/log/messages',
-    `${homedir()}/Library/Logs/claude-flow.log`
+    `${homedir()}/Library/Logs/flowx.log`
   ];
   
   for (const logPath of systemLogPaths) {
@@ -301,9 +301,9 @@ async function getLogSources(): Promise<Array<{ name: string; path: string; type
   
   // If no sources found, create a default one
   if (sources.length === 0) {
-    const defaultLogPath = path.join(claudeFlowLogDir, 'claude-flow.log');
+    const defaultLogPath = path.join(claudeFlowLogDir, 'flowx.log');
     sources.push({
-      name: 'claude-flow',
+      name: 'flowx',
       path: defaultLogPath,
       type: 'file' as const
     });
@@ -573,7 +573,7 @@ async function showLogStats(context: CLIContext): Promise<void> {
 
 async function exportLogs(context: CLIContext): Promise<void> {
   const { args, options } = context;
-  const outputFile = args[0] || `claude-flow-logs-${Date.now()}.tson`;
+  const outputFile = args[0] || `flowx-logs-${Date.now()}.tson`;
   
   try {
     const logs = await getLogEntries(options);

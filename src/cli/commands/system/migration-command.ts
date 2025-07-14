@@ -39,13 +39,13 @@ export const migrationCommand: CLICommand = {
   name: 'migration',
   description: 'Manage database migrations and system upgrades',
   category: 'System',
-  usage: 'claude-flow migration <subcommand> [OPTIONS]',
+  usage: 'flowx migration <subcommand> [OPTIONS]',
   examples: [
-    'claude-flow migration status',
-    'claude-flow migration up',
-    'claude-flow migration down --version 1.2.0',
-    'claude-flow migration create --name "add-user-preferences"',
-    'claude-flow migration history --limit 10'
+    'flowx migration status',
+    'flowx migration up',
+    'flowx migration down --version 1.2.0',
+    'flowx migration create --name "add-user-preferences"',
+    'flowx migration history --limit 10'
   ],
   subcommands: [
     {
@@ -276,7 +276,7 @@ async function showMigrationStatus(context: CLIContext): Promise<void> {
     printInfo(`Pending: ${pendingCount}`);
     
     if (pendingCount > 0) {
-      printWarning(`${pendingCount} migrations are pending. Run 'claude-flow migration up' to apply them.`);
+      printWarning(`${pendingCount} migrations are pending. Run 'flowx migration up' to apply them.`);
     }
     
   } catch (error) {

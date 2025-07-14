@@ -53,14 +53,14 @@ export const backupCommand: CLICommand = {
   name: 'backup',
   description: 'Create and manage system backups with real data persistence',
   category: 'System',
-  usage: 'claude-flow backup <subcommand> [OPTIONS]',
+  usage: 'flowx backup <subcommand> [OPTIONS]',
   examples: [
-    'claude-flow backup create --description "Pre-upgrade backup"',
-    'claude-flow backup create --type incremental --components database,config',
-    'claude-flow backup list --format table',
-    'claude-flow backup info backup-123',
-    'claude-flow backup verify backup-123',
-    'claude-flow backup cleanup --older-than 30d'
+    'flowx backup create --description "Pre-upgrade backup"',
+    'flowx backup create --type incremental --components database,config',
+    'flowx backup list --format table',
+    'flowx backup info backup-123',
+    'flowx backup verify backup-123',
+    'flowx backup cleanup --older-than 30d'
   ],
   subcommands: [
     {
@@ -595,9 +595,9 @@ async function backupConfiguration(backupPath: string, manifest: BackupManifest)
 
     // Backup main config files
     const configFiles = [
-      'claude-flow.tson',
-      'claude-flow.yaml',
-      '.claude-flow.tson',
+      'flowx.tson',
+      'flowx.yaml',
+      '.flowx.tson',
       'config.tson'
     ];
 

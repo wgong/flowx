@@ -1,15 +1,32 @@
-import { spawn, ChildProcess } from 'node:child_process';
-import { EventEmitter } from 'node:events';
-import { Logger } from "../core/logger.ts";
-import { generateId } from "../utils/helpers.ts";
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-import { Buffer } from 'node:buffer';
-import { SystemError } from '../utils/errors.ts';
+/**
+ * Background executor for long-running tasks with detached processes and persistence
+ * Handles task queuing, process management, and state persistence
+ */
 
-export interface BackgroundTask {
+import { EventEmitter } from 'node:events';
+import { spawn, ChildProcess } from 'node:child_process';
+import { writeFile, readFile, mkdir, access } from 'node:fs/promises';
+import { join } from 'node:path';
+import { TaskDefinition, TaskResult, TaskStatus, AgentState } from "../swarm/types.ts";
+import { ILogger } from "../core/logger.ts";
+import { IEventBus } from "../core/event-bus.ts";
+import { generateId } from "../utils/helpers.ts";
+
+export interface BackgroundTaskConfig {
+  maxConcurrentTasks: number;
+  taskTimeout: number;
+  retryAttempts: number;
+  retryBackoffBase: number;
+  persistenceDir: string;
+  healthCheckInterval: number;
+  processCleanupInterval: number;
+  maxQueueSize: number;
+  enablePersistence: boolean;
+}
+
+export interface BackgroundTaskDefinition {
   id: string;
-  type: 'claude-spawn' | 'script' | 'command';
+  type: 'claude-spawn' | 'script' | 'command' | 'workflow' | 'agent-task';
   command: string;
   args: string[];
   options?: {
@@ -18,200 +35,238 @@ export interface BackgroundTask {
     timeout?: number;
     retries?: number;
     detached?: boolean;
+    priority?: number;
+    metadata?: Record<string, any>;
   };
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  pid?: number | undefined;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout';
+  pid?: number;
   output?: string;
   error?: string;
+  result?: any;
   startTime?: Date;
   endTime?: Date;
   retryCount: number;
+  queueTime?: number;
+  executionTime?: number;
+  priority: number;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-export interface BackgroundExecutorConfig {
-  maxConcurrentTasks: number;
-  defaultTimeout: number;
-  logPath: string;
-  enablePersistence: boolean;
-  checkInterval: number;
-  cleanupInterval: number;
-  maxRetries: number;
+export interface BackgroundExecutorMetrics {
+  totalTasks: number;
+  completedTasks: number;
+  failedTasks: number;
+  runningTasks: number;
+  queuedTasks: number;
+  averageExecutionTime: number;
+  successRate: number;
+  throughput: number;
+  resourceUsage: {
+    cpu: number;
+    memory: number;
+    activeProcesses: number;
+  };
 }
 
 export class BackgroundExecutor extends EventEmitter {
-  private logger: Logger;
-  private config: BackgroundExecutorConfig;
-  private tasks: Map<string, BackgroundTask>;
-  private processes: Map<string, ChildProcess>;
-  private queue: string[];
-  private isRunning: boolean = false;
-  private checkTimer?: ReturnType<typeof setInterval> | null;
-  private cleanupTimer?: ReturnType<typeof setInterval> | null;
+  private tasks = new Map<string, BackgroundTaskDefinition>();
+  private processes = new Map<string, ChildProcess>();
+  private taskQueue: string[] = [];
+  private runningTasks = new Set<string>();
+  private completedTasks = new Set<string>();
+  private failedTasks = new Set<string>();
+  private healthCheckTimer?: NodeJS.Timeout;
+  private cleanupTimer?: NodeJS.Timeout;
+  private queueProcessTimer?: NodeJS.Timeout;
+  private isShuttingDown = false;
 
-  constructor(config: Partial<BackgroundExecutorConfig> = {}) {
+  get shuttingDown(): boolean {
+    return this.isShuttingDown;
+  }
+  private metrics: BackgroundExecutorMetrics;
+
+  constructor(
+    private config: BackgroundTaskConfig,
+    private logger: ILogger,
+    private eventBus: IEventBus
+  ) {
     super();
-    this.logger = new Logger({ level: 'info', format: 'text', destination: 'console' }, { component: 'BackgroundExecutor' });
-    this.config = {
-      maxConcurrentTasks: 5,
-      defaultTimeout: 300000, // 5 minutes
-      logPath: './background-tasks',
-      enablePersistence: true,
-      checkInterval: 1000, // 1 second
-      cleanupInterval: 60000, // 1 minute
-      maxRetries: 3,
-      ...config
-    };
-
-    this.tasks = new Map();
-    this.processes = new Map();
-    this.queue = [];
-    this.checkTimer = null;
-    this.cleanupTimer = null;
+    this.metrics = this.initializeMetrics();
+    this.setupEventHandlers();
   }
 
-  async start(): Promise<void> {
-    if (this.isRunning) return;
+  private initializeMetrics(): BackgroundExecutorMetrics {
+    return {
+      totalTasks: 0,
+      completedTasks: 0,
+      failedTasks: 0,
+      runningTasks: 0,
+      queuedTasks: 0,
+      averageExecutionTime: 0,
+      successRate: 0,
+      throughput: 0,
+      resourceUsage: {
+        cpu: 0,
+        memory: 0,
+        activeProcesses: 0
+      }
+    };
+  }
 
-    this.logger.info('Starting background executor...');
-    this.isRunning = true;
+  private setupEventHandlers(): void {
+    this.eventBus.on('system:shutdown', () => this.shutdown());
+    this.eventBus.on('task:cancel', (taskId: string) => this.cancelTask(taskId));
+  }
 
-    // Create log directory
+  async initialize(): Promise<void> {
+    this.logger.info('Initializing BackgroundExecutor');
+
+    // Create persistence directory if enabled
     if (this.config.enablePersistence) {
-      await fs.mkdir(this.config.logPath, { recursive: true });
+      try {
+        await mkdir(this.config.persistenceDir, { recursive: true });
+        await this.loadPersistedTasks();
+      } catch (error) {
+        this.logger.error('Failed to create persistence directory', { error });
+      }
     }
 
-    // Start background processing
-    this.checkTimer = setInterval(() => {
-      this.processQueue();
-      this.checkRunningTasks();
-    }, this.config.checkInterval);
+    // Start health check timer
+    this.healthCheckTimer = setInterval(
+      () => this.performHealthCheck(),
+      this.config.healthCheckInterval
+    );
 
     // Start cleanup timer
-    this.cleanupTimer = setInterval(() => {
-      this.cleanupCompletedTasks();
-    }, this.config.cleanupInterval);
+    this.cleanupTimer = setInterval(
+      () => this.performCleanup(),
+      this.config.processCleanupInterval
+    );
 
-    this.emit('executor:started');
+    // Start queue processing timer
+    this.queueProcessTimer = setInterval(
+      () => this.processQueue(),
+      1000 // Process queue every second
+    );
+
+    this.logger.info('BackgroundExecutor initialized successfully');
   }
 
-  async stop(): Promise<void> {
-    if (!this.isRunning) return;
-
-    this.logger.info('Stopping background executor...');
-    this.isRunning = false;
-
-    // Clear timers
-    if (this.checkTimer) {
-      clearInterval(this.checkTimer as any);
-      this.checkTimer = null;
+  async shutdown(): Promise<void> {
+    if (this.isShuttingDown) {
+      return;
     }
 
+    this.logger.info('Shutting down BackgroundExecutor');
+    this.isShuttingDown = true;
+
+    // Clear timers first to prevent new tasks from being processed
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+      this.healthCheckTimer = undefined;
+    }
     if (this.cleanupTimer) {
-      clearInterval(this.cleanupTimer as any);
-      this.cleanupTimer = null;
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = undefined;
+    }
+    if (this.queueProcessTimer) {
+      clearInterval(this.queueProcessTimer);
+      this.queueProcessTimer = undefined;
     }
 
-    // Kill all running processes
-    for (const [taskId, process] of this.processes) {
-      this.logger.warn(`Killing process for task ${taskId}`);
-      process.kill('SIGTERM');
+    // Force clear any remaining timers (aggressive cleanup for tests)
+    const timers = [this.healthCheckTimer, this.cleanupTimer, this.queueProcessTimer];
+    timers.forEach(timer => {
+      if (timer) {
+        clearInterval(timer);
+      }
+    });
+
+    // Cancel all running tasks
+    const runningTaskIds = Array.from(this.runningTasks);
+    if (runningTaskIds.length > 0) {
+      this.logger.info(`Cancelling ${runningTaskIds.length} running tasks`);
+      await Promise.allSettled(runningTaskIds.map(taskId => this.cancelTask(taskId)));
     }
 
-    this.emit('executor:stopped');
+    // Kill any remaining processes
+    for (const [taskId, process] of this.processes.entries()) {
+      try {
+        if (!process.killed && process.exitCode === null) {
+          process.kill('SIGTERM');
+          // Force kill after 1 second
+          setTimeout(() => {
+            if (!process.killed && process.exitCode === null) {
+              process.kill('SIGKILL');
+            }
+          }, 1000);
+        }
+      } catch (error) {
+        this.logger.error(`Error killing process for task ${taskId}`, error);
+      }
+    }
+
+    // Persist state if enabled
+    if (this.config.enablePersistence) {
+      try {
+        await this.persistTasks();
+      } catch (error) {
+        this.logger.error('Failed to persist tasks during shutdown', error);
+      }
+    }
+
+    // Clear all data
+    this.tasks.clear();
+    this.processes.clear();
+    this.taskQueue.length = 0;
+    this.runningTasks.clear();
+    this.completedTasks.clear();
+    this.failedTasks.clear();
+
+    this.logger.info('BackgroundExecutor shutdown complete');
   }
 
   /**
-   * Validates a command to prevent command injection attacks
-   * @param command The command to validate
-   * @param args Command arguments to validate
-   * @throws SystemError if the command is disallowed or dangerous
+   * Submit a background task for execution
    */
-  private validateCommand(command: string, args: string[] = []): void {
-    // Allowlist of safe commands
-    const allowedCommands = [
-      'claude', 'node', 'npm', 'python', 'python3', 'pip',
-      'git', 'bash', 'sh', 'zsh', 'dotnet', 'java', 'javac', 'cargo',
-      'rustc', 'go', 'gradle', 'mvn', 'make', 'cmake', 'docker'
-    ];
-    
-    // Check if the command is in the allowlist
-    const commandName = path.basename(command);
-    if (!allowedCommands.includes(commandName)) {
-      throw new SystemError(`Command not allowed: ${commandName}. Only allowlisted commands can be executed.`);
+  async submitTask(taskDef: Omit<BackgroundTaskDefinition, 'id' | 'status' | 'retryCount' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    if (this.isShuttingDown) {
+      throw new Error('BackgroundExecutor is shutting down');
     }
-    
-    // Validate arguments (check for shell special chars and common injection patterns)
-    const dangerousPatterns = [
-      /^\s*&/, // Leading ampersand
-      /;\s*$/, // Trailing semicolon
-      /\|\s*[a-z]/, // Pipe to another command
-      /`/, // Backticks
-      /\$\(/, // Command substitution $()
-      /\s*\|\|\s*/, // Double pipe
-      /\s*&&\s*/, // Double ampersand
-      /\s*>\s*/, // Output redirection
-      /\s*<\s*/, // Input redirection
-    ];
-    
-    for (const arg of args) {
-      // Skip args that start with - (flags)
-      if (arg.startsWith('-')) continue;
-      
-      // Check for dangerous patterns
-      for (const pattern of dangerousPatterns) {
-        if (pattern.test(arg)) {
-          throw new SystemError(`Potentially unsafe argument detected: ${arg}`);
-        }
-      }
+
+    if (this.taskQueue.length >= this.config.maxQueueSize) {
+      throw new Error('Task queue is full');
     }
+
+    const task: BackgroundTaskDefinition = {
+      ...taskDef,
+      id: generateId(),
+      status: 'pending',
+      retryCount: 0,
+      priority: taskDef.priority || 0,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    this.tasks.set(task.id, task);
+    this.addToQueue(task.id);
+    this.metrics.totalTasks++;
+    this.metrics.queuedTasks++;
+
+    this.logger.info('Task submitted to background executor', { taskId: task.id, type: task.type });
+    this.emit('task:submitted', task);
+
+    if (this.config.enablePersistence) {
+      await this.persistTask(task);
+    }
+
+    return task.id;
   }
 
-  async submitTask(
-    type: BackgroundTask['type'],
-    command: string,
-    args: string[] = [],
-    options: BackgroundTask['options'] = {}
-  ): Promise<string> {
-    try {
-      // Validate command and arguments
-      this.validateCommand(command, args);
-      
-      const taskId = generateId('bgtask');
-      const task: BackgroundTask = {
-        id: taskId,
-        type,
-        command,
-        args,
-        options: {
-          timeout: this.config.defaultTimeout,
-          retries: this.config.maxRetries,
-          ...options
-        },
-        status: 'pending',
-        retryCount: 0
-      };
-
-      this.tasks.set(taskId, task);
-      this.queue.push(taskId);
-
-      if (this.config.enablePersistence) {
-        await this.saveTaskState(task);
-      }
-
-      this.logger.info(`Submitted background task: ${taskId} - ${command}`);
-      this.emit('task:submitted', task);
-
-      // Process immediately if possible
-      this.processQueue();
-
-      return taskId;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to submit task: ${errorMessage}`, { command, args });
-      throw error;
-    }
-  }
-
+  /**
+   * Submit a Claude-specific background task
+   */
   async submitClaudeTask(
     prompt: string,
     tools: string[] = [],
@@ -219,354 +274,459 @@ export class BackgroundExecutor extends EventEmitter {
       cwd: string;
       env: Record<string, string>;
       timeout: number;
-      model?: string;
-      maxTokens?: number;
+      model: string;
+      maxTokens: number;
+      priority: number;
+      metadata: Record<string, any>;
     }> = {}
   ): Promise<string> {
-    // Validate prompt content
-    if (!prompt || typeof prompt !== 'string') {
-      throw new SystemError('Invalid prompt: must be a non-empty string');
-    }
-    
-    // Validate tools
-    const validToolPattern = /^[a-zA-Z0-9_\-:]+$/;
-    for (const tool of tools) {
-      if (!validToolPattern.test(tool)) {
-        throw new SystemError(`Invalid tool name: ${tool}. Tool names must contain only alphanumeric characters, underscores, hyphens, and colons.`);
-      }
-    }
-    
-    // Build claude command arguments - sanitize all inputs
     const args = ['-p', prompt];
     
     if (tools.length > 0) {
       args.push('--allowedTools', tools.join(','));
     }
 
-    if (options.model && validToolPattern.test(options.model)) {
+    if (options.model) {
       args.push('--model', options.model);
-    } else if (options.model) {
-      throw new SystemError(`Invalid model name: ${options.model}`);
     }
 
-    if (options.maxTokens && Number.isInteger(options.maxTokens) && options.maxTokens > 0) {
+    if (options.maxTokens) {
       args.push('--max-tokens', options.maxTokens.toString());
-    } else if (options.maxTokens !== undefined) {
-      throw new SystemError(`Invalid maxTokens: ${options.maxTokens}. Must be a positive integer.`);
     }
 
-    // Even with validation, use with caution
-    if (process.env.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS === 'true') {
-      args.push('--dangerously-skip-permissions');
-    }
+    args.push('--dangerously-skip-permissions');
 
-    return this.submitTask('claude-spawn', 'claude', args, {
-      ...options,
-      detached: true // Run in background
+    return this.submitTask({
+      type: 'claude-spawn',
+      command: 'claude',
+      args,
+      options: {
+        cwd: options.cwd,
+        env: options.env,
+        timeout: options.timeout || this.config.taskTimeout,
+        detached: true,
+        priority: options.priority || 0,
+        metadata: options.metadata
+      },
+      priority: options.priority || 0
     });
   }
 
-  private async processQueue(): Promise<void> {
-    if (!this.isRunning) return;
-
-    // Check how many tasks are running
-    const runningTasks = Array.from(this.tasks.values())
-      .filter(t => t.status === 'running').length;
-
-    const availableSlots = this.config.maxConcurrentTasks - runningTasks;
-
-    // Process pending tasks
-    for (let i = 0; i < availableSlots && this.queue.length > 0; i++) {
-      const taskId = this.queue.shift();
-      if (!taskId) continue;
-
-      const task = this.tasks.get(taskId);
-      if (!task || task.status !== 'pending') continue;
-
-      await this.executeTask(task);
-    }
-  }
-
-  private async executeTask(task: BackgroundTask): Promise<void> {
-    try {
-      // Revalidate command and args before execution for extra security
-      try {
-        this.validateCommand(task.command, task.args);
-      } catch (validationError) {
-        task.status = 'failed';
-        const errorMessage = validationError instanceof Error ? validationError.message : String(validationError);
-        task.error = `Command validation failed: ${errorMessage}`;
-        task.endTime = new Date();
-        this.logger.error(`Task validation failed ${task.id}:`, validationError);
-        this.emit('task:failed', task);
-        return;
-      }
-      
-      task.status = 'running';
-      task.startTime = new Date();
-
-      this.logger.info(`Executing task ${task.id}: ${task.command} ${task.args.join(' ')}`);
-
-      // Create log files for task
-      const logDir = path.join(this.config.logPath, task.id);
-      if (this.config.enablePersistence) {
-        await fs.mkdir(logDir, { recursive: true });
-      }
-
-      // Use shell: false for security and specify full path when possible
-      // This prevents shell injection attacks
-      const childProcess = spawn(task.command, task.args, {
-        cwd: task.options?.cwd,
-        env: { ...process.env, ...task.options?.env },
-        detached: task.options?.detached,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        shell: false // Explicitly disable shell for security
-      });
-
-      task.pid = childProcess.pid;
-      this.processes.set(task.id, childProcess);
-
-      // Collect output
-      let stdout = '';
-      let stderr = '';
-
-      childProcess.stdout?.on('data', (data: Buffer) => {
-        stdout += data.toString();
-        this.emit('task:output', { taskId: task.id, data: data.toString() });
-      });
-
-      childProcess.stderr?.on('data', (data: Buffer) => {
-        stderr += data.toString();
-        this.emit('task:error', { taskId: task.id, data: data.toString() });
-      });
-
-      // Handle process completion
-      childProcess.on('close', async (code) => {
-        task.endTime = new Date();
-        task.output = stdout;
-        task.error = stderr;
-
-        if (code === 0) {
-          task.status = 'completed';
-          this.logger.info(`Task ${task.id} completed successfully`);
-          this.emit('task:completed', task);
-        } else {
-          task.status = 'failed';
-          this.logger.error(`Task ${task.id} failed with code ${code}`);
-          
-          // Retry logic
-          if (task.retryCount < (task.options?.retries || 0)) {
-            task.retryCount++;
-            task.status = 'pending';
-            this.queue.push(task.id);
-            this.logger.info(`Retrying task ${task.id} (${task.retryCount}/${task.options?.retries})`);
-            this.emit('task:retry', task);
-          } else {
-            this.emit('task:failed', task);
-          }
-        }
-
-        this.processes.delete(task.id);
-
-        if (this.config.enablePersistence) {
-          await this.saveTaskOutput(task);
-        }
-      });
-
-      // Set timeout if specified
-      if (task.options?.timeout) {
-        setTimeout(() => {
-          if (this.processes.has(task.id)) {
-            this.logger.warn(`Task ${task.id} timed out after ${task.options?.timeout}ms`);
-            childProcess.kill('SIGTERM');
-          }
-        }, task.options.timeout);
-      }
-
-      // For detached processes, unref to allow main process to exit
-      if (task.options?.detached) {
-        childProcess.unref();
-      }
-
-      this.emit('task:started', task);
-
-      if (this.config.enablePersistence) {
-        await this.saveTaskState(task);
-      }
-
-    } catch (error) {
-      task.status = 'failed';
-      task.error = String(error);
-      task.endTime = new Date();
-      
-      this.logger.error(`Failed to execute task ${task.id}:`, error);
-      this.emit('task:failed', task);
-
-      if (this.config.enablePersistence) {
-        await this.saveTaskState(task);
-      }
-    }
-  }
-
-  private checkRunningTasks(): void {
-    // Check for hung or timed out tasks
-    const now = Date.now();
-
-    for (const [taskId, task] of this.tasks) {
-      if (task.status !== 'running' || !task.startTime) continue;
-
-      const runtime = now - task.startTime.getTime();
-      const timeout = task.options?.timeout || this.config.defaultTimeout;
-
-      if (runtime > timeout) {
-        const process = this.processes.get(taskId);
-        if (process) {
-          this.logger.warn(`Killing timed out task ${taskId}`);
-          process.kill('SIGTERM');
-          
-          // Force kill after 5 seconds
-          setTimeout(() => {
-            if (this.processes.has(taskId)) {
-              process.kill('SIGKILL');
-            }
-          }, 5000);
-        }
-      }
-    }
-  }
-
-  private cleanupCompletedTasks(): void {
-    const cutoffTime = Date.now() - 3600000; // 1 hour
-
-    for (const [taskId, task] of this.tasks) {
-      if (task.status === 'completed' || task.status === 'failed') {
-        if (task.endTime && task.endTime.getTime() < cutoffTime) {
-          this.tasks.delete(taskId);
-          this.logger.debug(`Cleaned up old task: ${taskId}`);
-        }
-      }
-    }
-  }
-
-  private async saveTaskState(task: BackgroundTask): Promise<void> {
-    if (!this.config.enablePersistence) return;
-
-    try {
-      const taskFile = path.join(this.config.logPath, task.id, 'task.tson');
-      await fs.writeFile(taskFile, JSON.stringify(task, null, 2));
-    } catch (error) {
-      this.logger.error(`Failed to save task state for ${task.id}:`, error);
-    }
-  }
-
-  private async saveTaskOutput(task: BackgroundTask): Promise<void> {
-    if (!this.config.enablePersistence) return;
-
-    try {
-      const logDir = path.join(this.config.logPath, task.id);
-      
-      if (task.output) {
-        await fs.writeFile(path.join(logDir, 'stdout.log'), task.output);
-      }
-      
-      if (task.error) {
-        await fs.writeFile(path.join(logDir, 'stderr.log'), task.error);
-      }
-
-      // Save final task state
-      await this.saveTaskState(task);
-    } catch (error) {
-      this.logger.error(`Failed to save task output for ${task.id}:`, error);
-    }
-  }
-
-  // Public API methods
-  getTask(taskId: string): BackgroundTask | undefined {
+  /**
+   * Get task status and result
+   */
+  getTask(taskId: string): BackgroundTaskDefinition | undefined {
     return this.tasks.get(taskId);
   }
 
-  getTasks(status?: BackgroundTask['status']): BackgroundTask[] {
-    const tasks = Array.from(this.tasks.values());
-    return status ? tasks.filter(t => t.status === status) : tasks;
-  }
-
-  async waitForTask(taskId: string, timeout?: number): Promise<BackgroundTask> {
-    return new Promise((resolve, reject) => {
-      const task = this.tasks.get(taskId);
-      if (!task) {
-        reject(new Error('Task not found'));
-        return;
-      }
-
-      if (task.status === 'completed' || task.status === 'failed') {
-        resolve(task);
-        return;
-      }
-
-      const timeoutHandle = timeout ? setTimeout(() => {
-        reject(new Error('Wait timeout'));
-      }, timeout) : undefined;
-
-      const checkTask = () => {
-        const currentTask = this.tasks.get(taskId);
-        if (!currentTask) {
-          if (timeoutHandle) clearTimeout(timeoutHandle);
-          reject(new Error('Task disappeared'));
-          return;
-        }
-
-        if (currentTask.status === 'completed' || currentTask.status === 'failed') {
-          if (timeoutHandle) clearTimeout(timeoutHandle);
-          resolve(currentTask);
-        } else {
-          setTimeout(checkTask, 100);
-        }
-      };
-
-      checkTask();
-    });
-  }
-
-  async killTask(taskId: string): Promise<void> {
+  /**
+   * Cancel a running task
+   */
+  async cancelTask(taskId: string): Promise<boolean> {
     const task = this.tasks.get(taskId);
     if (!task) {
-      throw new Error('Task not found');
+      return false;
     }
 
-    const process = this.processes.get(taskId);
-    if (process) {
-      this.logger.info(`Killing task ${taskId}`);
-      process.kill('SIGTERM');
+    if (task.status === 'running') {
+      const process = this.processes.get(taskId);
+      if (process && !process.killed) {
+        process.kill('SIGTERM');
+        
+        // Force kill after 5 seconds
+        setTimeout(() => {
+          if (!process.killed) {
+            process.kill('SIGKILL');
+          }
+        }, 5000);
+      }
       
-      // Force kill after 5 seconds
-      setTimeout(() => {
-        if (this.processes.has(taskId)) {
-          process.kill('SIGKILL');
-        }
-      }, 5000);
+      this.runningTasks.delete(taskId);
+      this.metrics.runningTasks--;
     }
 
-    task.status = 'failed';
-    task.error = 'Task killed by user';
+    // Remove from queue if pending
+    const queueIndex = this.taskQueue.indexOf(taskId);
+    if (queueIndex > -1) {
+      this.taskQueue.splice(queueIndex, 1);
+      this.metrics.queuedTasks--;
+    }
+
+    task.status = 'cancelled';
     task.endTime = new Date();
-    
-    this.emit('task:killed', task);
+    task.updatedAt = new Date();
+
+    this.logger.info('Task cancelled', { taskId });
+    this.emit('task:cancelled', task);
+
+    if (this.config.enablePersistence) {
+      await this.persistTask(task);
+    }
+
+    return true;
   }
 
-  getStatus(): {
-    running: number;
-    pending: number;
-    completed: number;
-    failed: number;
-    queueLength: number;
-  } {
-    const tasks = Array.from(this.tasks.values());
-    return {
-      running: tasks.filter(t => t.status === 'running').length,
-      pending: tasks.filter(t => t.status === 'pending').length,
-      completed: tasks.filter(t => t.status === 'completed').length,
-      failed: tasks.filter(t => t.status === 'failed').length,
-      queueLength: this.queue.length
-    };
+  /**
+   * Get current metrics
+   */
+  getMetrics(): BackgroundExecutorMetrics {
+    this.updateMetrics();
+    return { ...this.metrics };
+  }
+
+  /**
+   * List all tasks with optional filtering
+   */
+  listTasks(filter?: {
+    status?: BackgroundTaskDefinition['status'];
+    type?: BackgroundTaskDefinition['type'];
+    limit?: number;
+    offset?: number;
+  }): BackgroundTaskDefinition[] {
+    let tasks = Array.from(this.tasks.values());
+
+    if (filter?.status) {
+      tasks = tasks.filter(task => task.status === filter.status);
+    }
+
+    if (filter?.type) {
+      tasks = tasks.filter(task => task.type === filter.type);
+    }
+
+    // Sort by priority (higher first) then by creation time
+    tasks.sort((a, b) => {
+      if (a.priority !== b.priority) {
+        return b.priority - a.priority;
+      }
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    });
+
+    if (filter?.offset) {
+      tasks = tasks.slice(filter.offset);
+    }
+
+    if (filter?.limit) {
+      tasks = tasks.slice(0, filter.limit);
+    }
+
+    return tasks;
+  }
+
+  private addToQueue(taskId: string): void {
+    const task = this.tasks.get(taskId);
+    if (!task) return;
+
+    // Insert based on priority
+    let insertIndex = this.taskQueue.length;
+    for (let i = 0; i < this.taskQueue.length; i++) {
+      const queuedTask = this.tasks.get(this.taskQueue[i]);
+      if (queuedTask && task.priority > queuedTask.priority) {
+        insertIndex = i;
+        break;
+      }
+    }
+
+    this.taskQueue.splice(insertIndex, 0, taskId);
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.isShuttingDown || this.runningTasks.size >= this.config.maxConcurrentTasks) {
+      return;
+    }
+
+    const taskId = this.taskQueue.shift();
+    if (!taskId) {
+      return;
+    }
+
+    const task = this.tasks.get(taskId);
+    if (!task) {
+      return;
+    }
+
+    this.metrics.queuedTasks--;
+    await this.executeTask(task);
+  }
+
+  private async executeTask(task: BackgroundTaskDefinition): Promise<void> {
+    task.status = 'running';
+    task.startTime = new Date();
+    task.updatedAt = new Date();
+    task.queueTime = task.startTime.getTime() - task.createdAt.getTime();
+
+    this.runningTasks.add(task.id);
+    this.metrics.runningTasks++;
+
+    this.logger.info('Executing background task', { taskId: task.id, type: task.type, command: task.command });
+    this.emit('task:started', task);
+
+         try {
+       const childProcess = spawn(task.command, task.args, {
+         cwd: task.options?.cwd,
+         env: { ...process.env, ...task.options?.env },
+         detached: task.options?.detached || false,
+         stdio: ['ignore', 'pipe', 'pipe']
+       });
+
+       this.processes.set(task.id, childProcess);
+       task.pid = childProcess.pid;
+
+       let output = '';
+       let error = '';
+
+       childProcess.stdout?.on('data', (data: Buffer) => {
+         output += data.toString();
+       });
+
+       childProcess.stderr?.on('data', (data: Buffer) => {
+         error += data.toString();
+       });
+
+       // Set up timeout
+       const timeout = task.options?.timeout || this.config.taskTimeout;
+       const timeoutHandle = setTimeout(() => {
+         if (!childProcess.killed) {
+           childProcess.kill('SIGTERM');
+           setTimeout(() => {
+             if (!childProcess.killed) {
+               childProcess.kill('SIGKILL');
+             }
+           }, 5000);
+         }
+       }, timeout);
+
+       childProcess.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
+        clearTimeout(timeoutHandle);
+        this.processes.delete(task.id);
+        this.runningTasks.delete(task.id);
+        this.metrics.runningTasks--;
+
+        task.endTime = new Date();
+        task.updatedAt = new Date();
+        task.executionTime = task.endTime.getTime() - (task.startTime?.getTime() || 0);
+        task.output = output;
+        task.error = error;
+
+        if (signal === 'SIGTERM' || signal === 'SIGKILL') {
+          task.status = 'timeout';
+          this.logger.warn('Task timed out', { taskId: task.id, signal });
+        } else if (code === 0) {
+          task.status = 'completed';
+          this.completedTasks.add(task.id);
+          this.metrics.completedTasks++;
+          this.logger.info('Task completed successfully', { taskId: task.id });
+        } else {
+          task.status = 'failed';
+          this.failedTasks.add(task.id);
+          this.metrics.failedTasks++;
+          this.logger.error('Task failed', { taskId: task.id, code, error });
+        }
+
+        this.emit('task:completed', task);
+
+        // Handle retries for failed tasks
+        if (task.status === 'failed' && task.retryCount < (task.options?.retries || this.config.retryAttempts)) {
+          this.scheduleRetry(task);
+        }
+
+        if (this.config.enablePersistence) {
+          this.persistTask(task);
+        }
+      });
+
+             childProcess.on('error', (err: Error) => {
+        clearTimeout(timeoutHandle);
+        this.processes.delete(task.id);
+        this.runningTasks.delete(task.id);
+        this.metrics.runningTasks--;
+
+        task.status = 'failed';
+        task.error = err.message;
+        task.endTime = new Date();
+        task.updatedAt = new Date();
+        task.executionTime = task.endTime.getTime() - (task.startTime?.getTime() || 0);
+
+        this.failedTasks.add(task.id);
+        this.metrics.failedTasks++;
+
+        this.logger.error('Task process error', { taskId: task.id, error: err.message });
+        this.emit('task:error', task, err);
+
+        // Handle retries for failed tasks
+        if (task.retryCount < (task.options?.retries || this.config.retryAttempts)) {
+          this.scheduleRetry(task);
+        }
+
+        if (this.config.enablePersistence) {
+          this.persistTask(task);
+        }
+      });
+
+    } catch (error) {
+      this.runningTasks.delete(task.id);
+      this.metrics.runningTasks--;
+
+      task.status = 'failed';
+      task.error = error instanceof Error ? error.message : String(error);
+      task.endTime = new Date();
+      task.updatedAt = new Date();
+      task.executionTime = task.endTime.getTime() - (task.startTime?.getTime() || 0);
+
+      this.failedTasks.add(task.id);
+      this.metrics.failedTasks++;
+
+      this.logger.error('Failed to execute task', { taskId: task.id, error });
+      this.emit('task:error', task, error);
+
+      // Handle retries for failed tasks
+      if (task.retryCount < (task.options?.retries || this.config.retryAttempts)) {
+        this.scheduleRetry(task);
+      }
+
+      if (this.config.enablePersistence) {
+        await this.persistTask(task);
+      }
+    }
+  }
+
+  private scheduleRetry(task: BackgroundTaskDefinition): void {
+    task.retryCount++;
+    task.status = 'pending';
+    task.updatedAt = new Date();
+
+    const backoffDelay = Math.pow(this.config.retryBackoffBase, task.retryCount) * 1000;
+    
+    this.logger.info('Scheduling task retry', { 
+      taskId: task.id, 
+      retryCount: task.retryCount, 
+      backoffDelay 
+    });
+
+    setTimeout(() => {
+      if (!this.isShuttingDown) {
+        this.addToQueue(task.id);
+        this.metrics.queuedTasks++;
+      }
+    }, backoffDelay);
+  }
+
+  private async performHealthCheck(): Promise<void> {
+    // Check for stuck processes
+    const now = Date.now();
+    for (const [taskId, task] of this.tasks) {
+      if (task.status === 'running' && task.startTime) {
+        const runtime = now - task.startTime.getTime();
+        const timeout = task.options?.timeout || this.config.taskTimeout;
+        
+        if (runtime > timeout * 1.5) { // 50% buffer
+          this.logger.warn('Detected stuck task', { taskId, runtime, timeout });
+          await this.cancelTask(taskId);
+        }
+      }
+    }
+
+    // Update metrics
+    this.updateMetrics();
+  }
+
+  private performCleanup(): void {
+    // Clean up completed tasks older than 1 hour
+    const cutoffTime = Date.now() - (60 * 60 * 1000);
+    
+    for (const [taskId, task] of this.tasks) {
+      if ((task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') &&
+          task.endTime && task.endTime.getTime() < cutoffTime) {
+        this.tasks.delete(taskId);
+        this.completedTasks.delete(taskId);
+        this.failedTasks.delete(taskId);
+        this.processes.delete(taskId);
+      }
+    }
+  }
+
+  private updateMetrics(): void {
+    this.metrics.runningTasks = this.runningTasks.size;
+    this.metrics.queuedTasks = this.taskQueue.length;
+    
+    // Calculate success rate
+    const totalCompleted = this.metrics.completedTasks + this.metrics.failedTasks;
+    this.metrics.successRate = totalCompleted > 0 ? (this.metrics.completedTasks / totalCompleted) * 100 : 0;
+    
+    // Calculate average execution time
+    const completedTasks = Array.from(this.tasks.values()).filter(t => t.status === 'completed' && t.executionTime);
+    this.metrics.averageExecutionTime = completedTasks.length > 0 
+      ? completedTasks.reduce((sum, task) => sum + (task.executionTime || 0), 0) / completedTasks.length 
+      : 0;
+    
+    // Update resource usage
+    this.metrics.resourceUsage.activeProcesses = this.processes.size;
+  }
+
+  private async persistTask(task: BackgroundTaskDefinition): Promise<void> {
+    if (!this.config.enablePersistence) return;
+
+    try {
+      const taskFile = join(this.config.persistenceDir, `${task.id}.json`);
+      await writeFile(taskFile, JSON.stringify(task, null, 2));
+    } catch (error) {
+      this.logger.error('Failed to persist task', { taskId: task.id, error });
+    }
+  }
+
+  private async persistTasks(): Promise<void> {
+    if (!this.config.enablePersistence) return;
+
+    try {
+      const stateFile = join(this.config.persistenceDir, 'executor-state.json');
+      const state = {
+        tasks: Array.from(this.tasks.values()),
+        taskQueue: this.taskQueue,
+        metrics: this.metrics,
+        timestamp: new Date().toISOString()
+      };
+      await writeFile(stateFile, JSON.stringify(state, null, 2));
+    } catch (error) {
+      this.logger.error('Failed to persist executor state', { error });
+    }
+  }
+
+  private async loadPersistedTasks(): Promise<void> {
+    try {
+      const stateFile = join(this.config.persistenceDir, 'executor-state.json');
+      await access(stateFile);
+      
+      const stateData = await readFile(stateFile, 'utf8');
+      const state = JSON.parse(stateData);
+      
+      // Restore tasks
+      for (const task of state.tasks) {
+        // Reset running tasks to pending on restart
+        if (task.status === 'running') {
+          task.status = 'pending';
+          task.startTime = undefined;
+          task.pid = undefined;
+        }
+        
+        // Convert date strings back to Date objects
+        task.createdAt = new Date(task.createdAt);
+        task.updatedAt = new Date(task.updatedAt);
+        if (task.startTime) task.startTime = new Date(task.startTime);
+        if (task.endTime) task.endTime = new Date(task.endTime);
+        
+        this.tasks.set(task.id, task);
+        
+        if (task.status === 'pending') {
+          this.addToQueue(task.id);
+        } else if (task.status === 'completed') {
+          this.completedTasks.add(task.id);
+        } else if (task.status === 'failed') {
+          this.failedTasks.add(task.id);
+        }
+      }
+      
+      this.logger.info('Restored persisted tasks', { taskCount: state.tasks.length });
+    } catch (error) {
+      this.logger.info('No persisted state found or failed to load', { error });
+    }
   }
 }

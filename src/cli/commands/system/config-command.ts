@@ -1,6 +1,6 @@
 /**
  * Config Command
- * Comprehensive configuration management for Claude-Flow
+ * Comprehensive configuration management for flowx
  */
 
 import type { CLICommand, CLIContext } from '../../interfaces/index.ts';
@@ -101,15 +101,15 @@ const DEFAULT_CONFIG: ConfigSchema = {
 
 export const configCommand: CLICommand = {
   name: 'config',
-  description: 'Manage Claude-Flow configuration',
+  description: 'Manage flowx configuration',
   category: 'System',
-  usage: 'claude-flow config <subcommand> [options]',
+  usage: 'flowx config <subcommand> [options]',
   examples: [
-    'claude-flow config list',
-    'claude-flow config get system.logLevel',
-    'claude-flow config set mcp.port 3001',
-    'claude-flow config validate',
-    'claude-flow config profile create production'
+    'flowx config list',
+    'flowx config get system.logLevel',
+    'flowx config set mcp.port 3001',
+    'flowx config validate',
+    'flowx config profile create production'
   ],
   options: [
     {
@@ -209,7 +209,7 @@ export const configCommand: CLICommand = {
       return;
     }
     
-    printError('Invalid subcommand. Use "claude-flow config --help" for usage information.');
+    printError('Invalid subcommand. Use "flowx config --help" for usage information.');
   }
 };
 
@@ -221,7 +221,7 @@ async function listConfig(context: CLIContext): Promise<void> {
   try {
     const config = await loadConfig(options);
     
-    printInfo('📋 Claude-Flow Configuration');
+    printInfo('📋 flowx Configuration');
     console.log('─'.repeat(60));
     
     if (options.format === 'json') {
@@ -245,7 +245,7 @@ async function getConfig(context: CLIContext): Promise<void> {
   const { args, options } = context;
   
   if (args.length === 0) {
-    printError('Configuration key is required. Example: claude-flow config get system.logLevel');
+    printError('Configuration key is required. Example: flowx config get system.logLevel');
     return;
   }
   
@@ -275,7 +275,7 @@ async function setConfig(context: CLIContext): Promise<void> {
   const { args, options } = context;
   
   if (args.length < 2) {
-    printError('Key and value are required. Example: claude-flow config set mcp.port 3001');
+    printError('Key and value are required. Example: flowx config set mcp.port 3001');
     return;
   }
   
@@ -324,7 +324,7 @@ async function unsetConfig(context: CLIContext): Promise<void> {
   const { args, options } = context;
   
   if (args.length === 0) {
-    printError('Configuration key is required. Example: claude-flow config unset custom.setting');
+    printError('Configuration key is required. Example: flowx config unset custom.setting');
     return;
   }
   
@@ -418,7 +418,7 @@ async function resetConfig(context: CLIContext): Promise<void> {
 async function exportConfig(context: CLIContext): Promise<void> {
   const { args, options } = context;
   
-  const outputFile = args[0] || `claude-flow-config-${Date.now()}.tson`;
+  const outputFile = args[0] || `flowx-config-${Date.now()}.tson`;
   
   try {
     const config = await loadConfig(options);
@@ -441,7 +441,7 @@ async function importConfig(context: CLIContext): Promise<void> {
   const { args, options } = context;
   
   if (args.length === 0) {
-    printError('Configuration file is required. Example: claude-flow config import config.tson');
+    printError('Configuration file is required. Example: flowx config import config.tson');
     return;
   }
   
@@ -494,7 +494,7 @@ async function manageProfiles(context: CLIContext): Promise<void> {
   switch (action) {
     case 'create':
       if (!profileName) {
-        printError('Profile name is required. Example: claude-flow config profile create production');
+        printError('Profile name is required. Example: flowx config profile create production');
         return;
       }
       await createProfile(profileName, options);
@@ -502,7 +502,7 @@ async function manageProfiles(context: CLIContext): Promise<void> {
       
     case 'delete':
       if (!profileName) {
-        printError('Profile name is required. Example: claude-flow config profile delete production');
+        printError('Profile name is required. Example: flowx config profile delete production');
         return;
       }
       await deleteProfile(profileName, options);
@@ -511,7 +511,7 @@ async function manageProfiles(context: CLIContext): Promise<void> {
     case 'copy':
       const targetProfile = args[2];
       if (!profileName || !targetProfile) {
-        printError('Source and target profile names are required. Example: claude-flow config profile copy default production');
+        printError('Source and target profile names are required. Example: flowx config profile copy default production');
         return;
       }
       await copyProfile(profileName, targetProfile, options);
@@ -519,7 +519,7 @@ async function manageProfiles(context: CLIContext): Promise<void> {
       
     case 'switch':
       if (!profileName) {
-        printError('Profile name is required. Example: claude-flow config profile switch production');
+        printError('Profile name is required. Example: flowx config profile switch production');
         return;
       }
       await switchProfile(profileName, options);
@@ -537,7 +537,7 @@ async function backupConfig(context: CLIContext): Promise<void> {
   try {
     const config = await loadConfig(options);
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupFile = `claude-flow-config-backup-${timestamp}.tson`;
+    const backupFile = `flowx-config-backup-${timestamp}.tson`;
     
     await fs.writeFile(backupFile, JSON.stringify(config, null, 2));
     
@@ -552,7 +552,7 @@ async function restoreConfig(context: CLIContext): Promise<void> {
   const { args, options } = context;
   
   if (args.length === 0) {
-    printError('Backup file is required. Example: claude-flow config restore backup.tson');
+    printError('Backup file is required. Example: flowx config restore backup.tson');
     return;
   }
   
@@ -582,7 +582,7 @@ async function restoreConfig(context: CLIContext): Promise<void> {
 async function initConfig(context: CLIContext): Promise<void> {
   const { options } = context;
   
-  printInfo('🚀 Claude-Flow Configuration Wizard');
+  printInfo('🚀 flowx Configuration Wizard');
   console.log('─'.repeat(50));
   
   try {
@@ -618,7 +618,7 @@ async function initConfig(context: CLIContext): Promise<void> {
     await saveConfig(config, options);
     
     printSuccess('\n✓ Configuration initialized successfully!');
-    printInfo('Use "claude-flow config list" to view your configuration');
+    printInfo('Use "flowx config list" to view your configuration');
     
   } catch (error) {
     printError(`Failed to initialize configuration: ${error instanceof Error ? error.message : String(error)}`);
@@ -656,11 +656,11 @@ async function saveConfig(config: ConfigSchema, options: any): Promise<void> {
 
 function getConfigPath(options: any): string {
   if (options.global) {
-    return path.join(homedir(), '.claude-flow', 'config.tson');
+    return path.join(homedir(), '.flowx', 'config.tson');
   }
   
   const profile = options.profile || 'default';
-  return path.join(process.cwd(), '.claude-flow', `config-${profile}.tson`);
+  return path.join(process.cwd(), '.flowx', `config-${profile}.tson`);
 }
 
 function getNestedValue(obj: any, key: string): any {
@@ -878,7 +878,7 @@ async function yamlToConfig(yamlContent: string): Promise<any> {
 
 async function listProfiles(options: any): Promise<void> {
   try {
-    const configDir = path.join(process.cwd(), '.claude-flow');
+    const configDir = path.join(process.cwd(), '.flowx');
     const files = await fs.readdir(configDir).catch(() => []);
     
     const profiles = files
@@ -922,7 +922,7 @@ async function deleteProfile(profileName: string, options: any): Promise<void> {
   }
   
   try {
-    const configPath = path.join(process.cwd(), '.claude-flow', `config-${profileName}.tson`);
+    const configPath = path.join(process.cwd(), '.flowx', `config-${profileName}.tson`);
     await fs.unlink(configPath);
     
     printSuccess(`✓ Profile '${profileName}' deleted`);
@@ -952,7 +952,7 @@ async function switchProfile(profileName: string, options: any): Promise<void> {
     const profileConfig = await loadConfig({ ...options, profile: profileName });
     
     // Update current profile reference (this would be stored in a separate file)
-    const profileRefPath = path.join(process.cwd(), '.claude-flow', 'current-profile');
+    const profileRefPath = path.join(process.cwd(), '.flowx', 'current-profile');
     await fs.writeFile(profileRefPath, profileName);
     
     printSuccess(`✓ Switched to profile '${profileName}'`);

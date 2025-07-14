@@ -18,13 +18,13 @@ export const sparcCommand: CLICommand = {
   name: 'sparc',
   description: 'Execute SPARC methodology workflows with real implementation',
   category: 'System',
-  usage: 'claude-flow sparc <mode> [TASK] [OPTIONS]',
+  usage: 'flowx sparc <mode> [TASK] [OPTIONS]',
   examples: [
-    'claude-flow sparc architect "Design user service"',
-    'claude-flow sparc code "Implement auth module"', 
-    'claude-flow sparc tdd "Create test suite"',
-    'claude-flow sparc review "Security review"',
-    'claude-flow sparc batch --modes "architect,code,tdd"'
+    'flowx sparc architect "Design user service"',
+    'flowx sparc code "Implement auth module"', 
+    'flowx sparc tdd "Create test suite"',
+    'flowx sparc review "Security review"',
+    'flowx sparc batch --modes "architect,code,tdd"'
   ],
   arguments: [
     {
@@ -394,7 +394,7 @@ async function executeSparcMode(mode: string, context: CLIContext): Promise<void
 
   if (!task) {
     printError(`Task description required for SPARC ${mode} mode`);
-    printInfo(`Usage: claude-flow sparc ${mode} "task description"`);
+    printInfo(`Usage: flowx sparc ${mode} "task description"`);
     return;
   }
 
@@ -643,7 +643,7 @@ async function executeBatchMode(context: CLIContext): Promise<void> {
   
   if (!task && !args[0]) {
     printError('Task description required for batch mode');
-    printInfo('Usage: claude-flow sparc batch "task description" --modes "architect,code,tdd"');
+    printInfo('Usage: flowx sparc batch "task description" --modes "architect,code,tdd"');
     return;
   }
   
@@ -787,10 +787,10 @@ async function listSparcModes(context: CLIContext): Promise<void> {
   }
 
   console.log(infoBold('Examples:'));
-  console.log('  claude-flow sparc architect "Design user authentication system"');
-  console.log('  claude-flow sparc code "Implement REST API endpoints"');
-  console.log('  claude-flow sparc tdd "Create comprehensive test suite"');
-  console.log('  claude-flow sparc batch --modes "architect,code,tdd" --parallel');
+  console.log('  flowx sparc architect "Design user authentication system"');
+  console.log('  flowx sparc code "Implement REST API endpoints"');
+  console.log('  flowx sparc tdd "Create comprehensive test suite"');
+  console.log('  flowx sparc batch --modes "architect,code,tdd" --parallel');
   console.log();
 }
 

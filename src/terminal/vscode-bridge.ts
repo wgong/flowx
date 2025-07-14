@@ -169,7 +169,7 @@ function setupTerminalRenderer(terminal: VSCodeTerminal, terminalId: string): vo
     // It would involve creating a custom terminal profile that captures output
     
     // For now, we'll use a simpler approach with periodic output checking
-    let lastOutput = '';
+    const lastOutput = '';
     const checkOutput = setInterval(() => {
       // This is a placeholder - actual implementation would depend on
       // available VSCode APIs for reading terminal content

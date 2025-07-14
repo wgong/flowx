@@ -6,7 +6,7 @@
 import { EventEmitter } from 'node:events';
 import { CommandParser } from './command-parser.ts';
 import { printError, printInfo } from './output-formatter.ts';
-import { getCommand } from './command-registry.ts';
+import { getCommand, getCommandByNameOrAlias } from './command-registry.ts';
 
 export const VERSION = "1.0.0";
 
@@ -284,7 +284,7 @@ export class CLIApplication extends EventEmitter {
     try {
       // Parse command line arguments
       const parsed = this.commandParser.parse(args);
-      const { command: commandName, subcommand, args: commandArgs, options: rawOptions } = parsed;
+      const { command: commandName, args: commandArgs, options: rawOptions } = parsed;
 
       // Handle no command (show help)
       if (!commandName) {
@@ -303,24 +303,26 @@ export class CLIApplication extends EventEmitter {
         return;
       }
 
-      // Get command from registry
-      const command = getCommand(commandName);
+      // Get command from registry (including aliases)
+      const command = getCommandByNameOrAlias(commandName);
       if (!command) {
         this.outputFormatter.printError(`Unknown command: ${commandName}`);
         this.outputFormatter.printInfo('Run "claude-flow help" to see available commands.');
         return;
       }
 
-      // Handle subcommands
+      // Handle subcommands - check if first argument is a valid subcommand
       let targetCommand = command;
-      if (subcommand && command.subcommands) {
-        const subCmd = command.subcommands.find(sc => sc.name === subcommand);
+      let subcommand: string | undefined;
+      let finalArgs = commandArgs;
+      
+      if (commandArgs.length > 0 && command.subcommands) {
+        const potentialSubcommand = commandArgs[0];
+        const subCmd = command.subcommands.find(sc => sc.name === potentialSubcommand);
         if (subCmd) {
           targetCommand = subCmd;
-        } else {
-          this.outputFormatter.printError(`Unknown subcommand: ${subcommand}`);
-          this.outputFormatter.printInfo(`Run "claude-flow help ${commandName}" to see available subcommands.`);
-          return;
+          subcommand = potentialSubcommand;
+          finalArgs = commandArgs.slice(1); // Remove subcommand from args
         }
       }
 
@@ -329,7 +331,7 @@ export class CLIApplication extends EventEmitter {
 
       // Create execution context
       const context: CLIContext = {
-        args: commandArgs,
+        args: finalArgs,
         options,
         config: this.config,
         command: commandName,
@@ -348,8 +350,8 @@ export class CLIApplication extends EventEmitter {
       if (this.logger) context.logger = this.logger;
       if (this.validator) context.validator = this.validator;
 
-      // Execute the target command
-      await targetCommand.handler(context);
+      // Execute the target command through middleware
+      await this.executeMiddleware(targetCommand, context);
 
     } catch (error) {
       this.handleError(error);
@@ -721,7 +723,8 @@ export class CLIApplication extends EventEmitter {
         type: 'string',
         default: 'info',
         choices: ['debug', 'info', 'warn', 'error']
-      }
+      },
+
     ];
   }
 
@@ -792,6 +795,8 @@ export class CLIApplication extends EventEmitter {
         }
       }
     });
+
+
   }
 
   /**

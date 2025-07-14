@@ -38,14 +38,14 @@ export const terminalCommand: CLICommand = {
   name: 'terminal',
   description: 'Manage terminal sessions and execution environments',
   category: 'System',
-  usage: 'claude-flow terminal <subcommand> [OPTIONS]',
+  usage: 'flowx terminal <subcommand> [OPTIONS]',
   examples: [
-    'claude-flow terminal list',
-    'claude-flow terminal spawn --agent researcher',
-    'claude-flow terminal exec <terminal-id> "ls -la"',
-    'claude-flow terminal kill <terminal-id>',
-    'claude-flow terminal health',
-    'claude-flow terminal maintenance'
+    'flowx terminal list',
+    'flowx terminal spawn --agent researcher',
+    'flowx terminal exec <terminal-id> "ls -la"',
+    'flowx terminal kill <terminal-id>',
+    'flowx terminal health',
+    'flowx terminal maintenance'
   ],
   options: [
     {
@@ -135,7 +135,7 @@ export const terminalCommand: CLICommand = {
       return;
     }
     
-    printError('Invalid subcommand. Use "claude-flow terminal --help" for usage information.');
+    printError('Invalid subcommand. Use "flowx terminal --help" for usage information.');
   }
 };
 
@@ -197,7 +197,7 @@ async function spawnTerminal(context: CLIContext): Promise<void> {
       shell: options.shell || (process.platform === 'win32' ? 'powershell' : 'bash'),
       metadata: {
         shell: options.shell,
-        initCommands: options.shell === 'bash' ? ['export PS1="[claude-flow]$ "'] : undefined
+        initCommands: options.shell === 'bash' ? ['export PS1="[flowx]$ "'] : undefined
       }
     };
 
@@ -223,7 +223,7 @@ async function executeCommand(context: CLIContext): Promise<void> {
   const { args, options } = context;
 
   if (args.length < 2) {
-    printError('Usage: claude-flow terminal exec <terminal-id> <command>');
+    printError('Usage: flowx terminal exec <terminal-id> <command>');
     return;
   }
 
@@ -254,7 +254,7 @@ async function killTerminal(context: CLIContext): Promise<void> {
   const { args } = context;
 
   if (args.length === 0) {
-    printError('Usage: claude-flow terminal kill <terminal-id>');
+    printError('Usage: flowx terminal kill <terminal-id>');
     return;
   }
 
@@ -319,7 +319,7 @@ async function streamOutput(context: CLIContext): Promise<void> {
   const { args } = context;
 
   if (args.length === 0) {
-    printError('Usage: claude-flow terminal stream <terminal-id>');
+    printError('Usage: flowx terminal stream <terminal-id>');
     return;
   }
 
@@ -342,7 +342,7 @@ async function showHistory(context: CLIContext): Promise<void> {
   const { args } = context;
 
   if (args.length === 0) {
-    printError('Usage: claude-flow terminal history <terminal-id>');
+    printError('Usage: flowx terminal history <terminal-id>');
     return;
   }
 

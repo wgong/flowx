@@ -11,12 +11,12 @@ export const memoryCommand: CLICommand = {
   name: 'memory',
   description: 'Manage memory bank operations with real persistence',
   category: 'Memory',
-  usage: 'claude-flow memory <subcommand> [OPTIONS]',
+  usage: 'flowx memory <subcommand> [OPTIONS]',
   examples: [
-    'claude-flow memory store --key "project" --value "Important project requirements"',
-    'claude-flow memory query --search "project"',
-    'claude-flow memory list --type user',
-    'claude-flow memory stats'
+    'flowx memory store --key "project" --value "Important project requirements"',
+    'flowx memory query --search "project"',
+    'flowx memory list --type user',
+    'flowx memory stats'
   ],
   subcommands: [
     {
@@ -311,7 +311,7 @@ async function showMemoryStats(context: CLIContext): Promise<void> {
       console.log('\nService Details:');
       console.log('  Backend: Not initialized');
       console.log('  Error: Memory manager not available');
-      console.log('  Suggestion: Run "claude-flow start" to initialize backend services');
+      console.log('  Suggestion: Run "flowx start" to initialize backend services');
     }
   }
 }

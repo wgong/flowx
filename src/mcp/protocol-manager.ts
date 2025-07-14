@@ -2,9 +2,8 @@
  * MCP Protocol Version Management and Compatibility Checking
  */
 
-import { MCPProtocolVersion, MCPCapabilities, MCPInitializeParams } from "../utils/types.ts";
-import { ILogger } from "../core/logger.ts";
-import { MCPError } from "../utils/errors.ts";
+import { MCPProtocolVersion, MCPCapabilities, MCPInitializeParams } from "../utils/types.js";
+import { ILogger } from "../core/logger.js";
 
 export interface ProtocolVersionInfo {
   version: MCPProtocolVersion;
@@ -59,6 +58,9 @@ export class MCPProtocolManager {
         'tool_list_changed',
         'resource_list_changed',
         'prompt_list_changed',
+        'enhanced_error_handling',
+        'batch_operations',
+        'streaming_responses',
       ],
     },
     {
@@ -73,6 +75,7 @@ export class MCPProtocolManager {
         'notifications',
         'tool_list_changed',
         'resource_list_changed',
+        'enhanced_error_handling',
       ],
     },
     {
@@ -102,8 +105,26 @@ export class MCPProtocolManager {
       breakingChanges: [
         'Changed tool response format',
         'Modified error codes',
+        'Updated capability negotiation',
       ],
       migrationGuide: 'https://docs.mcp.io/migration/2024.10-to-2024.11',
+    },
+    {
+      version: { major: 2024, minor: 9, patch: 0 },
+      name: 'MCP 2024.9.0',
+      releaseDate: new Date('2024-08-01'),
+      deprecated: true,
+      deprecationDate: new Date('2024-10-01'),
+      supportedFeatures: [
+        'tools',
+        'prompts',
+        'resources',
+      ],
+      breakingChanges: [
+        'Removed legacy tool format',
+        'Changed initialization sequence',
+      ],
+      migrationGuide: 'https://docs.mcp.io/migration/2024.9-to-2024.10',
     },
   ];
 
@@ -113,10 +134,10 @@ export class MCPProtocolManager {
     serverCapabilities?: MCPCapabilities,
   ) {
     // Initialize supported versions
-    for (const versionInfo of this.knownVersions) {
-      const key = this.versionToString(versionInfo.version);
-      this.supportedVersions.set(key, versionInfo);
-    }
+    this.knownVersions.forEach(versionInfo => {
+      const versionKey = this.versionToString(versionInfo.version);
+      this.supportedVersions.set(versionKey, versionInfo);
+    });
 
     // Set current version (latest supported or preferred)
     this.currentVersion = preferredVersion || this.getLatestSupportedVersion();
@@ -131,176 +152,162 @@ export class MCPProtocolManager {
   }
 
   /**
-   * Negotiate protocol version and capabilities with client
+   * Negotiate protocol version and capabilities with a client
    */
   async negotiateProtocol(clientParams: MCPInitializeParams): Promise<NegotiationResult> {
-    this.logger.debug('Starting protocol negotiation', {
-      clientVersion: this.versionToString(clientParams.protocolVersion),
+    this.logger.info('Starting protocol negotiation', {
+      clientVersion: clientParams.protocolVersion,
       clientCapabilities: clientParams.capabilities,
-      clientInfo: clientParams.clientInfo,
     });
 
+    const clientVersion = clientParams.protocolVersion;
+    const clientCapabilities = clientParams.capabilities;
+
+    // Check compatibility
+    const compatibility = this.checkCompatibility(clientVersion);
+    
+    if (!compatibility.compatible) {
+      throw new Error(`Incompatible protocol version: ${this.versionToString(clientVersion)}. ${compatibility.errors.join(', ')}`);
+    }
+
+    // Find the best mutually supported version
+    let agreedVersion: MCPProtocolVersion;
+    
+    if (this.isVersionSupported(clientVersion)) {
+      agreedVersion = clientVersion;
+    } else {
+      // Find the highest version that both support
+      agreedVersion = this.findBestMutualVersion(clientVersion);
+    }
+
+    // Negotiate capabilities
+    const agreedCapabilities = this.negotiateCapabilities(
+      clientCapabilities,
+      this.serverCapabilities,
+      agreedVersion
+    );
+
     const result: NegotiationResult = {
-      agreedVersion: this.currentVersion,
-      agreedCapabilities: { ...this.serverCapabilities },
-      clientCapabilities: clientParams.capabilities,
+      agreedVersion,
+      agreedCapabilities,
+      clientCapabilities,
       serverCapabilities: this.serverCapabilities,
-      warnings: [],
-      limitations: [],
+      warnings: compatibility.warnings,
+      limitations: this.identifyLimitations(agreedVersion, agreedCapabilities),
     };
 
-    try {
-      // Check version compatibility
-      const compatibility = this.checkCompatibility(clientParams.protocolVersion);
-      
-      if (!compatibility.compatible) {
-        throw new MCPError(
-          `Protocol version ${this.versionToString(clientParams.protocolVersion)} is not compatible. ${compatibility.errors.join(', ')}`
-        );
-      }
-
-      // Use client's version if it's supported and newer
-      if (this.isVersionSupported(clientParams.protocolVersion)) {
-        const clientVersionInfo = this.getVersionInfo(clientParams.protocolVersion);
-        const currentVersionInfo = this.getVersionInfo(this.currentVersion);
-        
-        if (clientVersionInfo && currentVersionInfo) {
-          if (this.compareVersions(clientParams.protocolVersion, this.currentVersion) <= 0) {
-            result.agreedVersion = clientParams.protocolVersion;
-          }
-        }
-      }
-
-      // Negotiate capabilities
-      result.agreedCapabilities = this.negotiateCapabilities(
-        clientParams.capabilities,
-        this.serverCapabilities,
-        result.agreedVersion
-      );
-
-      // Add warnings from compatibility check
-      result.warnings.push(...compatibility.warnings);
-
-      // Check for deprecated features
-      const versionInfo = this.getVersionInfo(result.agreedVersion);
-      if (versionInfo?.deprecated) {
-        result.warnings.push(
-          `Protocol version ${this.versionToString(result.agreedVersion)} is deprecated. ` +
-          `Please upgrade to a newer version.`
-        );
-      }
-
-      // Check for missing features
-      const missingFeatures = this.getMissingFeatures(
-        result.agreedVersion,
-        result.agreedCapabilities
+    // Add deprecation warnings
+    const versionInfo = this.getVersionInfo(agreedVersion);
+    if (versionInfo?.deprecated) {
+      result.warnings.push(
+        `Protocol version ${this.versionToString(agreedVersion)} is deprecated. ` +
+        `Please upgrade to ${this.versionToString(this.getLatestSupportedVersion())}.`
       );
       
-      if (missingFeatures.length > 0) {
-        result.limitations.push(
-          `Some features may not be available: ${missingFeatures.join(', ')}`
-        );
+      if (versionInfo.migrationGuide) {
+        result.warnings.push(`Migration guide: ${versionInfo.migrationGuide}`);
       }
-
-      this.logger.info('Protocol negotiation completed', {
-        agreedVersion: this.versionToString(result.agreedVersion),
-        warnings: result.warnings.length,
-        limitations: result.limitations.length,
-      });
-
-      return result;
-    } catch (error) {
-      this.logger.error('Protocol negotiation failed', {
-        clientVersion: this.versionToString(clientParams.protocolVersion),
-        error,
-      });
-      throw error;
     }
+
+    this.logger.info('Protocol negotiation completed', {
+      agreedVersion: this.versionToString(agreedVersion),
+      agreedCapabilities,
+      warnings: result.warnings,
+      limitations: result.limitations,
+    });
+
+    return result;
   }
 
   /**
-   * Check compatibility between client and server versions
+   * Check if a client version is compatible with the server
    */
   checkCompatibility(clientVersion: MCPProtocolVersion): CompatibilityResult {
     const result: CompatibilityResult = {
       compatible: false,
       warnings: [],
       errors: [],
+      missingFeatures: [],
+      deprecatedFeatures: [],
     };
 
-    const clientVersionInfo = this.getVersionInfo(clientVersion);
-    const serverVersionInfo = this.getVersionInfo(this.currentVersion);
-
-    // Check if version is known
-    if (!clientVersionInfo) {
-      result.errors.push(`Unknown protocol version: ${this.versionToString(clientVersion)}`);
-      result.recommendedVersion = this.getLatestSupportedVersion();
-      return result;
-    }
-
-    // Check major version compatibility
-    if (clientVersion.major !== this.currentVersion.major) {
-      result.errors.push(
-        `Major version mismatch: client ${clientVersion.major}, server ${this.currentVersion.major}`
-      );
-      return result;
-    }
-
-    // Check if client version is too new
-    if (this.compareVersions(clientVersion, this.currentVersion) > 0) {
-      result.errors.push(
-        `Client version ${this.versionToString(clientVersion)} is newer than supported server version ${this.versionToString(this.currentVersion)}`
-      );
-      result.recommendedVersion = this.currentVersion;
-      return result;
-    }
-
-    // Check for deprecated versions
-    if (clientVersionInfo.deprecated) {
-      result.warnings.push(
-        `Client is using deprecated version ${this.versionToString(clientVersion)}. ` +
-        `Support will be removed after ${clientVersionInfo.deprecationDate?.toISOString().split('T')[0]}`
-      );
-      result.recommendedVersion = this.getLatestSupportedVersion();
+    // Check if version is supported
+    if (!this.isVersionSupported(clientVersion)) {
+      const latestSupported = this.getLatestSupportedVersion();
+      const comparison = this.compareVersions(clientVersion, latestSupported);
+      
+      if (comparison > 0) {
+        // Client version is newer than what we support
+        result.errors.push(
+          `Client version ${this.versionToString(clientVersion)} is newer than supported. ` +
+          `Maximum supported version: ${this.versionToString(latestSupported)}`
+        );
+        result.recommendedVersion = latestSupported;
+      } else {
+        // Client version is older - check if we can find a compatible version
+        const compatibleVersion = this.findBestMutualVersion(clientVersion);
+        if (compatibleVersion) {
+          result.compatible = true;
+          result.recommendedVersion = compatibleVersion;
+          result.warnings.push(
+            `Client version ${this.versionToString(clientVersion)} is older. ` +
+            `Recommended version: ${this.versionToString(compatibleVersion)}`
+          );
+        } else {
+          result.errors.push(
+            `Client version ${this.versionToString(clientVersion)} is not supported. ` +
+            `Minimum supported version: ${this.versionToString(this.getOldestSupportedVersion())}`
+          );
+        }
+      }
+    } else {
+      result.compatible = true;
+      
+      // Check for deprecation
+      const versionInfo = this.getVersionInfo(clientVersion);
+      if (versionInfo?.deprecated) {
+        result.warnings.push(
+          `Version ${this.versionToString(clientVersion)} is deprecated`
+        );
+        result.deprecatedFeatures = versionInfo.breakingChanges || [];
+      }
     }
 
     // Check for missing features
-    const serverFeatures = serverVersionInfo?.supportedFeatures || [];
-    const clientFeatures = clientVersionInfo.supportedFeatures;
-    const missingFeatures = serverFeatures.filter(feature => !clientFeatures.includes(feature));
-    
-    if (missingFeatures.length > 0) {
-      result.missingFeatures = missingFeatures;
-      result.warnings.push(
-        `Client version lacks some server features: ${missingFeatures.join(', ')}`
-      );
+    const versionInfo = this.getVersionInfo(clientVersion);
+    if (versionInfo) {
+      const latestVersionInfo = this.getVersionInfo(this.getLatestSupportedVersion());
+      if (latestVersionInfo) {
+        const missingFeatures = latestVersionInfo.supportedFeatures.filter(
+          feature => !versionInfo.supportedFeatures.includes(feature)
+        );
+        result.missingFeatures = missingFeatures;
+        
+        if (missingFeatures.length > 0) {
+          result.warnings.push(
+            `Client version missing features: ${missingFeatures.join(', ')}`
+          );
+        }
+      }
     }
 
-    // Check for deprecated features being used
-    const deprecatedFeatures = this.getDeprecatedFeatures(clientVersion);
-    if (deprecatedFeatures.length > 0) {
-      result.deprecatedFeatures = deprecatedFeatures;
-      result.warnings.push(
-        `Client version uses deprecated features: ${deprecatedFeatures.join(', ')}`
-      );
-    }
-
-    result.compatible = true;
     return result;
   }
 
   /**
-   * Get information about a specific protocol version
+   * Get information about a specific version
    */
   getVersionInfo(version: MCPProtocolVersion): ProtocolVersionInfo | undefined {
-    return this.supportedVersions.get(this.versionToString(version));
+    const versionKey = this.versionToString(version);
+    return this.supportedVersions.get(versionKey);
   }
 
   /**
    * Check if a version is supported
    */
   isVersionSupported(version: MCPProtocolVersion): boolean {
-    return this.supportedVersions.has(this.versionToString(version));
+    const versionKey = this.versionToString(version);
+    return this.supportedVersions.has(versionKey);
   }
 
   /**
@@ -315,10 +322,20 @@ export class MCPProtocolManager {
   }
 
   /**
+   * Get the oldest supported version
+   */
+  getOldestSupportedVersion(): MCPProtocolVersion {
+    const versions = Array.from(this.supportedVersions.values())
+      .sort((a, b) => this.compareVersions(a.version, b.version));
+    
+    return versions[0]?.version || { major: 2024, minor: 9, patch: 0 };
+  }
+
+  /**
    * Get all supported version strings
    */
   getSupportedVersionStrings(): string[] {
-    return Array.from(this.supportedVersions.keys());
+    return Array.from(this.supportedVersions.keys()).sort();
   }
 
   /**
@@ -377,11 +394,11 @@ export class MCPProtocolManager {
     serverCapabilities: MCPCapabilities,
     agreedVersion: MCPProtocolVersion
   ): MCPCapabilities {
-    const result: MCPCapabilities = {};
+    const agreedCapabilities: MCPCapabilities = {};
 
     // Negotiate logging capabilities
     if (clientCapabilities.logging && serverCapabilities.logging) {
-      result.logging = {
+      agreedCapabilities.logging = {
         level: this.negotiateLogLevel(
           clientCapabilities.logging.level,
           serverCapabilities.logging.level
@@ -391,14 +408,14 @@ export class MCPProtocolManager {
 
     // Negotiate tools capabilities
     if (clientCapabilities.tools && serverCapabilities.tools) {
-      result.tools = {
+      agreedCapabilities.tools = {
         listChanged: clientCapabilities.tools.listChanged && serverCapabilities.tools.listChanged,
       };
     }
 
     // Negotiate resources capabilities
     if (clientCapabilities.resources && serverCapabilities.resources) {
-      result.resources = {
+      agreedCapabilities.resources = {
         listChanged: clientCapabilities.resources.listChanged && serverCapabilities.resources.listChanged,
         subscribe: clientCapabilities.resources.subscribe && serverCapabilities.resources.subscribe,
       };
@@ -406,13 +423,13 @@ export class MCPProtocolManager {
 
     // Negotiate prompts capabilities
     if (clientCapabilities.prompts && serverCapabilities.prompts) {
-      result.prompts = {
+      agreedCapabilities.prompts = {
         listChanged: clientCapabilities.prompts.listChanged && serverCapabilities.prompts.listChanged,
       };
     }
 
-    // Only include capabilities supported by the agreed version
-    return this.filterCapabilitiesByVersion(result, agreedVersion);
+    // Filter capabilities by version support
+    return this.filterCapabilitiesByVersion(agreedCapabilities, agreedVersion);
   }
 
   private negotiateLogLevel(
@@ -432,58 +449,82 @@ export class MCPProtocolManager {
     capabilities: MCPCapabilities,
     version: MCPProtocolVersion
   ): MCPCapabilities {
-    const versionInfo = this.getVersionInfo(version);
-    if (!versionInfo) return capabilities;
+    const filtered: MCPCapabilities = { ...capabilities };
 
-    const result: MCPCapabilities = {};
-
-    // Only include capabilities supported by this version
-    if (versionInfo.supportedFeatures.includes('logging') && capabilities.logging) {
-      result.logging = capabilities.logging;
-    }
-    
-    if (versionInfo.supportedFeatures.includes('tools') && capabilities.tools) {
-      result.tools = capabilities.tools;
-    }
-    
-    if (versionInfo.supportedFeatures.includes('resources') && capabilities.resources) {
-      result.resources = capabilities.resources;
-    }
-    
-    if (versionInfo.supportedFeatures.includes('prompts') && capabilities.prompts) {
-      result.prompts = capabilities.prompts;
-    }
-
-    return result;
-  }
-
-  private getMissingFeatures(
-    version: MCPProtocolVersion,
-    capabilities: MCPCapabilities
-  ): string[] {
-    const versionInfo = this.getVersionInfo(version);
-    if (!versionInfo) return [];
-
-    const missing: string[] = [];
-    const availableFeatures = versionInfo.supportedFeatures;
-
-    // Check what's missing compared to latest version
-    const latestVersion = this.getLatestSupportedVersion();
-    const latestVersionInfo = this.getVersionInfo(latestVersion);
-    
-    if (latestVersionInfo) {
-      for (const feature of latestVersionInfo.supportedFeatures) {
-        if (!availableFeatures.includes(feature)) {
-          missing.push(feature);
-        }
+    // Remove capabilities not supported in the agreed version
+    if (!this.isFeatureSupported(version, 'tool_list_changed')) {
+      if (filtered.tools) {
+        delete filtered.tools.listChanged;
       }
     }
 
-    return missing;
+    if (!this.isFeatureSupported(version, 'resource_list_changed')) {
+      if (filtered.resources) {
+        delete filtered.resources.listChanged;
+      }
+    }
+
+    if (!this.isFeatureSupported(version, 'prompt_list_changed')) {
+      if (filtered.prompts) {
+        delete filtered.prompts.listChanged;
+      }
+    }
+
+    return filtered;
   }
 
-  private getDeprecatedFeatures(version: MCPProtocolVersion): string[] {
+  private findBestMutualVersion(clientVersion: MCPProtocolVersion): MCPProtocolVersion {
+    // Find the highest version that is <= client version and supported by server
+    const supportedVersions = Array.from(this.supportedVersions.values())
+      .map(v => v.version)
+      .filter(v => this.compareVersions(v, clientVersion) <= 0)
+      .sort((a, b) => this.compareVersions(b, a));
+
+    return supportedVersions[0] || this.getOldestSupportedVersion();
+  }
+
+  private identifyLimitations(
+    version: MCPProtocolVersion,
+    capabilities: MCPCapabilities
+  ): string[] {
+    const limitations: string[] = [];
+
     const versionInfo = this.getVersionInfo(version);
-    return versionInfo?.breakingChanges || [];
+    const latestVersion = this.getLatestSupportedVersion();
+    const latestVersionInfo = this.getVersionInfo(latestVersion);
+
+    if (versionInfo && latestVersionInfo) {
+      // Check for missing features
+      const missingFeatures = latestVersionInfo.supportedFeatures.filter(
+        feature => !versionInfo.supportedFeatures.includes(feature)
+      );
+
+      if (missingFeatures.includes('batch_operations')) {
+        limitations.push('Batch operations not available - requests will be processed individually');
+      }
+
+      if (missingFeatures.includes('streaming_responses')) {
+        limitations.push('Streaming responses not available - all responses will be sent at once');
+      }
+
+      if (missingFeatures.includes('enhanced_error_handling')) {
+        limitations.push('Enhanced error details not available - basic error information only');
+      }
+    }
+
+    // Check capability limitations
+    if (!capabilities.tools?.listChanged) {
+      limitations.push('Tool list change notifications disabled');
+    }
+
+    if (!capabilities.resources?.listChanged) {
+      limitations.push('Resource list change notifications disabled');
+    }
+
+    if (!capabilities.resources?.subscribe) {
+      limitations.push('Resource subscriptions not available');
+    }
+
+    return limitations;
   }
 }

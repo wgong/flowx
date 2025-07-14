@@ -87,15 +87,26 @@ export const InkDashboard: React.FC<DashboardProps> = ({ processManager, systemM
         });
         
       } catch (error) {
-        console.error('WebSocket connection failed:', error);
+        // WebSocket connection failed - work in offline mode
+        console.log('WebSocket connection failed, working in offline mode');
         setWsConnected(false);
+        // Continue without WebSocket connection
       }
     };
 
-    connectWebSocket();
+    // Try to connect but don't fail if it doesn't work
+    connectWebSocket().catch(() => {
+      // Silently handle connection failures
+      setWsConnected(false);
+    });
     
     return () => {
-      wsClient.disconnect();
+      // Only disconnect if we have a connection
+      try {
+        wsClient.disconnect();
+      } catch (error) {
+        // Ignore disconnection errors
+      }
     };
   }, [liveUpdates]);
 
@@ -223,7 +234,7 @@ export const InkDashboard: React.FC<DashboardProps> = ({ processManager, systemM
       {/* Header */}
       <Box marginBottom={1}>
         <Gradient name="rainbow">
-          <BigText text="Claude Flow" font="tiny" />
+          <BigText text="FlowX" font="tiny" />
         </Gradient>
       </Box>
 

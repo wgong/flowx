@@ -67,13 +67,13 @@ export const daemonCommand: CLICommand = {
   name: 'daemon',
   description: 'Manage background services and daemon processes',
   category: 'System',
-  usage: 'claude-flow daemon <subcommand> [OPTIONS]',
+  usage: 'flowx daemon <subcommand> [OPTIONS]',
   examples: [
-    'claude-flow daemon start claude-flow-server',
-    'claude-flow daemon stop all',
-    'claude-flow daemon status',
-    'claude-flow daemon create --name web-server --command "node server.ts"',
-    'claude-flow daemon logs claude-flow-server --follow'
+    'flowx daemon start flowx-server',
+    'flowx daemon stop all',
+    'flowx daemon status',
+    'flowx daemon create --name web-server --command "node server.ts"',
+    'flowx daemon logs flowx-server --follow'
   ],
   subcommands: [
     {
@@ -272,8 +272,8 @@ class DaemonManager {
   private dataDir: string;
 
   private constructor() {
-    this.configDir = path.join(homedir(), '.claude-flow', 'daemons');
-    this.dataDir = path.join(homedir(), '.claude-flow', 'daemon-data');
+    this.configDir = path.join(homedir(), '.flowx', 'daemons');
+    this.dataDir = path.join(homedir(), '.flowx', 'daemon-data');
   }
 
   static getInstance(): DaemonManager {
@@ -669,7 +669,7 @@ async function startDaemon(context: CLIContext): Promise<void> {
 
   if (args.length === 0) {
     printError('Daemon name is required');
-    printInfo('Usage: claude-flow daemon start <daemon-name> [options]');
+    printInfo('Usage: flowx daemon start <daemon-name> [options]');
     return;
   }
 
@@ -705,7 +705,7 @@ async function stopDaemon(context: CLIContext): Promise<void> {
 
   if (args.length === 0) {
     printError('Daemon name is required');
-    printInfo('Usage: claude-flow daemon stop <daemon-name> [options]');
+    printInfo('Usage: flowx daemon stop <daemon-name> [options]');
     return;
   }
 
@@ -737,7 +737,7 @@ async function restartDaemon(context: CLIContext): Promise<void> {
 
   if (args.length === 0) {
     printError('Daemon name is required');
-    printInfo('Usage: claude-flow daemon restart <daemon-name> [options]');
+    printInfo('Usage: flowx daemon restart <daemon-name> [options]');
     return;
   }
 
@@ -829,7 +829,7 @@ async function createDaemon(context: CLIContext): Promise<void> {
 
   if (!options.name || !options.command) {
     printError('Daemon name and command are required');
-    printInfo('Usage: claude-flow daemon create --name <name> --command <command> [options]');
+    printInfo('Usage: flowx daemon create --name <name> --command <command> [options]');
     return;
   }
 
@@ -877,7 +877,7 @@ async function removeDaemon(context: CLIContext): Promise<void> {
 
   if (args.length === 0) {
     printError('Daemon name is required');
-    printInfo('Usage: claude-flow daemon remove <daemon-name> [options]');
+    printInfo('Usage: flowx daemon remove <daemon-name> [options]');
     return;
   }
 
@@ -899,7 +899,7 @@ async function showDaemonLogs(context: CLIContext): Promise<void> {
 
   if (args.length === 0) {
     printError('Daemon name is required');
-    printInfo('Usage: claude-flow daemon logs <daemon-name> [options]');
+    printInfo('Usage: flowx daemon logs <daemon-name> [options]');
     return;
   }
 
