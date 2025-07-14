@@ -12,22 +12,6 @@ jest.mock('../../../../../src/cli/core/output-formatter', () => ({
   printWarning: jest.fn()
 }));
 
-jest.mock('../../../../../src/swarm/coordinator', () => ({
-  SwarmCoordinator: jest.fn().mockImplementation(() => ({
-    createTask: jest.fn(),
-    listTasks: jest.fn(),
-    getTask: jest.fn(),
-    executeTask: jest.fn(),
-    cancelTask: jest.fn(),
-    retryTask: jest.fn(),
-    assignTask: jest.fn(),
-    updateTask: jest.fn(),
-    getTaskStatistics: jest.fn(),
-    registerAgent: jest.fn(),
-    listAgents: jest.fn()
-  }))
-}));
-
 const mockSwarmCoordinator = {
   createTask: jest.fn() as jest.MockedFunction<any>,
   listTasks: jest.fn() as jest.MockedFunction<any>,
@@ -43,6 +27,10 @@ const mockSwarmCoordinator = {
   executeWorkflow: jest.fn() as jest.MockedFunction<any>,
   listWorkflows: jest.fn() as jest.MockedFunction<any>
 };
+
+jest.mock('../../../../../src/swarm/coordinator', () => ({
+  SwarmCoordinator: jest.fn().mockImplementation(() => mockSwarmCoordinator)
+}));
 
 jest.mock('../../../../../src/coordination/task-execution-engine', () => ({
   TaskExecutionEngine: jest.fn().mockImplementation(() => mockSwarmCoordinator)

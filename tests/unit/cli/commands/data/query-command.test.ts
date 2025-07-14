@@ -9,6 +9,26 @@ const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
   throw new Error('process.exit called');
 });
 
+// Create mock objects
+const mockPersistenceManager = {
+  query: jest.fn(),
+  getSchema: jest.fn(),
+  getIndices: jest.fn(),
+  executeQuery: jest.fn()
+};
+
+const mockMemoryManager = {
+  query: jest.fn(),
+  search: jest.fn(),
+  getMemoryBanks: jest.fn()
+};
+
+const mockSwarmCoordinator = {
+  queryAgents: jest.fn(),
+  queryTasks: jest.fn(),
+  queryMetrics: jest.fn()
+};
+
 // Mock dependencies
 jest.mock('../../../../../src/cli/core/output-formatter', () => ({
   printSuccess: jest.fn(),
@@ -18,48 +38,25 @@ jest.mock('../../../../../src/cli/core/output-formatter', () => ({
 }));
 
 jest.mock('../../../../../src/core/persistence', () => ({
-  PersistenceManager: jest.fn().mockImplementation(() => ({
-    query: jest.fn(),
-    getSchema: jest.fn(),
-    getIndices: jest.fn(),
-    executeQuery: jest.fn()
-  }))
+  PersistenceManager: jest.fn().mockImplementation(() => mockPersistenceManager)
 }));
 
 jest.mock('../../../../../src/memory/manager', () => ({
-  MemoryManager: jest.fn().mockImplementation(() => ({
-    query: jest.fn(),
-    search: jest.fn(),
-    getMemoryBanks: jest.fn()
-  }))
+  MemoryManager: jest.fn().mockImplementation(() => mockMemoryManager)
 }));
 
 jest.mock('../../../../../src/swarm/coordinator', () => ({
-  SwarmCoordinator: jest.fn().mockImplementation(() => ({
-    queryAgents: jest.fn(),
-    queryTasks: jest.fn(),
-    queryMetrics: jest.fn()
-  }))
+  SwarmCoordinator: jest.fn().mockImplementation(() => mockSwarmCoordinator)
 }));
 
 describe('Query Command', () => {
   let mockOutputFormatter: any;
-  let mockPersistenceManager: any;
-  let mockMemoryManager: any;
-  let mockSwarmCoordinator: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
     
     // Get mocked modules
     mockOutputFormatter = require('../../../../../src/cli/core/output-formatter');
-    const { PersistenceManager } = require('../../../../../src/core/persistence');
-    const { MemoryManager } = require('../../../../../src/memory/manager');
-          const { SwarmCoordinator } = require('../../../../../src/swarm/coordinator');
-    
-    mockPersistenceManager = new PersistenceManager();
-    mockMemoryManager = new MemoryManager();
-    mockSwarmCoordinator = new SwarmCoordinator();
     
     // Setup default mock responses
     mockPersistenceManager.query.mockResolvedValue([
@@ -75,47 +72,41 @@ describe('Query Command', () => {
         memories: ['id', 'content', 'timestamp']
       }
     });
-    
+
     mockPersistenceManager.getIndices.mockResolvedValue([
-      { table: 'tasks', field: 'status', type: 'btree' },
-      { table: 'agents', field: 'type', type: 'hash' }
+      { name: 'idx_tasks_status', table: 'tasks', columns: ['status'] },
+      { name: 'idx_agents_type', table: 'agents', columns: ['type'] }
     ]);
-    
-    mockPersistenceManager.executeQuery.mockResolvedValue({
-      results: [{ id: 1, name: 'test' }],
-      count: 1,
-      executionTime: 15
-    });
-    
+
     mockMemoryManager.query.mockResolvedValue([
-      { id: 'mem-1', content: 'Test memory', relevance: 0.95 }
+      { id: 'mem-1', content: 'Test memory', timestamp: new Date() }
     ]);
-    
+
     mockMemoryManager.search.mockResolvedValue([
       { id: 'mem-1', content: 'Test memory', score: 0.95 }
     ]);
-    
+
     mockMemoryManager.getMemoryBanks.mockResolvedValue([
-      { id: 'bank-1', name: 'default', size: 100 }
+      { id: 'bank-1', name: 'Test Bank', size: 100 }
     ]);
-    
+
     mockSwarmCoordinator.queryAgents.mockResolvedValue([
-      { id: 'agent-1', type: 'researcher', status: 'active' }
+      { id: 'agent-1', name: 'Test Agent', status: 'active' }
     ]);
-    
+
     mockSwarmCoordinator.queryTasks.mockResolvedValue([
-      { id: 'task-1', type: 'analysis', status: 'completed' }
+      { id: 'task-1', name: 'Test Task', status: 'pending' }
     ]);
-    
+
     mockSwarmCoordinator.queryMetrics.mockResolvedValue({
-      totalAgents: 5,
-      activeTasks: 3,
-      completedTasks: 10
+      totalTasks: 10,
+      completedTasks: 5,
+      activeAgents: 3
     });
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
   });
 
   describe('executeQuery function', () => {
