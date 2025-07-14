@@ -1,183 +1,124 @@
-// Jest setup file for Claude Flow tests
+/**
+ * Jest setup file for Claude-Flow tests
+ * Handles timer cleanup, mocking, and test environment setup
+ */
 
-// Set up test environment
-process.env.CLAUDE_FLOW_ENV = 'test';
+import { jest } from '@jest/globals';
 
-// Mock logger configuration to prevent initialization errors
-jest.mock('../src/core/logger', () => {
-  const mockLogger = {
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    configure: jest.fn(),
-    child: jest.fn(() => mockLogger),
-    close: jest.fn(),
-  };
-  
-  return {
-    Logger: {
-      getInstance: jest.fn(() => mockLogger),
-    },
-    LogLevel: {
-      DEBUG: 'debug',
-      INFO: 'info',
-      WARN: 'warn',
-      ERROR: 'error',
-    },
-  };
+// Global test timeout
+jest.setTimeout(30000);
+
+// Mock process.cwd to prevent ENOENT: no such file or directory, uv_cwd errors
+process.cwd = jest.fn(() => '/Users/sethford/Downloads/Projects/claude-code-flow');
+
+// Enable fake timers globally to prevent hanging
+beforeEach(() => {
+  jest.useFakeTimers();
 });
 
-// Mock only the fs/promises module which is commonly used
-jest.mock('node:fs/promises', () => ({
-  readFile: jest.fn().mockResolvedValue('mock-file-content'),
-  writeFile: jest.fn().mockResolvedValue(undefined),
-  mkdir: jest.fn().mockResolvedValue(undefined),
-  readdir: jest.fn().mockResolvedValue([]),
-  stat: jest.fn().mockResolvedValue({
-    isDirectory: () => true,
-    isFile: () => false
-  }),
-  unlink: jest.fn().mockResolvedValue(undefined),
-  rmdir: jest.fn().mockResolvedValue(undefined),
-  access: jest.fn().mockImplementation(() => Promise.resolve()),
-  mkdtemp: jest.fn().mockImplementation(async (prefix) => {
-    const { mkdtemp: realMkdtemp } = require('fs').promises;
-    return realMkdtemp(prefix);
-  }),
-  rm: jest.fn().mockResolvedValue(undefined),
-}));
-
-// Also mock the fs/promises module without the node: prefix
-jest.mock('fs/promises', () => ({
-  readFile: jest.fn().mockResolvedValue('mock-file-content'),
-  writeFile: jest.fn().mockResolvedValue(undefined),
-  mkdir: jest.fn().mockResolvedValue(undefined),
-  readdir: jest.fn().mockResolvedValue([]),
-  stat: jest.fn().mockResolvedValue({
-    isDirectory: () => true,
-    isFile: () => false
-  }),
-  unlink: jest.fn().mockResolvedValue(undefined),
-  rmdir: jest.fn().mockResolvedValue(undefined),
-  access: jest.fn().mockImplementation(() => Promise.resolve()),
-  mkdtemp: jest.fn().mockImplementation(async (prefix) => {
-    const { mkdtemp: realMkdtemp } = require('fs').promises;
-    return realMkdtemp(prefix);
-  }),
-  rm: jest.fn().mockResolvedValue(undefined),
-}));
-
-// Mock better-sqlite3 since it's used in some tests
-jest.mock('better-sqlite3', () => {
-  // Simple in-memory storage for mocking
-  const mockStorage = new Map();
-  
-  return jest.fn().mockImplementation(() => ({
-    prepare: jest.fn((sql) => {
-      if (sql.includes('CREATE TABLE')) {
-        return {
-          run: jest.fn(),
-          get: jest.fn(),
-          all: jest.fn(),
-        };
-      }
-      
-      if (sql.includes('INSERT OR REPLACE')) {
-        return {
-          run: jest.fn((params) => {
-            // Store the entry using the ID as key
-            const [id, agentId, sessionId, type, content, context, timestamp, tags, version, parentId, metadata] = params;
-            mockStorage.set(id, {
-              id, agent_id: agentId, session_id: sessionId, type, content, context, timestamp, tags, version, parent_id: parentId, metadata
-            });
-          }),
-          get: jest.fn(),
-          all: jest.fn(),
-        };
-      }
-      
-      if (sql.includes('SELECT * FROM memory_entries WHERE id = ?')) {
-        return {
-          run: jest.fn(),
-          get: jest.fn((params) => {
-            const [id] = params;
-            return mockStorage.get(id) || undefined;
-          }),
-          all: jest.fn(),
-        };
-      }
-      
-      if (sql.includes('DELETE FROM memory_entries WHERE id = ?')) {
-        return {
-          run: jest.fn((params) => {
-            const [id] = params;
-            mockStorage.delete(id);
-          }),
-          get: jest.fn(),
-          all: jest.fn(),
-        };
-      }
-      
-      if (sql.includes('SELECT COUNT(*) as count FROM memory_entries')) {
-        return {
-          run: jest.fn(),
-          get: jest.fn(() => ({ count: mockStorage.size })),
-          all: jest.fn(),
-        };
-      }
-      
-      if (sql.includes('SELECT * FROM memory_entries')) {
-        return {
-          run: jest.fn(),
-          get: jest.fn(),
-          all: jest.fn((params) => {
-            let results = Array.from(mockStorage.values());
-            
-            // Simple filtering based on common query patterns
-            if (sql.includes('agent_id = ?') && params && params.length > 0) {
-              const agentId = params[0];
-              results = results.filter(entry => entry.agent_id === agentId);
-            }
-            
-            if (sql.includes('session_id = ?') && params && params.length > 0) {
-              const sessionId = params[0];
-              results = results.filter(entry => entry.session_id === sessionId);
-            }
-            
-            return results;
-          }),
-        };
-      }
-      
-      // Default fallback
-      return {
-        run: jest.fn(),
-        get: jest.fn(),
-        all: jest.fn(),
-      };
-    }),
-    exec: jest.fn(),
-    close: jest.fn(),
-    serialize: jest.fn().mockReturnValue(Buffer.from('mock-serialized-db')),
-  }));
+afterEach(() => {
+  // Clear all timers and intervals
+  jest.clearAllTimers();
+  jest.clearAllMocks();
+  jest.restoreAllMocks();
+  jest.useRealTimers();
 });
 
-// Mock uuid
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'mock-uuid-v4'),
-}));
+// Global cleanup after all tests
+afterAll(() => {
+  jest.useRealTimers();
+});
 
-// Set up global test environment
+// Mock console methods to reduce noise in tests
+const originalConsole = { ...console };
 global.console = {
-  ...console,
-  // Suppress debug logs during tests
-  debug: jest.fn(),
+  ...originalConsole,
   log: jest.fn(),
   info: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
+  debug: jest.fn()
 };
 
-// Increase timeout for async operations
-jest.setTimeout(30000); 
+// Mock process.exit to prevent tests from actually exiting
+process.exit = jest.fn();
+
+// Mock setTimeout and setInterval to prevent hanging
+global.setTimeout = jest.fn((fn, delay) => {
+  return originalSetTimeout(fn, delay);
+});
+
+global.setInterval = jest.fn((fn, delay) => {
+  return originalSetInterval(fn, delay);
+});
+
+global.clearTimeout = jest.fn((id) => {
+  return originalClearTimeout(id);
+});
+
+global.clearInterval = jest.fn((id) => {
+  return originalClearInterval(id);
+});
+
+// Store original timer functions
+const originalSetTimeout = global.setTimeout;
+const originalSetInterval = global.setInterval;
+const originalClearTimeout = global.clearTimeout;
+const originalClearInterval = global.clearInterval;
+
+// Mock file system operations for tests
+jest.mock('node:fs/promises', () => ({
+  readFile: jest.fn(),
+  writeFile: jest.fn(),
+  mkdir: jest.fn(),
+  stat: jest.fn(),
+  unlink: jest.fn(),
+  rmdir: jest.fn(),
+  access: jest.fn()
+}));
+
+// Mock child_process to prevent actual process spawning
+jest.mock('node:child_process', () => ({
+  exec: jest.fn((cmd, callback) => {
+    if (callback) {
+      callback(null, { stdout: '[]', stderr: '' });
+    }
+    return {
+      stdout: { on: jest.fn() },
+      stderr: { on: jest.fn() },
+      on: jest.fn()
+    };
+  }),
+  spawn: jest.fn(() => ({
+    stdout: { on: jest.fn() },
+    stderr: { on: jest.fn() },
+    on: jest.fn(),
+    kill: jest.fn()
+  }))
+}));
+
+// Mock readline to prevent stdin issues
+jest.mock('node:readline', () => ({
+  createInterface: jest.fn(() => ({
+    on: jest.fn(),
+    close: jest.fn(),
+    question: jest.fn()
+  }))
+}));
+
+// Environment variables for testing
+process.env.NODE_ENV = 'test';
+process.env.CLAUDE_FLOW_ENV = 'test';
+process.env.CLAUDE_FLOW_LOG_LEVEL = 'silent';
+process.env.CLAUDE_FLOW_DISABLE_METRICS = 'true';
+process.env.CLAUDE_FLOW_DISABLE_TELEMETRY = 'true';
+
+// Unhandled promise rejection handler
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Uncaught exception handler
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+}); 
