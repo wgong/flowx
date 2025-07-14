@@ -6,7 +6,7 @@
 import type { CLICommand, CLIContext } from '../../interfaces/index.ts';
 import { successBold, infoBold, warningBold, errorBold, printSuccess, printError, printWarning, printInfo } from '../../core/output-formatter.ts';
 import { writeFile, mkdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
 
 export const initCommand: CLICommand = {
@@ -169,20 +169,40 @@ async function getProjectName(interactive: boolean): Promise<string> {
 }
 
 async function validateProjectDirectory(projectPath: string, force: boolean): Promise<void> {
-  if (existsSync(projectPath)) {
-    if (!force) {
-      throw new Error(`Directory ${projectPath} already exists. Use --force to override.`);
+  try {
+    // Get current working directory safely
+    let currentDir;
+    try {
+      currentDir = process.cwd();
+    } catch (cwdError) {
+      throw new Error(`Unable to determine current working directory: ${cwdError instanceof Error ? cwdError.message : String(cwdError)}`);
     }
     
-    // Check if directory is empty or contains only safe files
-    const { readdir } = await import('node:fs/promises');
-    const files = await readdir(projectPath);
-    const safeFiles = ['.git', '.gitignore', 'README.md', '.DS_Store'];
-    const nonSafeFiles = files.filter(f => !safeFiles.includes(f));
+    // Ensure project path is valid
+    const resolvedPath = projectPath.startsWith('/') ? projectPath : join(currentDir, projectPath);
     
-    if (nonSafeFiles.length > 0) {
-      printWarning(`Directory contains files: ${nonSafeFiles.join(', ')}`);
+    if (existsSync(resolvedPath)) {
+      if (!force) {
+        throw new Error(`Directory ${resolvedPath} already exists. Use --force to override.`);
+      }
+      
+      // Check if directory is empty or contains only safe files
+      const { readdir } = await import('node:fs/promises');
+      try {
+        const files = await readdir(resolvedPath);
+        const safeFiles = ['.git', '.gitignore', 'README.md', '.DS_Store'];
+        const nonSafeFiles = files.filter(f => !safeFiles.includes(f));
+        
+        if (nonSafeFiles.length > 0) {
+          printWarning(`Directory contains files: ${nonSafeFiles.join(', ')}`);
+        }
+      } catch (readError) {
+        throw new Error(`Cannot read directory ${resolvedPath}: ${readError instanceof Error ? readError.message : String(readError)}`);
+      }
     }
+  } catch (error) {
+    printError(`Directory validation failed: ${error instanceof Error ? error.message : String(error)}`);
+    throw error;
   }
 }
 
@@ -237,36 +257,49 @@ async function getInitializationConfig(options: any, projectName: string): Promi
 async function createProjectStructure(projectPath: string, config: InitializationConfig): Promise<void> {
   printInfo('Creating project structure...');
 
-  // Basic directory structure
-  const directories = [
-    'src',
-    'docs',
-    'examples',
-    'tests',
-    'config',
-    '.flowx'
-  ];
+  try {
+    // Ensure project root directory exists
+    await mkdir(projectPath, { recursive: true });
 
-  // Add template-specific directories
-  if (config.sparc) {
-    directories.push('sparc', 'sparc/modes', 'sparc/workflows');
+    // Basic directory structure
+    const directories = [
+      'src',
+      'docs',
+      'examples',
+      'tests',
+      'config',
+      '.flowx'
+    ];
+
+    // Add template-specific directories
+    if (config.sparc) {
+      directories.push('sparc', 'sparc/modes', 'sparc/workflows');
+    }
+
+    if (config.swarm) {
+      directories.push('swarms', 'agents', 'coordinators');
+    }
+
+    if (config.advanced) {
+      directories.push('plugins', 'templates', 'scripts');
+    }
+
+    // Create directories with error handling
+    for (const dir of directories) {
+      try {
+        await mkdir(join(projectPath, dir), { recursive: true });
+      } catch (dirError) {
+        printWarning(`Failed to create directory ${dir}: ${dirError instanceof Error ? dirError.message : String(dirError)}`);
+        // Continue with other directories
+      }
+    }
+
+    // Create basic files
+    await createBasicFiles(projectPath, config);
+  } catch (error) {
+    printError(`Failed to create project structure: ${error instanceof Error ? error.message : String(error)}`);
+    throw error;
   }
-
-  if (config.swarm) {
-    directories.push('swarms', 'agents', 'coordinators');
-  }
-
-  if (config.advanced) {
-    directories.push('plugins', 'templates', 'scripts');
-  }
-
-  // Create directories
-  for (const dir of directories) {
-    await mkdir(join(projectPath, dir), { recursive: true });
-  }
-
-  // Create basic files
-  await createBasicFiles(projectPath, config);
 }
 
 async function createBasicFiles(projectPath: string, config: InitializationConfig): Promise<void> {

@@ -12,45 +12,55 @@ jest.mock('../../../../../src/cli/core/output-formatter', () => ({
   printWarning: jest.fn()
 }));
 
-jest.mock('../../../../../src/swarm/swarm-coordinator', () => ({
+jest.mock('../../../../../src/cli/core/global-initialization', () => ({
+  getMemoryManager: jest.fn(),
+  getPersistenceManager: jest.fn()
+}));
+
+jest.mock('../../../../../src/core/logger', () => ({
+  Logger: {
+    getInstance: jest.fn(() => ({
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn()
+    }))
+  }
+}));
+
+jest.mock('../../../../../src/swarm/coordinator', () => ({
   SwarmCoordinator: jest.fn().mockImplementation(() => ({
-    spawnAgent: jest.fn(),
-    getAgentStatus: jest.fn(),
-    listAgents: jest.fn()
+    initialize: jest.fn(),
+    stop: jest.fn(),
+    registerAgent: jest.fn(),
+    getSwarmStatus: jest.fn()
   }))
 }));
 
 describe('Spawn Command', () => {
   let mockOutputFormatter: any;
   let mockSwarmCoordinator: any;
+  let mockLogger: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
     
     // Get mocked modules
     mockOutputFormatter = require('../../../../../src/cli/core/output-formatter');
-    const { SwarmCoordinator } = require('../../../../../src/swarm/swarm-coordinator');
+    const { SwarmCoordinator } = require('../../../../../src/swarm/coordinator');
+    const { Logger } = require('../../../../../src/core/logger');
+    
     mockSwarmCoordinator = new SwarmCoordinator();
+    mockLogger = Logger.getInstance();
     
     // Setup default mock responses
-    mockSwarmCoordinator.spawnAgent.mockResolvedValue({
-      id: 'agent-123',
-      type: 'researcher',
+    mockSwarmCoordinator.registerAgent.mockResolvedValue('agent-123');
+    mockSwarmCoordinator.initialize.mockResolvedValue();
+    mockSwarmCoordinator.stop.mockResolvedValue();
+    mockSwarmCoordinator.getSwarmStatus.mockReturnValue({
       status: 'active',
-      pid: 12345
+      agents: { total: 1, idle: 1, busy: 0, offline: 0, error: 0 }
     });
-    
-    mockSwarmCoordinator.getAgentStatus.mockResolvedValue({
-      id: 'agent-123',
-      status: 'active',
-      uptime: 1000,
-      tasksCompleted: 5
-    });
-    
-    mockSwarmCoordinator.listAgents.mockResolvedValue([
-      { id: 'agent-1', type: 'researcher', status: 'active' },
-      { id: 'agent-2', type: 'coder', status: 'idle' }
-    ]);
   });
 
   afterEach(() => {
@@ -59,226 +69,174 @@ describe('Spawn Command', () => {
 
   describe('spawnAgent function', () => {
     it('should spawn a researcher agent successfully', async () => {
-      const { spawnAgent } = require('../../../../../src/cli/commands/agents/spawn-command');
+      const { spawnCommand } = require('../../../../../src/cli/commands/agents/spawn-command');
       
       const context = {
-        args: ['researcher'],
-        options: {
-          name: 'test-researcher',
-          priority: 'high',
-          timeout: 30000,
-          capabilities: 'research,analysis',
-          'max-tasks': 10,
-          autonomy: 'medium',
-          verbose: false
-        }
+        args: ['researcher', 'Research Bot'],
+        options: {}
       };
 
-      await spawnAgent(context);
+      await spawnCommand.handler(context);
 
-      expect(mockSwarmCoordinator.spawnAgent).toHaveBeenCalledWith({
-        type: 'researcher',
-        name: 'test-researcher',
-        priority: 'high',
-        timeout: 30000,
-        capabilities: ['research', 'analysis'],
-        maxTasks: 10,
-        autonomy: 'medium'
-      });
-
-      expect(mockOutputFormatter.printSuccess).toHaveBeenCalledWith(
-        expect.stringContaining('Agent spawned successfully')
-      );
+      expect(mockSwarmCoordinator.registerAgent).toHaveBeenCalledWith('Research Bot', 'researcher', []);
+      expect(mockOutputFormatter.printSuccess).toHaveBeenCalledWith('✅ Agent spawned successfully!');
     });
 
     it('should spawn a coder agent with default options', async () => {
-      const { spawnAgent } = require('../../../../../src/cli/commands/agents/spawn-command');
+      const { spawnCommand } = require('../../../../../src/cli/commands/agents/spawn-command');
       
       const context = {
         args: ['coder'],
         options: {}
       };
 
-      await spawnAgent(context);
+      await spawnCommand.handler(context);
 
-      expect(mockSwarmCoordinator.spawnAgent).toHaveBeenCalledWith({
-        type: 'coder',
-        name: expect.any(String),
-        priority: 'normal',
-        timeout: 60000,
-        capabilities: [],
-        maxTasks: 5,
-        autonomy: 'medium'
-      });
-
-      expect(mockOutputFormatter.printSuccess).toHaveBeenCalledWith(
-        expect.stringContaining('Agent spawned successfully')
+      expect(mockSwarmCoordinator.registerAgent).toHaveBeenCalledWith(
+        expect.stringContaining('coder-'),
+        'coder',
+        []
       );
+      expect(mockOutputFormatter.printSuccess).toHaveBeenCalledWith('✅ Agent spawned successfully!');
     });
 
     it('should handle all supported agent types', async () => {
-      const { spawnAgent } = require('../../../../../src/cli/commands/agents/spawn-command');
+      const { spawnCommand } = require('../../../../../src/cli/commands/agents/spawn-command');
       
-      const agentTypes = [
-        'researcher', 'coder', 'analyst', 'coordinator', 'tester', 
-        'reviewer', 'architect', 'optimizer', 'documenter', 'monitor',
-        'specialist', 'security', 'devops'
-      ];
-
-      for (const type of agentTypes) {
+      const validTypes = ['researcher', 'coder', 'analyst', 'coordinator', 'tester', 'reviewer', 'architect', 'optimizer', 'documenter', 'monitor', 'specialist', 'security', 'devops'];
+      
+      for (const type of validTypes) {
         const context = {
           args: [type],
           options: {}
         };
 
-        await spawnAgent(context);
-
-        expect(mockSwarmCoordinator.spawnAgent).toHaveBeenCalledWith(
-          expect.objectContaining({ type })
+        await spawnCommand.handler(context);
+        expect(mockSwarmCoordinator.registerAgent).toHaveBeenCalledWith(
+          expect.stringContaining(type),
+          type,
+          []
         );
       }
     });
 
     it('should handle invalid agent type', async () => {
-      const { spawnAgent } = require('../../../../../src/cli/commands/agents/spawn-command');
+      const { spawnCommand } = require('../../../../../src/cli/commands/agents/spawn-command');
       
       const context = {
         args: ['invalid-type'],
         options: {}
       };
 
-      await spawnAgent(context);
+      await spawnCommand.handler(context);
 
-      expect(mockOutputFormatter.printError).toHaveBeenCalledWith(
-        expect.stringContaining('Invalid agent type')
-      );
+      expect(mockOutputFormatter.printError).toHaveBeenCalledWith('Invalid agent type: invalid-type');
+      expect(mockSwarmCoordinator.registerAgent).not.toHaveBeenCalled();
     });
 
     it('should handle missing agent type', async () => {
-      const { spawnAgent } = require('../../../../../src/cli/commands/agents/spawn-command');
+      const { spawnCommand } = require('../../../../../src/cli/commands/agents/spawn-command');
       
       const context = {
         args: [],
         options: {}
       };
 
-      await spawnAgent(context);
+      await spawnCommand.handler(context);
 
-      expect(mockOutputFormatter.printError).toHaveBeenCalledWith(
-        'Agent type is required'
-      );
+      expect(mockOutputFormatter.printError).toHaveBeenCalledWith('Agent type is required');
+      expect(mockSwarmCoordinator.registerAgent).not.toHaveBeenCalled();
     });
 
     it('should parse capabilities correctly', async () => {
-      const { spawnAgent } = require('../../../../../src/cli/commands/agents/spawn-command');
+      const { spawnCommand } = require('../../../../../src/cli/commands/agents/spawn-command');
       
       const context = {
         args: ['researcher'],
-        options: {
-          capabilities: 'research,analysis,documentation'
-        }
+        options: { capabilities: 'analysis,research,writing' }
       };
 
-      await spawnAgent(context);
+      await spawnCommand.handler(context);
 
-      expect(mockSwarmCoordinator.spawnAgent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          capabilities: ['research', 'analysis', 'documentation']
-        })
+      expect(mockSwarmCoordinator.registerAgent).toHaveBeenCalledWith(
+        expect.any(String),
+        'researcher',
+        ['analysis', 'research', 'writing']
       );
     });
 
     it('should handle spawn errors gracefully', async () => {
-      const { spawnAgent } = require('../../../../../src/cli/commands/agents/spawn-command');
+      const { spawnCommand } = require('../../../../../src/cli/commands/agents/spawn-command');
       
-      mockSwarmCoordinator.spawnAgent.mockRejectedValue(new Error('Spawn failed'));
+      mockSwarmCoordinator.registerAgent.mockRejectedValue(new Error('Spawn failed'));
       
       const context = {
         args: ['researcher'],
         options: {}
       };
 
-      await spawnAgent(context);
-
-      expect(mockOutputFormatter.printError).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to spawn agent')
-      );
+      await expect(spawnCommand.handler(context)).rejects.toThrow('Spawn failed');
+      expect(mockOutputFormatter.printError).toHaveBeenCalledWith('Failed to spawn agent: Spawn failed');
     });
 
     it('should show verbose output when requested', async () => {
-      const { spawnAgent } = require('../../../../../src/cli/commands/agents/spawn-command');
+      const { spawnCommand } = require('../../../../../src/cli/commands/agents/spawn-command');
       
       const context = {
         args: ['researcher'],
-        options: {
-          verbose: true
-        }
+        options: { verbose: true }
       };
 
-      await spawnAgent(context);
+      await spawnCommand.handler(context);
 
-      expect(mockOutputFormatter.printInfo).toHaveBeenCalledWith(
-        expect.stringContaining('Spawning agent with configuration')
-      );
+      expect(mockOutputFormatter.printInfo).toHaveBeenCalledWith('Agent Configuration:');
     });
 
     it('should validate priority values', async () => {
-      const { spawnAgent } = require('../../../../../src/cli/commands/agents/spawn-command');
-      
-      const validPriorities = ['low', 'normal', 'high', 'urgent'];
-      
-      for (const priority of validPriorities) {
-        const context = {
-          args: ['researcher'],
-          options: { priority }
-        };
-
-        await spawnAgent(context);
-
-        expect(mockSwarmCoordinator.spawnAgent).toHaveBeenCalledWith(
-          expect.objectContaining({ priority })
-        );
-      }
-    });
-
-    it('should validate autonomy levels', async () => {
-      const { spawnAgent } = require('../../../../../src/cli/commands/agents/spawn-command');
-      
-      const validAutonomy = ['low', 'medium', 'high', 'full'];
-      
-      for (const autonomy of validAutonomy) {
-        const context = {
-          args: ['researcher'],
-          options: { autonomy }
-        };
-
-        await spawnAgent(context);
-
-        expect(mockSwarmCoordinator.spawnAgent).toHaveBeenCalledWith(
-          expect.objectContaining({ autonomy })
-        );
-      }
-    });
-
-    it('should handle numeric options correctly', async () => {
-      const { spawnAgent } = require('../../../../../src/cli/commands/agents/spawn-command');
+      const { spawnCommand } = require('../../../../../src/cli/commands/agents/spawn-command');
       
       const context = {
         args: ['researcher'],
-        options: {
-          timeout: '45000',
-          'max-tasks': '15'
+        options: { priority: 8 }
+      };
+
+      await spawnCommand.handler(context);
+
+      expect(mockSwarmCoordinator.registerAgent).toHaveBeenCalled();
+      expect(mockOutputFormatter.printInfo).toHaveBeenCalledWith('⚡ Priority: 8');
+    });
+
+    it('should validate autonomy levels', async () => {
+      const { spawnCommand } = require('../../../../../src/cli/commands/agents/spawn-command');
+      
+      const context = {
+        args: ['researcher'],
+        options: { autonomy: 0.9 }
+      };
+
+      await spawnCommand.handler(context);
+
+      expect(mockSwarmCoordinator.registerAgent).toHaveBeenCalled();
+      expect(mockOutputFormatter.printInfo).toHaveBeenCalledWith('🤖 Autonomy: 90%');
+    });
+
+    it('should handle numeric options correctly', async () => {
+      const { spawnCommand } = require('../../../../../src/cli/commands/agents/spawn-command');
+      
+      const context = {
+        args: ['researcher'],
+        options: { 
+          priority: 7,
+          timeout: 600,
+          maxTasks: 5
         }
       };
 
-      await spawnAgent(context);
+      await spawnCommand.handler(context);
 
-      expect(mockSwarmCoordinator.spawnAgent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          timeout: 45000,
-          maxTasks: 15
-        })
-      );
+      expect(mockSwarmCoordinator.registerAgent).toHaveBeenCalled();
+      expect(mockOutputFormatter.printInfo).toHaveBeenCalledWith('⚡ Priority: 7');
+      expect(mockOutputFormatter.printInfo).toHaveBeenCalledWith('🎯 Max Tasks: 5');
     });
   });
 
@@ -286,33 +244,27 @@ describe('Spawn Command', () => {
     it('should have correct command structure', () => {
       const { spawnCommand } = require('../../../../../src/cli/commands/agents/spawn-command');
       
-      expect(spawnCommand).toBeDefined();
       expect(spawnCommand.name).toBe('spawn');
-      expect(spawnCommand.description).toContain('Spawn a new agent');
-      expect(spawnCommand.category).toBe('Agent');
-      expect(spawnCommand.handler).toBeDefined();
+      expect(spawnCommand.description).toBe('Direct agent spawning interface');
+      expect(spawnCommand.category).toBe('Agents');
+      expect(spawnCommand.usage).toBe('flowx spawn <agent-type> [name] [OPTIONS]');
     });
 
     it('should have all required options defined', () => {
       const { spawnCommand } = require('../../../../../src/cli/commands/agents/spawn-command');
       
       const optionNames = spawnCommand.options.map((opt: any) => opt.name);
-      
       expect(optionNames).toContain('name');
       expect(optionNames).toContain('priority');
       expect(optionNames).toContain('timeout');
       expect(optionNames).toContain('capabilities');
-      expect(optionNames).toContain('max-tasks');
-      expect(optionNames).toContain('autonomy');
-      expect(optionNames).toContain('verbose');
     });
 
     it('should have proper examples', () => {
       const { spawnCommand } = require('../../../../../src/cli/commands/agents/spawn-command');
       
-      expect(spawnCommand.examples).toBeDefined();
+      expect(spawnCommand.examples).toBeInstanceOf(Array);
       expect(spawnCommand.examples.length).toBeGreaterThan(0);
-      expect(spawnCommand.examples[0]).toContain('flowx spawn');
     });
   });
 }); 

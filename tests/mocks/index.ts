@@ -55,7 +55,7 @@ interface IMemoryManager {
 interface ICoordinationManager {
   initialize(): Promise<void>;
   shutdown(): Promise<void>;
-  assignTask(task: any, agentId: string): Promise<void>;
+  assignTask(task: any, agentId: string): Promise<string>;
   getAgentTaskCount(agentId: string): Promise<number>;
   getAgentTasks(agentId: string): Promise<any[]>;
   cancelTask(taskId: string, reason?: string): Promise<void>;
@@ -67,6 +67,10 @@ interface ICoordinationManager {
   getCoordinationMetrics(): Promise<Record<string, unknown>>;
   enableAdvancedScheduling(): void;
   reportConflict(type: 'resource' | 'task', id: string, agents: string[]): Promise<void>;
+  registerAgent(agent: any): Promise<void>;
+  unregisterAgent(agentId: string): Promise<void>;
+  completeTask(taskId: string, result?: any): Promise<void>;
+  failTask(taskId: string, error?: any): Promise<void>;
 }
 
 interface IMCPServer {
@@ -535,11 +539,12 @@ export class MockCoordinationManager implements ICoordinationManager {
     this.initialized = false;
   });
 
-  assignTask = createSpy(async (task: Task, agentId: string): Promise<void> => {
+  assignTask = createSpy(async (task: Task, agentId: string): Promise<string> => {
     this.tasks.set(task.id, { task, agentId });
     const agentTaskList = this.agentTasks.get(agentId) || [];
     agentTaskList.push(task);
     this.agentTasks.set(agentId, agentTaskList);
+    return agentId;
   });
 
   getAgentTaskCount = createSpy(async (agentId: string): Promise<number> => {
@@ -597,6 +602,22 @@ export class MockCoordinationManager implements ICoordinationManager {
   });
 
   reportConflict = createSpy(async (type: 'resource' | 'task', id: string, agents: string[]): Promise<void> => {
+    // Mock implementation
+  });
+
+  registerAgent = createSpy(async (agent: any): Promise<void> => {
+    // Mock implementation
+  });
+
+  unregisterAgent = createSpy(async (agentId: string): Promise<void> => {
+    // Mock implementation
+  });
+
+  completeTask = createSpy(async (taskId: string, result?: any): Promise<void> => {
+    // Mock implementation
+  });
+
+  failTask = createSpy(async (taskId: string, error?: any): Promise<void> => {
     // Mock implementation
   });
 

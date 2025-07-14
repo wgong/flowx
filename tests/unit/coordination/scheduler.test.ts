@@ -1,8 +1,8 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
-import { TaskCoordinator, CapabilitySchedulingStrategy, CoordinationConfig } from '../../../src/coordination/task-coordinator.js';
-import type { IEventBus } from '../../../src/core/event-bus.js';
-import type { ILogger } from '../../../src/core/logger.js';
-import type { Task, AgentProfile } from '../../../src/core/types.js';
+import { TaskCoordinator, CapabilitySchedulingStrategy, CoordinationConfig } from '../../../src/coordination/task-coordinator';
+import type { IEventBus } from '../../../src/core/event-bus';
+import type { ILogger } from '../../../src/core/logger';
+import type { Task, AgentProfile } from '../../../src/core/types';
 
 // Mock dependencies
 const mockEventBus: IEventBus = {

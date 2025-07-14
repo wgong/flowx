@@ -3,14 +3,14 @@
  */
 
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
-import { PatternRecognizer } from '../../../../src/hive-mind/neural/pattern-recognizer.js';
-import { EventBus } from '../../../../src/core/event-bus.js';
-import { DatabaseManager } from '../../../../src/hive-mind/database/database-manager.js';
+import { PatternRecognizer } from '../../../../src/hive-mind/neural/pattern-recognizer';
+import { EventBus } from '../../../../src/core/event-bus';
+import { DatabaseManager } from '../../../../src/hive-mind/database/database-manager';
 
 // Mock dependencies
-jest.mock('../../../../src/core/event-bus.js');
-jest.mock('../../../../src/hive-mind/database/database-manager.js');
-jest.mock('../../../../src/core/logger.js', () => ({
+jest.mock('../../../../src/core/event-bus');
+jest.mock('../../../../src/hive-mind/database/database-manager');
+jest.mock('../../../../src/core/logger', () => ({
   Logger: jest.fn().mockImplementation(() => ({
     debug: jest.fn(),
     info: jest.fn(),

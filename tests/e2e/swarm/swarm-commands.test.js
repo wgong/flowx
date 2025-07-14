@@ -2,7 +2,7 @@
  * E2E tests for swarm commands
  */
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
-import { createCommandTestRunner } from '../command-test-base.js';
+import { createCommandTestRunner } from '../utils/command-test-base';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 

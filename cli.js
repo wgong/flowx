@@ -2,10 +2,10 @@
 
 /**
  * FlowX CLI Entry Point
- * Uses tsx to run TypeScript source directly for development
+ * Uses built JavaScript files from dist directory
  */
 
-// Use tsx to run TypeScript files directly
+// Use built JavaScript files
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -13,10 +13,10 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const tsFile = join(__dirname, 'src/cli/main.ts');
+const jsFile = join(__dirname, 'dist/main.js');
 
-// Use tsx to run the TypeScript file
-const child = spawn('npx', ['tsx', tsFile, ...process.argv.slice(2)], {
+// Run the built JavaScript file
+const child = spawn('node', [jsFile, ...process.argv.slice(2)], {
   stdio: 'inherit',
   cwd: __dirname
 });

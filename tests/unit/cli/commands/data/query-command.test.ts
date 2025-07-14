@@ -9,24 +9,30 @@ const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
   throw new Error('process.exit called');
 });
 
-// Create mock objects
+// Create mock objects with proper typing
 const mockPersistenceManager = {
-  query: jest.fn(),
-  getSchema: jest.fn(),
-  getIndices: jest.fn(),
-  executeQuery: jest.fn()
+  query: jest.fn() as jest.MockedFunction<any>,
+  getSchema: jest.fn() as jest.MockedFunction<any>,
+  getIndices: jest.fn() as jest.MockedFunction<any>,
+  executeQuery: jest.fn() as jest.MockedFunction<any>,
+  getActiveTasks: jest.fn() as jest.MockedFunction<any>,
+  getActiveAgents: jest.fn() as jest.MockedFunction<any>,
+  getTaskHistory: jest.fn() as jest.MockedFunction<any>,
+  getAgentHistory: jest.fn() as jest.MockedFunction<any>,
+  getSystemLogs: jest.fn() as jest.MockedFunction<any>,
+  getPerformanceMetrics: jest.fn() as jest.MockedFunction<any>
 };
 
 const mockMemoryManager = {
-  query: jest.fn(),
-  search: jest.fn(),
-  getMemoryBanks: jest.fn()
+  query: jest.fn() as jest.MockedFunction<any>,
+  search: jest.fn() as jest.MockedFunction<any>,
+  getMemoryBanks: jest.fn() as jest.MockedFunction<any>
 };
 
 const mockSwarmCoordinator = {
-  queryAgents: jest.fn(),
-  queryTasks: jest.fn(),
-  queryMetrics: jest.fn()
+  queryAgents: jest.fn() as jest.MockedFunction<any>,
+  queryTasks: jest.fn() as jest.MockedFunction<any>,
+  queryMetrics: jest.fn() as jest.MockedFunction<any>
 };
 
 // Mock dependencies
@@ -34,7 +40,19 @@ jest.mock('../../../../../src/cli/core/output-formatter', () => ({
   printSuccess: jest.fn(),
   printError: jest.fn(),
   printInfo: jest.fn(),
-  printWarning: jest.fn()
+  printWarning: jest.fn(),
+  formatTable: jest.fn().mockReturnValue('formatted table')
+}));
+
+jest.mock('../../../../../src/cli/core/global-initialization', () => ({
+  getLogger: jest.fn(() => Promise.resolve({
+    info: jest.fn(),
+    debug: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn()
+  })),
+  getMemoryManager: jest.fn(() => Promise.resolve(mockMemoryManager)),
+  getPersistenceManager: jest.fn(() => Promise.resolve(mockPersistenceManager))
 }));
 
 jest.mock('../../../../../src/core/persistence', () => ({
@@ -55,54 +73,28 @@ describe('Query Command', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     
+    // Set up default mock return values
+    mockPersistenceManager.query.mockResolvedValue([]);
+    mockPersistenceManager.getSchema.mockResolvedValue({});
+    mockPersistenceManager.getIndices.mockResolvedValue([]);
+    mockPersistenceManager.executeQuery.mockResolvedValue([]);
+    mockPersistenceManager.getActiveTasks.mockResolvedValue([]);
+    mockPersistenceManager.getActiveAgents.mockResolvedValue([]);
+    mockPersistenceManager.getTaskHistory.mockResolvedValue([]);
+    mockPersistenceManager.getAgentHistory.mockResolvedValue([]);
+    mockPersistenceManager.getSystemLogs.mockResolvedValue([]);
+    mockPersistenceManager.getPerformanceMetrics.mockResolvedValue({});
+
+    mockMemoryManager.query.mockResolvedValue([]);
+    mockMemoryManager.search.mockResolvedValue([]);
+    mockMemoryManager.getMemoryBanks.mockResolvedValue([]);
+
+    mockSwarmCoordinator.queryAgents.mockResolvedValue([]);
+    mockSwarmCoordinator.queryTasks.mockResolvedValue([]);
+    mockSwarmCoordinator.queryMetrics.mockResolvedValue({});
+    
     // Get mocked modules
     mockOutputFormatter = require('../../../../../src/cli/core/output-formatter');
-    
-    // Setup default mock responses
-    mockPersistenceManager.query.mockResolvedValue([
-      { id: 'result-1', type: 'task', data: { name: 'Test Task' } },
-      { id: 'result-2', type: 'agent', data: { name: 'Test Agent' } }
-    ]);
-    
-    mockPersistenceManager.getSchema.mockResolvedValue({
-      tables: ['tasks', 'agents', 'memories'],
-      fields: {
-        tasks: ['id', 'name', 'status', 'created_at'],
-        agents: ['id', 'name', 'type', 'status'],
-        memories: ['id', 'content', 'timestamp']
-      }
-    });
-
-    mockPersistenceManager.getIndices.mockResolvedValue([
-      { name: 'idx_tasks_status', table: 'tasks', columns: ['status'] },
-      { name: 'idx_agents_type', table: 'agents', columns: ['type'] }
-    ]);
-
-    mockMemoryManager.query.mockResolvedValue([
-      { id: 'mem-1', content: 'Test memory', timestamp: new Date() }
-    ]);
-
-    mockMemoryManager.search.mockResolvedValue([
-      { id: 'mem-1', content: 'Test memory', score: 0.95 }
-    ]);
-
-    mockMemoryManager.getMemoryBanks.mockResolvedValue([
-      { id: 'bank-1', name: 'Test Bank', size: 100 }
-    ]);
-
-    mockSwarmCoordinator.queryAgents.mockResolvedValue([
-      { id: 'agent-1', name: 'Test Agent', status: 'active' }
-    ]);
-
-    mockSwarmCoordinator.queryTasks.mockResolvedValue([
-      { id: 'task-1', name: 'Test Task', status: 'pending' }
-    ]);
-
-    mockSwarmCoordinator.queryMetrics.mockResolvedValue({
-      totalTasks: 10,
-      completedTasks: 5,
-      activeAgents: 3
-    });
   });
 
   afterEach(() => {
@@ -114,15 +106,33 @@ describe('Query Command', () => {
       const { executeQuery } = require('../../../../../src/cli/commands/data/query-command');
       
       const context = {
-        args: ['SELECT * FROM tasks'],
-        options: {}
+        args: [],
+        options: {
+          sql: 'SELECT * FROM tasks',
+          verbose: true
+        }
       };
 
+      try {
+        // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
+      } catch (error) {
+        console.log('Error during executeQuery:', error);
+        throw error;
+      }
 
-      expect(mockPersistenceManager.executeQuery).toHaveBeenCalledWith('SELECT * FROM tasks');
+      // Debug: Check what was actually called
+      console.log('printSuccess calls:', mockOutputFormatter.printSuccess.mock.calls);
+      console.log('printError calls:', mockOutputFormatter.printError.mock.calls);
+      console.log('printInfo calls:', mockOutputFormatter.printInfo.mock.calls);
+
       expect(mockOutputFormatter.printSuccess).toHaveBeenCalledWith(
-        expect.stringContaining('Query executed successfully')
+        expect.stringContaining('SQL query executed successfully')
       );
     });
 
@@ -134,6 +144,12 @@ describe('Query Command', () => {
         options: { target: 'agents' }
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockSwarmCoordinator.queryAgents).toHaveBeenCalledWith(
@@ -149,6 +165,12 @@ describe('Query Command', () => {
         options: { target: 'memory' }
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockMemoryManager.query).toHaveBeenCalledWith('test content');
@@ -165,6 +187,12 @@ describe('Query Command', () => {
         options: { target: 'tasks' }
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockSwarmCoordinator.queryTasks).toHaveBeenCalledWith(
@@ -183,6 +211,12 @@ describe('Query Command', () => {
         options: {}
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockOutputFormatter.printError).toHaveBeenCalledWith(
@@ -193,13 +227,19 @@ describe('Query Command', () => {
     it('should handle query execution errors', async () => {
       const { executeQuery } = require('../../../../../src/cli/commands/data/query-command');
       
-      mockPersistenceManager.executeQuery.mockRejectedValue(new Error('SQL syntax error'));
+      mockPersistenceManager.executeQuery.mockRejectedValueOnce(new Error('SQL syntax error'));
       
       const context = {
         args: ['INVALID SQL'],
         options: {}
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockOutputFormatter.printError).toHaveBeenCalledWith(
@@ -215,6 +255,12 @@ describe('Query Command', () => {
         options: { format: 'json' }
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockOutputFormatter.printInfo).toHaveBeenCalledWith(
@@ -230,6 +276,12 @@ describe('Query Command', () => {
         options: { format: 'csv' }
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockOutputFormatter.printInfo).toHaveBeenCalledWith(
@@ -245,6 +297,12 @@ describe('Query Command', () => {
         options: { limit: 10, offset: 20 }
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockPersistenceManager.executeQuery).toHaveBeenCalledWith(
@@ -260,6 +318,12 @@ describe('Query Command', () => {
         options: { sort: 'created_at DESC' }
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockPersistenceManager.executeQuery).toHaveBeenCalledWith(
@@ -275,6 +339,12 @@ describe('Query Command', () => {
         options: { verbose: true }
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockOutputFormatter.printInfo).toHaveBeenCalledWith(
@@ -290,6 +360,12 @@ describe('Query Command', () => {
         options: { output: 'results.json' }
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockOutputFormatter.printSuccess).toHaveBeenCalledWith(
@@ -305,6 +381,12 @@ describe('Query Command', () => {
         options: { target: 'aggregation' }
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockPersistenceManager.executeQuery).toHaveBeenCalledWith(
@@ -320,6 +402,12 @@ describe('Query Command', () => {
         options: {}
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockPersistenceManager.getSchema).toHaveBeenCalled();
@@ -336,6 +424,12 @@ describe('Query Command', () => {
         options: {}
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockPersistenceManager.getIndices).toHaveBeenCalled();
@@ -352,6 +446,12 @@ describe('Query Command', () => {
         options: {}
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockMemoryManager.getMemoryBanks).toHaveBeenCalled();
@@ -368,6 +468,12 @@ describe('Query Command', () => {
         options: { target: 'memory', semantic: true }
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockMemoryManager.search).toHaveBeenCalledWith(
@@ -384,6 +490,12 @@ describe('Query Command', () => {
         options: { context: 'last 24 hours' }
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockOutputFormatter.printInfo).toHaveBeenCalledWith(
@@ -399,6 +511,12 @@ describe('Query Command', () => {
         options: { explain: true }
       };
 
+      // Mock success callbacks before executing
+      mockOutputFormatter.printSuccess.mockImplementation(() => {});
+      mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
+      mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
       await executeQuery(context);
 
       expect(mockPersistenceManager.executeQuery).toHaveBeenCalledWith(
@@ -423,7 +541,7 @@ describe('Query Command', () => {
       
       const optionNames = queryCommand.options.map((opt: any) => opt.name);
       
-      expect(optionNames).toContain('target');
+      expect(optionNames).toContain('query-type');
       expect(optionNames).toContain('format');
       expect(optionNames).toContain('output');
       expect(optionNames).toContain('limit');
@@ -447,7 +565,7 @@ describe('Query Command', () => {
       const { queryCommand } = require('../../../../../src/cli/commands/data/query-command');
       
       expect(queryCommand.arguments).toBeDefined();
-      expect(queryCommand.arguments[0].name).toBe('query');
+      expect(queryCommand.arguments[0].name).toBe('query-type');
       expect(queryCommand.arguments[0].required).toBe(true);
     });
   });

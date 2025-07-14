@@ -7,7 +7,7 @@ import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 // Define mocks for testing
 const mockCommandRegistry = {
   register: jest.fn(),
-  execute: jest.fn(),
+  execute: jest.fn() as jest.Mock,
   get: jest.fn(),
   getAll: jest.fn()
 };
@@ -75,12 +75,12 @@ class CLIApplication {
         await this.commandRegistry.execute(parsedArgs.command, parsedArgs);
         return 0;
       } catch (error) {
-        this.outputFormatter.error(`Error executing command: ${error.message}`);
+        this.outputFormatter.error(`Error executing command: ${(error as any).message}`);
         this.logger.error('Command execution failed', { error });
         return 1;
       }
     } catch (error) {
-      this.outputFormatter.error(`Application error: ${error.message}`);
+      this.outputFormatter.error(`Application error: ${(error as any).message}`);
       this.logger.error('Application error', { error });
       return 1;
     }
@@ -138,7 +138,7 @@ describe('CLIApplication', () => {
         args: []
       });
       
-      mockCommandRegistry.execute.mockResolvedValue(undefined);
+      mockCommandRegistry.execute.mockResolvedValue(null);
       
       const exitCode = await app.run(['status']);
       

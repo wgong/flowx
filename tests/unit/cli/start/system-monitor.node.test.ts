@@ -302,7 +302,7 @@ describe('SystemMonitor', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
       
       expect(callback).toHaveBeenCalled();
-      expect(callback.mock.calls[0][0].processes.total).toBe(4);
+      expect((callback.mock.calls[0][0] as any).processes.total).toBe(4);
     });
     
     it('should allow unsubscribing from metrics updates', async () => {

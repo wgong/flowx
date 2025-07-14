@@ -2,7 +2,7 @@
  * E2E tests for the system status command
  */
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
-import { createCommandTestRunner } from '../command-test-base.js';
+import { createCommandTestRunner } from '../utils/command-test-base';
 
 describe('System Status Command E2E', () => {
   let runner;

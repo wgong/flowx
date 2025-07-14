@@ -5,11 +5,11 @@
  * including multi-agent coordination, task distribution, and monitoring.
  */
 
-import { MessageBroker, IMessageBroker } from '../../src/communication/message-broker.js';
-import { MessageBus, MessageBusConfig } from '../../src/communication/message-bus.js';
-import { EventBus } from '../../src/core/event-bus.js';
-import { Logger } from '../../src/core/logger.js';
-import { AgentId } from '../../src/swarm/types.js';
+import { MessageBroker, IMessageBroker } from '../../src/communication/message-broker';
+import { MessageBus, MessageBusConfig } from '../../src/communication/message-bus';
+import { EventBus } from '../../src/core/event-bus';
+import { Logger } from '../../src/core/logger';
+import { AgentId } from '../../src/swarm/types';
 
 interface MockAgent {
   id: string;

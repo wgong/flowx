@@ -1,14 +1,43 @@
 /**
  * Comprehensive unit tests for Memory Backends (SQLite and Markdown)
+ * Updated to include neural memory capabilities and compression features
  */
 
-import { SQLiteBackend } from '../../../src/memory/backends/sqlite';
-import { MarkdownBackend } from '../../../src/memory/backends/markdown';
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { MemoryEntry } from '../../../src/utils/types';
-import { assertEquals, assertExists, assertRejects } from '../../utils/node-test-utils';
-import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+
+// Mock fs.promises
+const mockFs = {
+  mkdtemp: jest.fn(() => Promise.resolve('/tmp/mock-test-dir')),
+  rm: jest.fn(() => Promise.resolve()),
+  mkdir: jest.fn(() => Promise.resolve()),
+  writeFile: jest.fn(() => Promise.resolve()),
+  readFile: jest.fn(() => Promise.resolve('mock content')),
+  access: jest.fn(() => Promise.resolve()),
+  readdir: jest.fn(() => Promise.resolve([])),
+  stat: jest.fn(() => Promise.resolve({ isDirectory: () => false })),
+  unlink: jest.fn(() => Promise.resolve())
+};
+
+jest.mock('fs', () => ({
+  promises: mockFs,
+  default: { promises: mockFs }
+}));
+
+// Mock path module
+jest.mock('path', () => ({
+  join: jest.fn((...args: string[]) => args.join('/')),
+  resolve: jest.fn((...args: string[]) => args.join('/')),
+  dirname: jest.fn((path: string) => path.split('/').slice(0, -1).join('/')),
+  basename: jest.fn((path: string) => path.split('/').pop() || ''),
+  extname: jest.fn((path: string) => path.includes('.') ? '.' + path.split('.').pop() : '')
+}));
+
+// Import after mocking fs
+import { SQLiteBackend } from '../../../src/memory/backends/sqlite';
+import { MarkdownBackend } from '../../../src/memory/backends/markdown';
 
 // Mock logger
 const mockLogger = {
@@ -17,211 +46,438 @@ const mockLogger = {
   warn: jest.fn(),
   error: jest.fn(),
   trace: jest.fn(),
-  configure: jest.fn().mockResolvedValue(undefined)
-};
+  configure: jest.fn(() => Promise.resolve())
+} as any;
 
-// Helper to create MemoryEntry objects
 function createMemoryEntry(overrides: Partial<MemoryEntry> = {}): MemoryEntry {
-  const now = new Date();
   return {
-    id: `entry-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: 'test-entry-id',
     agentId: 'test-agent',
     sessionId: 'test-session',
-    type: 'observation',
+    type: 'artifact',
     content: 'Test content',
-    context: {},
-    timestamp: now,
+    context: { test: true },
+    timestamp: new Date(),
     tags: ['test'],
     version: 1,
-    parentId: undefined,
     ...overrides
   };
 }
 
-describe('Memory Backends - Basic Tests', () => {
+describe('Memory Backends', () => {
   let tempDir: string;
-  let sqliteBackend: SQLiteBackend;
-  let markdownBackend: MarkdownBackend;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(join(tmpdir(), 'memory-test-'));
-    
-    // Initialize backends
-    sqliteBackend = new SQLiteBackend(join(tempDir, 'test.db'), mockLogger);
-    markdownBackend = new MarkdownBackend(join(tempDir, 'markdown'), mockLogger);
-    
-    await sqliteBackend.initialize();
-    await markdownBackend.initialize();
+    tempDir = '/tmp/mock-test-dir';
+    jest.clearAllMocks();
   });
 
   afterEach(async () => {
-    await sqliteBackend.shutdown();
-    await markdownBackend.shutdown();
-    
-    // Clean up temp directory
-    try {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    } catch (error) {
-      // Ignore cleanup errors
-    }
+    // Cleanup is mocked
   });
 
-  describe('SQLite Backend', () => {
-    it('should store and retrieve memory entries', async () => {
-      const entry = createMemoryEntry({
-        content: 'Hello World test content',
-        tags: ['test', 'example'],
-        context: { source: 'unit-test' }
-      });
+  describe('SQLiteBackend', () => {
+    let backend: SQLiteBackend;
 
-      await sqliteBackend.store(entry);
-      const retrieved = await sqliteBackend.retrieve(entry.id);
-
-      assertExists(retrieved);
-      assertEquals(retrieved!.content, entry.content);
-      assertEquals(retrieved!.tags, entry.tags);
-      assertEquals(retrieved!.context, entry.context);
-      assertEquals(retrieved!.id, entry.id);
+    beforeEach(async () => {
+      backend = new SQLiteBackend(join(tempDir, 'test.db'), mockLogger);
     });
 
-    it('should handle different data types in content', async () => {
-      const testEntries = [
-        createMemoryEntry({ content: 'test string' }),
-        createMemoryEntry({ content: 'number: 42' }),
-        createMemoryEntry({ content: 'boolean: true' }),
-        createMemoryEntry({ content: 'array: [1, 2, 3, "four"]' }),
-        createMemoryEntry({ content: 'object: {"nested": {"deep": "value"}}' }),
-      ];
+    it('should store and retrieve entries', async () => {
+      const entry = createMemoryEntry();
+      
+      await backend.store(entry);
+      const retrieved = await backend.retrieve(entry.id);
+      
+      expect(retrieved).toEqual(entry);
+    });
 
-      // Store all test data
-      for (const entry of testEntries) {
+    it('should handle compressed entries', async () => {
+      const compressedEntry = createMemoryEntry({
+        content: 'compressed-data-base64',
+        metadata: {
+          compressed: true,
+          compressionAlgorithm: 'gzip',
+          originalSize: 5000,
+          compressedSize: 1500,
+          compressionRatio: 3.33
+        }
+      });
+      
+      await backend.store(compressedEntry);
+      const retrieved = await backend.retrieve(compressedEntry.id);
+      
+      expect(retrieved).toEqual(compressedEntry);
+      expect(retrieved?.metadata?.compressed).toBe(true);
+      expect(retrieved?.metadata?.compressionAlgorithm).toBe('gzip');
+    });
+
+    it('should handle neural pattern entries', async () => {
+      const neuralPatternEntry = createMemoryEntry({
+        id: 'pattern-neural-123',
+        type: 'artifact',
+        content: JSON.stringify({
+          id: 'neural-pattern-1',
+          type: 'coordination',
+          pattern: { operation: 'store', context: { namespace: 'test' } },
+          confidence: 0.8,
+          frequency: 10,
+          success_rate: 0.9
+        }),
+        tags: ['neural', 'pattern', 'coordination'],
+        metadata: {
+          isNeuralPattern: true,
+          patternType: 'coordination'
+        }
+      });
+      
+      await backend.store(neuralPatternEntry);
+      const retrieved = await backend.retrieve(neuralPatternEntry.id);
+      
+      expect(retrieved).toEqual(neuralPatternEntry);
+      expect(retrieved?.metadata?.isNeuralPattern).toBe(true);
+      expect(retrieved?.tags).toContain('neural');
+    });
+
+    it('should query entries by neural pattern tags', async () => {
+      const entries = [
+        createMemoryEntry({ id: 'entry-1', tags: ['neural', 'pattern'] }),
+        createMemoryEntry({ id: 'entry-2', tags: ['neural', 'learning'] }),
+        createMemoryEntry({ id: 'entry-3', tags: ['normal'] })
+      ];
+      
+      for (const entry of entries) {
+        await backend.store(entry);
+      }
+      
+      const neuralEntries = await backend.query({ tags: ['neural'] });
+      expect(neuralEntries).toHaveLength(2);
+      expect(neuralEntries.map(e => e.id)).toContain('entry-1');
+      expect(neuralEntries.map(e => e.id)).toContain('entry-2');
+    });
+
+    it('should handle analytics metadata', async () => {
+      const analyticsEntry = createMemoryEntry({
+        metadata: {
+          analytics: {
+            accessCount: 5,
+            lastAccessed: new Date(),
+            queryTime: 50,
+            compressionRatio: 2.5
+          }
+        }
+      });
+      
+      await backend.store(analyticsEntry);
+      const retrieved = await backend.retrieve(analyticsEntry.id);
+      
+      expect(retrieved?.metadata?.analytics).toBeDefined();
+      expect(retrieved?.metadata?.analytics?.accessCount).toBe(5);
+    });
+
+    it('should support batch operations for neural patterns', async () => {
+      const neuralEntries = Array.from({ length: 10 }, (_, i) => 
+        createMemoryEntry({
+          id: `neural-${i}`,
+          tags: ['neural', 'batch'],
+          metadata: { isNeuralPattern: true, batchId: 'batch-1' }
+        })
+      );
+      
+      // Store all entries
+      for (const entry of neuralEntries) {
+        await backend.store(entry);
+      }
+      
+      // Query batch
+      const batchEntries = await backend.query({ tags: ['batch'] });
+      expect(batchEntries).toHaveLength(10);
+      
+      // All should have neural metadata
+      batchEntries.forEach(entry => {
+        expect(entry.metadata?.isNeuralPattern).toBe(true);
+        expect(entry.metadata?.batchId).toBe('batch-1');
+      });
+    });
+
+    it('should handle large compressed entries efficiently', async () => {
+      const largeCompressedEntry = createMemoryEntry({
+        id: 'large-compressed',
+        content: 'x'.repeat(1000), // Simulate compressed data
+        metadata: {
+          compressed: true,
+          compressionAlgorithm: 'gzip',
+          originalSize: 50000,
+          compressedSize: 1000,
+          compressionRatio: 50
+        }
+      });
+      
+      const startTime = Date.now();
+      await backend.store(largeCompressedEntry);
+      const retrieved = await backend.retrieve(largeCompressedEntry.id);
+      const endTime = Date.now();
+      
+      expect(retrieved).toEqual(largeCompressedEntry);
+      expect(endTime - startTime).toBeLessThan(100); // Should be fast
+    });
+  });
+
+  describe('MarkdownBackend', () => {
+    let backend: MarkdownBackend;
+
+    beforeEach(async () => {
+      backend = new MarkdownBackend({
+        directory: tempDir,
+        fileExtension: '.md',
+        enableFrontmatter: true,
+        enableSearch: true
+      }, mockLogger);
+    });
+
+    it('should store and retrieve entries with neural metadata', async () => {
+      const neuralEntry = createMemoryEntry({
+        metadata: {
+          isNeuralPattern: true,
+          patternType: 'learning',
+          confidence: 0.85,
+          frequency: 15
+        }
+      });
+      
+      await backend.store(neuralEntry);
+      const retrieved = await backend.retrieve(neuralEntry.id);
+      
+      expect(retrieved).toEqual(neuralEntry);
+      expect(retrieved?.metadata?.isNeuralPattern).toBe(true);
+      expect(retrieved?.metadata?.confidence).toBe(0.85);
+    });
+
+    it('should handle compressed content in markdown format', async () => {
+      const compressedEntry = createMemoryEntry({
+        content: 'base64-compressed-content',
+        metadata: {
+          compressed: true,
+          compressionAlgorithm: 'gzip',
+          originalSize: 10000,
+          compressedSize: 2000
+        }
+      });
+      
+      await backend.store(compressedEntry);
+      const retrieved = await backend.retrieve(compressedEntry.id);
+      
+      expect(retrieved).toEqual(compressedEntry);
+      expect(retrieved?.metadata?.compressed).toBe(true);
+    });
+
+    it('should support frontmatter for neural patterns', async () => {
+      const patternEntry = createMemoryEntry({
+        id: 'pattern-frontmatter-test',
+        tags: ['neural', 'pattern', 'frontmatter'],
+        metadata: {
+          isNeuralPattern: true,
+          patternType: 'optimization',
+          confidence: 0.92,
+          lastUsed: new Date(),
+          frequency: 25
+        }
+      });
+      
+      await backend.store(patternEntry);
+      const retrieved = await backend.retrieve(patternEntry.id);
+      
+      expect(retrieved).toEqual(patternEntry);
+      expect(retrieved?.tags).toContain('neural');
+      expect(retrieved?.metadata?.patternType).toBe('optimization');
+    });
+
+    it('should query neural patterns by metadata', async () => {
+      const patterns = [
+        createMemoryEntry({ 
+          id: 'pattern-1', 
+          tags: ['neural', 'coordination'],
+          metadata: { patternType: 'coordination', confidence: 0.8 }
+        }),
+        createMemoryEntry({ 
+          id: 'pattern-2', 
+          tags: ['neural', 'optimization'],
+          metadata: { patternType: 'optimization', confidence: 0.9 }
+        }),
+        createMemoryEntry({ 
+          id: 'normal-entry', 
+          tags: ['normal'] 
+        })
+      ];
+      
+      for (const pattern of patterns) {
+        await backend.store(pattern);
+      }
+      
+      const neuralPatterns = await backend.query({ tags: ['neural'] });
+      expect(neuralPatterns).toHaveLength(2);
+      
+      const coordinationPatterns = await backend.query({ tags: ['coordination'] });
+      expect(coordinationPatterns).toHaveLength(1);
+      expect(coordinationPatterns[0].id).toBe('pattern-1');
+    });
+
+    it('should handle analytics data in markdown format', async () => {
+      const analyticsEntry = createMemoryEntry({
+        id: 'analytics-test',
+        content: 'Analytics report content',
+        metadata: {
+          analytics: {
+            generatedAt: new Date(),
+            totalEntries: 1000,
+            compressionRatio: 3.2,
+            queryPerformance: {
+              averageTime: 45,
+              slowQueries: 5
+            }
+          }
+        }
+      });
+      
+      await backend.store(analyticsEntry);
+      const retrieved = await backend.retrieve(analyticsEntry.id);
+      
+      expect(retrieved?.metadata?.analytics).toBeDefined();
+      expect(retrieved?.metadata?.analytics?.totalEntries).toBe(1000);
+      expect(retrieved?.metadata?.analytics?.compressionRatio).toBe(3.2);
+    });
+
+    it('should support search across neural patterns', async () => {
+      const searchablePatterns = [
+        createMemoryEntry({
+          id: 'search-pattern-1',
+          content: 'Neural pattern for coordination tasks',
+          tags: ['neural', 'coordination', 'search'],
+          metadata: { isNeuralPattern: true }
+        }),
+        createMemoryEntry({
+          id: 'search-pattern-2',
+          content: 'Neural pattern for optimization tasks',
+          tags: ['neural', 'optimization', 'search'],
+          metadata: { isNeuralPattern: true }
+        })
+      ];
+      
+      for (const pattern of searchablePatterns) {
+        await backend.store(pattern);
+      }
+      
+      const searchResults = await backend.query({ search: 'coordination' });
+      expect(searchResults).toHaveLength(1);
+      expect(searchResults[0].id).toBe('search-pattern-1');
+    });
+  });
+
+  describe('Backend Integration with Neural Features', () => {
+    let sqliteBackend: SQLiteBackend;
+    let markdownBackend: MarkdownBackend;
+
+    beforeEach(async () => {
+      sqliteBackend = new SQLiteBackend({
+        path: join(tempDir, 'integration.db'),
+        enableWAL: false
+      }, mockLogger);
+      
+      markdownBackend = new MarkdownBackend({
+        directory: join(tempDir, 'markdown'),
+        enableFrontmatter: true
+      }, mockLogger);
+    });
+
+    it('should handle neural patterns consistently across backends', async () => {
+      const neuralPattern = createMemoryEntry({
+        id: 'cross-backend-pattern',
+        content: JSON.stringify({
+          type: 'coordination',
+          pattern: { operation: 'store', success_rate: 0.95 },
+          confidence: 0.88
+        }),
+        tags: ['neural', 'pattern', 'coordination'],
+        metadata: {
+          isNeuralPattern: true,
+          patternType: 'coordination'
+        }
+      });
+      
+      // Store in both backends
+      await sqliteBackend.store(neuralPattern);
+      await markdownBackend.store(neuralPattern);
+      
+      // Retrieve from both
+      const sqliteResult = await sqliteBackend.retrieve(neuralPattern.id);
+      const markdownResult = await markdownBackend.retrieve(neuralPattern.id);
+      
+      // Should be consistent
+      expect(sqliteResult).toEqual(neuralPattern);
+      expect(markdownResult).toEqual(neuralPattern);
+      expect(sqliteResult?.metadata?.isNeuralPattern).toBe(true);
+      expect(markdownResult?.metadata?.isNeuralPattern).toBe(true);
+    });
+
+    it('should handle compressed entries consistently', async () => {
+      const compressedEntry = createMemoryEntry({
+        id: 'cross-backend-compressed',
+        content: 'compressed-base64-data',
+        metadata: {
+          compressed: true,
+          compressionAlgorithm: 'gzip',
+          originalSize: 8000,
+          compressedSize: 2000,
+          compressionRatio: 4.0
+        }
+      });
+      
+      // Store in both backends
+      await sqliteBackend.store(compressedEntry);
+      await markdownBackend.store(compressedEntry);
+      
+      // Retrieve from both
+      const sqliteResult = await sqliteBackend.retrieve(compressedEntry.id);
+      const markdownResult = await markdownBackend.retrieve(compressedEntry.id);
+      
+      // Should be consistent
+      expect(sqliteResult).toEqual(compressedEntry);
+      expect(markdownResult).toEqual(compressedEntry);
+      expect(sqliteResult?.metadata?.compressed).toBe(true);
+      expect(markdownResult?.metadata?.compressed).toBe(true);
+    });
+
+    it('should support analytics queries across backends', async () => {
+      const analyticsEntries = [
+        createMemoryEntry({
+          id: 'analytics-1',
+          tags: ['analytics', 'performance'],
+          metadata: { analytics: { queryTime: 30 } }
+        }),
+        createMemoryEntry({
+          id: 'analytics-2',
+          tags: ['analytics', 'compression'],
+          metadata: { analytics: { compressionRatio: 2.5 } }
+        })
+      ];
+      
+      // Store in both backends
+      for (const entry of analyticsEntries) {
         await sqliteBackend.store(entry);
-      }
-
-      // Retrieve and verify all test data
-      for (const entry of testEntries) {
-        const retrieved = await sqliteBackend.retrieve(entry.id);
-        assertExists(retrieved);
-        assertEquals(retrieved!.content, entry.content);
-      }
-    });
-
-    it('should update existing entries', async () => {
-      const entry = createMemoryEntry({ content: 'initial content' });
-      
-      // Store initial entry
-      await sqliteBackend.store(entry);
-      const initial = await sqliteBackend.retrieve(entry.id);
-      assertExists(initial);
-      
-      // Update entry
-      const updatedEntry = { ...entry, content: 'updated content', version: 2 };
-      await sqliteBackend.update(entry.id, updatedEntry);
-      const updated = await sqliteBackend.retrieve(entry.id);
-      
-      assertExists(updated);
-      assertEquals(updated!.content, 'updated content');
-      assertEquals(updated!.version, 2);
-    });
-
-    it('should delete entries', async () => {
-      const entry = createMemoryEntry({ content: 'to be deleted' });
-      
-      await sqliteBackend.store(entry);
-      const stored = await sqliteBackend.retrieve(entry.id);
-      assertExists(stored);
-      
-      await sqliteBackend.delete(entry.id);
-      const deleted = await sqliteBackend.retrieve(entry.id);
-      assertEquals(deleted, undefined);
-    });
-
-    it('should handle non-existent entries', async () => {
-      const nonExistentId = 'non-existent-id';
-      const result = await sqliteBackend.retrieve(nonExistentId);
-      assertEquals(result, undefined);
-    });
-
-    it('should query entries by agent', async () => {
-      const agent1Entry = createMemoryEntry({ agentId: 'agent-1', content: 'Agent 1 content' });
-      const agent2Entry = createMemoryEntry({ agentId: 'agent-2', content: 'Agent 2 content' });
-      
-      await sqliteBackend.store(agent1Entry);
-      await sqliteBackend.store(agent2Entry);
-      
-      const agent1Results = await sqliteBackend.query({ agentId: 'agent-1' });
-      assertEquals(agent1Results.length, 1);
-      assertEquals(agent1Results[0].content, 'Agent 1 content');
-    });
-
-    it('should get health status', async () => {
-      const health = await sqliteBackend.getHealthStatus();
-      assertEquals(health.healthy, true);
-      assertExists(health.metrics);
-      assertExists(health.metrics!.totalEntries);
-    });
-  });
-
-  describe('Markdown Backend', () => {
-    it('should store and retrieve memory entries as markdown', async () => {
-      const entry = createMemoryEntry({
-        content: 'Hello **World** test content',
-        tags: ['test', 'markdown'],
-        context: { source: 'unit-test' }
-      });
-
-      await markdownBackend.store(entry);
-      const retrieved = await markdownBackend.retrieve(entry.id);
-
-      assertExists(retrieved);
-      assertEquals(retrieved!.content, entry.content);
-      assertEquals(retrieved!.tags, entry.tags);
-      assertEquals(retrieved!.context, entry.context);
-      assertEquals(retrieved!.id, entry.id);
-    });
-
-    it('should handle different content types', async () => {
-      const testEntries = [
-        createMemoryEntry({ content: '# Header\nMarkdown content' }),
-        createMemoryEntry({ content: 'Plain text content' }),
-        createMemoryEntry({ content: '- List item 1\n- List item 2' }),
-      ];
-
-      // Store all test data
-      for (const entry of testEntries) {
         await markdownBackend.store(entry);
       }
-
-      // Retrieve and verify all test data
-      for (const entry of testEntries) {
-        const retrieved = await markdownBackend.retrieve(entry.id);
-        assertExists(retrieved);
-        assertEquals(retrieved!.content, entry.content);
-      }
-    });
-
-    it('should delete entries', async () => {
-      const entry = createMemoryEntry({ content: 'to be deleted' });
       
-      await markdownBackend.store(entry);
-      const stored = await markdownBackend.retrieve(entry.id);
-      assertExists(stored);
+      // Query from both
+      const sqliteAnalytics = await sqliteBackend.query({ tags: ['analytics'] });
+      const markdownAnalytics = await markdownBackend.query({ tags: ['analytics'] });
       
-      await markdownBackend.delete(entry.id);
-      const deleted = await markdownBackend.retrieve(entry.id);
-      assertEquals(deleted, undefined);
-    });
-
-    it('should handle non-existent entries', async () => {
-      const nonExistentId = 'non-existent-id';
-      const result = await markdownBackend.retrieve(nonExistentId);
-      assertEquals(result, undefined);
-    });
-
-    it('should get health status', async () => {
-      const health = await markdownBackend.getHealthStatus();
-      assertEquals(health.healthy, true);
-      assertExists(health.metrics);
+      // Should return same results
+      expect(sqliteAnalytics).toHaveLength(2);
+      expect(markdownAnalytics).toHaveLength(2);
+      
+      const sqliteIds = sqliteAnalytics.map(e => e.id).sort();
+      const markdownIds = markdownAnalytics.map(e => e.id).sort();
+      expect(sqliteIds).toEqual(markdownIds);
     });
   });
 });

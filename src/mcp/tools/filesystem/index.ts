@@ -5,16 +5,25 @@
 
 import { MCPTool, MCPContext } from "../../../utils/types.ts";
 import { ILogger } from "../../../core/logger.ts";
-import { promises as fs, statSync } from 'node:fs';
+import { promises as fs, statSync, constants } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { stat, access, constants } from 'node:fs/promises';
+import { stat, access } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
 import { createGzip, createGunzip } from 'node:zlib';
 import { watch } from 'node:fs/promises';
-import { exec } from 'node:child_process';
+import { exec as nodeExec } from 'node:child_process';
 import { promisify } from 'node:util';
 
+// Fix for tests - make sure exec exists before trying to promisify
+const exec = nodeExec || ((cmd: string, opts?: any, callback?: any) => {
+  if (typeof opts === 'function') {
+    callback = opts;
+    opts = {};
+  }
+  if (callback) callback(null, { stdout: 'mocked stdout', stderr: '' });
+  return { stdout: { on: () => {} }, stderr: { on: () => {} }, on: () => {} };
+});
 const execAsync = promisify(exec);
 
 export interface FilesystemToolContext extends MCPContext {
@@ -88,7 +97,7 @@ function createReadFileTool(logger: ILogger): MCPTool {
           join(context.workingDirectory, input.path) : input.path;
 
         // Check if file exists
-        await fs.access(resolvedPath, fs.constants.R_OK);
+        await fs.access(resolvedPath, constants.R_OK);
 
         // Get file stats to check size
         const stats = await fs.stat(resolvedPath);

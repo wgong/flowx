@@ -1,0 +1,451 @@
+/**
+ * Security Utilities Library
+ * Comprehensive security functions for JWT, encryption, audit logging
+ */
+
+import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from 'crypto';
+import { promisify } from 'util';
+import { SignJWT, jwtVerify, importJWK, JWK } from 'jose';
+import { 
+  AuditEvent, 
+  JWTPayload, 
+  JWTOptions, 
+  EncryptionResult, 
+  EncryptionOptions,
+  UnauthorizedError,
+  ValidationError,
+  RateLimitError,
+  SanitizedString 
+} from '../typescript-security/security-types';
+
+const scryptAsync = promisify(scrypt);
+
+/**
+ * JWT Security Utilities
+ */
+export class JWTUtils {
+  private static readonly DEFAULT_OPTIONS: JWTOptions = {
+    algorithm: 'HS256',
+    expiresIn: '1h',
+    issuer: 'flowx-security',
+    audience: 'flowx-api'
+  };
+
+  /**
+   * Generate a secure JWT token
+   */
+  static async generateToken(payload: Partial<JWTPayload>, secret: string, options: Partial<JWTOptions> = {}): Promise<string> {
+    const opts = { ...this.DEFAULT_OPTIONS, ...options };
+    
+    const jwt = new SignJWT({
+      ...payload,
+      iss: opts.issuer,
+      aud: opts.audience,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + this.parseExpiresIn(opts.expiresIn)
+    });
+
+    const secretKey = new TextEncoder().encode(secret);
+    return await jwt.setProtectedHeader({ alg: opts.algorithm }).sign(secretKey);
+  }
+
+  /**
+   * Verify and decode JWT token
+   */
+  static async verifyToken(token: string, secret: string): Promise<JWTPayload> {
+    try {
+      const secretKey = new TextEncoder().encode(secret);
+      const { payload } = await jwtVerify(token, secretKey);
+      
+      return payload as JWTPayload;
+    } catch (error) {
+      throw new UnauthorizedError('Invalid or expired token');
+    }
+  }
+
+  /**
+   * Refresh JWT token
+   */
+  static async refreshToken(token: string, secret: string, options: Partial<JWTOptions> = {}): Promise<string> {
+    const payload = await this.verifyToken(token, secret);
+    
+    // Check if token is close to expiration (within 5 minutes)
+    const now = Math.floor(Date.now() / 1000);
+    const timeToExpiry = payload.exp - now;
+    
+    if (timeToExpiry > 300) { // 5 minutes
+      throw new ValidationError('Token is not eligible for refresh yet');
+    }
+
+    // Generate new token with same payload but new expiration
+    const newPayload = {
+      ...payload,
+      iat: now,
+      exp: undefined // Will be set by generateToken
+    };
+
+    return this.generateToken(newPayload, secret, options);
+  }
+
+  private static parseExpiresIn(expiresIn: string): number {
+    const match = expiresIn.match(/^(\d+)([smhd])$/);
+    if (!match) {
+      throw new ValidationError('Invalid expiresIn format');
+    }
+
+    const [, value, unit] = match;
+    const multipliers = { s: 1, m: 60, h: 3600, d: 86400 };
+    
+    return parseInt(value) * multipliers[unit];
+  }
+}
+
+/**
+ * Encryption Utilities
+ */
+export class EncryptionUtils {
+  private static readonly DEFAULT_OPTIONS: EncryptionOptions = {
+    algorithm: 'aes-256-gcm',
+    keyDerivation: 'scrypt',
+    iterations: 100000
+  };
+
+  /**
+   * Encrypt data with AES-256-GCM
+   */
+  static async encrypt(data: string, password: string, options: Partial<EncryptionOptions> = {}): Promise<EncryptionResult> {
+    const opts = { ...this.DEFAULT_OPTIONS, ...options };
+    
+    const salt = randomBytes(16);
+    const iv = randomBytes(16);
+    
+    // Derive key from password
+    const key = await this.deriveKey(password, salt, opts);
+    
+    // Encrypt data
+    const cipher = crypto.createCipher(opts.algorithm, key);
+    cipher.setAAD(Buffer.from('flowx-security'));
+    
+    let encrypted = cipher.update(data, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    
+    const tag = cipher.getAuthTag();
+    
+    return {
+      encrypted,
+      iv: iv.toString('hex'),
+      tag: tag.toString('hex')
+    };
+  }
+
+  /**
+   * Decrypt data
+   */
+  static async decrypt(encryptedData: EncryptionResult, password: string, options: Partial<EncryptionOptions> = {}): Promise<string> {
+    const opts = { ...this.DEFAULT_OPTIONS, ...options };
+    
+    const salt = Buffer.from(encryptedData.iv, 'hex').slice(0, 16);
+    const iv = Buffer.from(encryptedData.iv, 'hex');
+    const tag = Buffer.from(encryptedData.tag || '', 'hex');
+    
+    // Derive key from password
+    const key = await this.deriveKey(password, salt, opts);
+    
+    // Decrypt data
+    const decipher = crypto.createDecipher(opts.algorithm, key);
+    decipher.setAAD(Buffer.from('flowx-security'));
+    decipher.setAuthTag(tag);
+    
+    let decrypted = decipher.update(encryptedData.encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    
+    return decrypted;
+  }
+
+  /**
+   * Hash password with salt
+   */
+  static async hashPassword(password: string): Promise<string> {
+    const salt = randomBytes(16);
+    const hash = await scryptAsync(password, salt, 64) as Buffer;
+    
+    return salt.toString('hex') + ':' + hash.toString('hex');
+  }
+
+  /**
+   * Verify password against hash
+   */
+  static async verifyPassword(password: string, hash: string): Promise<boolean> {
+    const [saltHex, hashHex] = hash.split(':');
+    const salt = Buffer.from(saltHex, 'hex');
+    const originalHash = Buffer.from(hashHex, 'hex');
+    
+    const derivedHash = await scryptAsync(password, salt, 64) as Buffer;
+    
+    return timingSafeEqual(originalHash, derivedHash);
+  }
+
+  private static async deriveKey(password: string, salt: Buffer, options: EncryptionOptions): Promise<Buffer> {
+    if (options.keyDerivation === 'scrypt') {
+      return await scryptAsync(password, salt, 32) as Buffer;
+    } else {
+      // PBKDF2 fallback
+      return crypto.pbkdf2Sync(password, salt, options.iterations || 100000, 32, 'sha256');
+    }
+  }
+}
+
+/**
+ * Audit Logging Utilities
+ */
+export class AuditLogger {
+  private static logs: AuditEvent[] = [];
+  private static readonly MAX_LOGS = 10000;
+
+  /**
+   * Log security event
+   */
+  static async logEvent(event: AuditEvent): Promise<void> {
+    // Add to in-memory store (in production, use persistent storage)
+    this.logs.push(event);
+    
+    // Rotate logs if too many
+    if (this.logs.length > this.MAX_LOGS) {
+      this.logs = this.logs.slice(-this.MAX_LOGS);
+    }
+
+    // Log to console for development
+    console.log(JSON.stringify({
+      level: 'audit',
+      timestamp: event.timestamp,
+      event
+    }));
+
+    // In production, send to SIEM or logging service
+    await this.sendToSIEM(event);
+  }
+
+  /**
+   * Query audit logs
+   */
+  static queryLogs(filters: Partial<AuditEvent>): AuditEvent[] {
+    return this.logs.filter(log => {
+      return Object.entries(filters).every(([key, value]) => {
+        if (value === undefined) return true;
+        return log[key] === value;
+      });
+    });
+  }
+
+  /**
+   * Get security metrics
+   */
+  static getSecurityMetrics(): SecurityMetrics {
+    const now = Date.now();
+    const oneHourAgo = now - (60 * 60 * 1000);
+    
+    const recentLogs = this.logs.filter(log => 
+      new Date(log.timestamp).getTime() > oneHourAgo
+    );
+
+    const failedLogins = recentLogs.filter(log => 
+      log.action === 'login' && !log.success
+    ).length;
+
+    const successfulLogins = recentLogs.filter(log => 
+      log.action === 'login' && log.success
+    ).length;
+
+    const totalRequests = recentLogs.length;
+    const failedRequests = recentLogs.filter(log => !log.success).length;
+
+    return {
+      totalRequests,
+      failedRequests,
+      successRate: totalRequests > 0 ? (totalRequests - failedRequests) / totalRequests : 1,
+      failedLogins,
+      successfulLogins,
+      uniqueUsers: new Set(recentLogs.map(log => log.userId)).size,
+      topActions: this.getTopActions(recentLogs),
+      suspiciousActivity: this.detectSuspiciousActivity(recentLogs)
+    };
+  }
+
+  private static async sendToSIEM(event: AuditEvent): Promise<void> {
+    // In production, implement SIEM integration
+    // Examples: Splunk, ELK Stack, AWS CloudWatch, etc.
+  }
+
+  private static getTopActions(logs: AuditEvent[]): Array<{ action: string; count: number }> {
+    const actionCounts = logs.reduce((acc, log) => {
+      acc[log.action] = (acc[log.action] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(actionCounts)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10)
+      .map(([action, count]) => ({ action, count }));
+  }
+
+  private static detectSuspiciousActivity(logs: AuditEvent[]): SuspiciousActivity[] {
+    const suspicious: SuspiciousActivity[] = [];
+
+    // Detect multiple failed logins
+    const failedLogins = logs.filter(log => log.action === 'login' && !log.success);
+    const failedByUser = failedLogins.reduce((acc, log) => {
+      acc[log.userId] = (acc[log.userId] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    Object.entries(failedByUser).forEach(([userId, count]) => {
+      if (count >= 5) {
+        suspicious.push({
+          type: 'multiple_failed_logins',
+          userId,
+          count,
+          severity: 'high'
+        });
+      }
+    });
+
+    // Detect unusual IP addresses
+    const ipCounts = logs.reduce((acc, log) => {
+      acc[log.ip] = (acc[log.ip] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    Object.entries(ipCounts).forEach(([ip, count]) => {
+      if (count > 100) { // More than 100 requests from single IP
+        suspicious.push({
+          type: 'high_request_volume',
+          ip,
+          count,
+          severity: 'medium'
+        });
+      }
+    });
+
+    return suspicious;
+  }
+}
+
+/**
+ * Rate Limiting Utilities
+ */
+export class RateLimiter {
+  private static requests: Map<string, number[]> = new Map();
+
+  /**
+   * Check if request is within rate limit
+   */
+  static async checkRateLimit(key: string, maxRequests: number, windowMs: number): Promise<void> {
+    const now = Date.now();
+    const windowStart = now - windowMs;
+
+    // Get existing requests for this key
+    const requests = this.requests.get(key) || [];
+    
+    // Remove old requests outside the window
+    const validRequests = requests.filter(time => time > windowStart);
+    
+    // Check if limit exceeded
+    if (validRequests.length >= maxRequests) {
+      throw new RateLimitError(`Rate limit exceeded: ${maxRequests} requests per ${windowMs}ms`);
+    }
+
+    // Add current request
+    validRequests.push(now);
+    this.requests.set(key, validRequests);
+
+    // Clean up old entries periodically
+    if (Math.random() < 0.01) { // 1% chance
+      this.cleanup();
+    }
+  }
+
+  private static cleanup(): void {
+    const now = Date.now();
+    const oneHourAgo = now - (60 * 60 * 1000);
+
+    for (const [key, requests] of this.requests.entries()) {
+      const validRequests = requests.filter(time => time > oneHourAgo);
+      if (validRequests.length === 0) {
+        this.requests.delete(key);
+      } else {
+        this.requests.set(key, validRequests);
+      }
+    }
+  }
+}
+
+/**
+ * Input Sanitization Utilities
+ */
+export class SanitizationUtils {
+  /**
+   * Sanitize input string
+   */
+  static sanitizeInput(input: string): SanitizedString {
+    return input
+      .replace(/[<>]/g, '') // Basic XSS prevention
+      .replace(/['"]/g, '') // SQL injection prevention
+      .replace(/javascript:/gi, '') // JavaScript protocol prevention
+      .replace(/data:/gi, '') // Data URL prevention
+      .replace(/vbscript:/gi, '') // VBScript prevention
+      .trim()
+      .slice(0, 1000) as SanitizedString; // Prevent DoS via large inputs
+  }
+
+  /**
+   * Validate JWT token from Authorization header
+   */
+  static async validateJWT(authHeader: string): Promise<JWTPayload> {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedError('Missing or invalid Authorization header');
+    }
+
+    const token = authHeader.slice(7); // Remove 'Bearer ' prefix
+    const secret = process.env.JWT_SECRET;
+    
+    if (!secret) {
+      throw new Error('JWT_SECRET environment variable not set');
+    }
+
+    return await JWTUtils.verifyToken(token, secret);
+  }
+
+  /**
+   * Audit log helper
+   */
+  static async auditLog(event: Omit<AuditEvent, 'timestamp'>): Promise<void> {
+    await AuditLogger.logEvent({
+      ...event,
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+// Type definitions
+interface SecurityMetrics {
+  totalRequests: number;
+  failedRequests: number;
+  successRate: number;
+  failedLogins: number;
+  successfulLogins: number;
+  uniqueUsers: number;
+  topActions: Array<{ action: string; count: number }>;
+  suspiciousActivity: SuspiciousActivity[];
+}
+
+interface SuspiciousActivity {
+  type: 'multiple_failed_logins' | 'high_request_volume' | 'unusual_access_pattern';
+  userId?: string;
+  ip?: string;
+  count: number;
+  severity: 'low' | 'medium' | 'high';
+}
+
+// Export helper functions for Lambda
+export const { validateJWT, sanitizeInput, auditLog } = SanitizationUtils;
+export const { checkRateLimit } = RateLimiter; 

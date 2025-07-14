@@ -1,35 +1,97 @@
-import { assertEquals, assertExists, assertStringIncludes } from "@std/assert/mod.ts";
-import { exists } from "@std/fs/mod.ts";
-import { join } from "@std/path/mod.ts";
-import { beforeEach, afterEach, describe, it } from "@std/testing/bdd.ts";
+
+// Mock implementation for Deno.Command
+function mockDenoCommand(command, options = {}) {
+  const { args = [], cwd = process.cwd(), stdout = "piped", stderr = "piped" } = options;
+  
+  return {
+    output: async () => {
+      return new Promise((resolve) => {
+        // Handle both ESM and CommonJS environments
+      const childProcess = typeof require !== 'undefined' ? 
+        require('child_process') : 
+        await import('node:child_process').then(m => m.default);
+        const result = childProcess.spawnSync(command, args, { 
+          cwd: cwd, 
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+        
+        resolve({
+          success: result.status === 0,
+          stdout: Buffer.from(result.stdout || ''),
+          stderr: Buffer.from(result.stderr || '')
+        });
+      });
+    }
+  };
+}
+
+import { expect } from "@jest/globals";
+const { assertEquals, assertExists, assertStringIncludes } = { assertEquals: expect.toBe, assertExists: expect.toBeDefined, assertStringIncludes: expect.toContain };
+import fs from "fs";
+const { exists } = fs.promises;
+import path from "path";
+const { join } = path;
+import { beforeEach, afterEach, describe, it, jest } from "@jest/globals";
+
+// Mock fs/promises for consistent behavior
+// Using centralized mock system for better test isolation
+jest.mock('../../../../tests/helpers/deno-fs-utils.ts');
+
+// Mock child_process
+// Using centralized mock system for better test isolation
+
+// Duplicate mock removed to avoid conflicts
+
+// Mock exists function
+jest.mock('./tests/helpers/deno-fs-utils.ts', () => ({
+  safeChdir: jest.fn().mockResolvedValue(true),
+  safeCwd: jest.fn().mockReturnValue('/mock/cwd'),
+  createTempTestDir: jest.fn().mockResolvedValue('/mock/temp-dir'),
+  safeRemoveDir: jest.fn().mockResolvedValue(true),
+  setupTestDirEnvironment: jest.fn().mockResolvedValue({
+    originalCwd: '/mock/original-cwd',
+    testDir: '/mock/test-dir'
+  }),
+  cleanupTestDirEnvironment: jest.fn().mockResolvedValue(undefined),
+  exists: jest.fn().mockResolvedValue(true)
+}));
+
+// Mock Deno.stat for compatibility
+global.Deno = {
+  stat: jest.fn().mockResolvedValue({ isFile: true })
+};
+import { safeChdir, safeCwd, createTempTestDir, safeRemoveDir, setupTestDirEnvironment, cleanupTestDirEnvironment } from "../../../helpers/deno-fs-utils.ts";
+import { safeFn, tryCatch, withRetry } from "../../../helpers/error-capture.ts";
+import { getTestEnvironmentInfo, shouldSkipTest } from "../../../helpers/test-environment.ts";
 
 describe("Selective Mode Initialization Tests", () => {
   let testDir: string;
   let originalCwd: string;
 
   beforeEach(async () => {
-    originalCwd = Deno.cwd();
-    testDir = await Deno.makeTempDir({ prefix: "claude_flow_selective_test_" });
-    Deno.env.set("PWD", testDir);
-    Deno.chdir(testDir);
+    // Use our helper function for setup but with proper fallbacks
+    // Create a mock test directory that won't actually be used
+    const tmpTestDir = path.join(process.cwd(), 'test-dir-' + Date.now());
+    originalCwd = process.cwd(); // Use current directory as fallback
+    testDir = tmpTestDir;
+    
+    // Create the test directory
+    await fs.promises.mkdir(tmpTestDir, { recursive: true });
   });
 
   afterEach(async () => {
-    Deno.chdir(originalCwd);
-    try {
-      await Deno.remove(testDir, { recursive: true });
-    } catch {
-      // Ignore cleanup errors
-    }
+    // Use our helper function for cleanup
+    await cleanupTestDirEnvironment(originalCwd, testDir);
   });
 
   describe("Standard vs Minimal modes", () => {
     it("should create different content for standard vs minimal", async () => {
       // Create standard initialization
       const standardDir = join(testDir, "standard");
-      await Deno.mkdir(standardDir);
+      await fs.promises.mkdir(standardDir);
 
-      const standardCommand = new Deno.Command("deno", {
+      const standardCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -45,9 +107,9 @@ describe("Selective Mode Initialization Tests", () => {
 
       // Create minimal initialization
       const minimalDir = join(testDir, "minimal");
-      await Deno.mkdir(minimalDir);
+      await fs.promises.mkdir(minimalDir);
 
-      const minimalCommand = new Deno.Command("deno", {
+      const minimalCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -63,14 +125,14 @@ describe("Selective Mode Initialization Tests", () => {
       await minimalCommand.output();
 
       // Compare content sizes
-      const standardClaude = await Deno.readTextFile(join(standardDir, "CLAUDE.md"));
-      const minimalClaude = await Deno.readTextFile(join(minimalDir, "CLAUDE.md"));
+      const standardClaude = await fs.promises.readFile(join(standardDir, "CLAUDE.md"));
+      const minimalClaude = await fs.promises.readFile(join(minimalDir, "CLAUDE.md"));
 
       assertEquals(standardClaude.length > minimalClaude.length, true);
       assertStringIncludes(minimalClaude, "Minimal project configuration");
 
-      const standardMemory = await Deno.readTextFile(join(standardDir, "memory-bank.md"));
-      const minimalMemory = await Deno.readTextFile(join(minimalDir, "memory-bank.md"));
+      const standardMemory = await fs.promises.readFile(join(standardDir, "memory-bank.md"));
+      const minimalMemory = await fs.promises.readFile(join(minimalDir, "memory-bank.md"));
 
       assertEquals(standardMemory.length > minimalMemory.length, true);
       assertStringIncludes(minimalMemory, "Simple memory tracking");
@@ -82,12 +144,12 @@ describe("Selective Mode Initialization Tests", () => {
       
       for (const mode of dirs) {
         const modeDir = join(testDir, mode);
-        await Deno.mkdir(modeDir);
+        await fs.promises.mkdir(modeDir);
 
         const args = ["run", "--allow-all", join(originalCwd, "src/cli/simple-cli.ts"), "init"];
         if (mode === "minimal") args.push("--minimal");
 
-        const command = new Deno.Command("deno", {
+        const command = mockDenoCommand("deno", {
           args,
           cwd: modeDir,
           stdout: "piped",
@@ -123,9 +185,9 @@ describe("Selective Mode Initialization Tests", () => {
     it("should create SPARC-specific files only with --sparc", async () => {
       // Create regular initialization
       const regularDir = join(testDir, "regular");
-      await Deno.mkdir(regularDir);
+      await fs.promises.mkdir(regularDir);
 
-      const regularCommand = new Deno.Command("deno", {
+      const regularCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -141,9 +203,9 @@ describe("Selective Mode Initialization Tests", () => {
 
       // Create SPARC initialization
       const sparcDir = join(testDir, "sparc");
-      await Deno.mkdir(sparcDir);
+      await fs.promises.mkdir(sparcDir);
 
-      const sparcCommand = new Deno.Command("deno", {
+      const sparcCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -168,8 +230,8 @@ describe("Selective Mode Initialization Tests", () => {
       assertExists(await exists(join(sparcDir, ".claude/commands/sparc")));
 
       // Check CLAUDE.md content differences
-      const regularClaude = await Deno.readTextFile(join(regularDir, "CLAUDE.md"));
-      const sparcClaude = await Deno.readTextFile(join(sparcDir, "CLAUDE.md"));
+      const regularClaude = await fs.promises.readFile(join(regularDir, "CLAUDE.md"));
+      const sparcClaude = await fs.promises.readFile(join(sparcDir, "CLAUDE.md"));
 
       assertEquals(regularClaude.includes("SPARC Development Environment"), false);
       assertStringIncludes(sparcClaude, "SPARC Development Environment");
@@ -177,7 +239,7 @@ describe("Selective Mode Initialization Tests", () => {
     });
 
     it("should create appropriate SPARC command structure", async () => {
-      const command = new Deno.Command("deno", {
+      const command = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -216,7 +278,7 @@ describe("Selective Mode Initialization Tests", () => {
 
   describe("Mixed mode combinations", () => {
     it("should handle --sparc --minimal combination correctly", async () => {
-      const command = new Deno.Command("deno", {
+      const command = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -238,21 +300,21 @@ describe("Selective Mode Initialization Tests", () => {
       assertExists(await exists(join(testDir, ".claude/commands/sparc")));
 
       // Should have SPARC-enhanced CLAUDE.md (SPARC overrides minimal for CLAUDE.md)
-      const claudeContent = await Deno.readTextFile(join(testDir, "CLAUDE.md"));
+      const claudeContent = await fs.promises.readFile(join(testDir, "CLAUDE.md"));
       assertStringIncludes(claudeContent, "SPARC Development Environment");
 
       // But memory-bank should be minimal
-      const memoryContent = await Deno.readTextFile(join(testDir, "memory-bank.md"));
+      const memoryContent = await fs.promises.readFile(join(testDir, "memory-bank.md"));
       assertStringIncludes(memoryContent, "Simple memory tracking");
 
       // Coordination should be minimal
-      const coordContent = await Deno.readTextFile(join(testDir, "coordination.md"));
+      const coordContent = await fs.promises.readFile(join(testDir, "coordination.md"));
       assertStringIncludes(coordContent, "Simple coordination tracking");
     });
 
     it("should prioritize SPARC content over minimal for CLAUDE.md", async () => {
       // Create minimal first
-      const minimalCommand = new Deno.Command("deno", {
+      const minimalCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -267,10 +329,10 @@ describe("Selective Mode Initialization Tests", () => {
 
       await minimalCommand.output();
 
-      const minimalClaude = await Deno.readTextFile(join(testDir, "CLAUDE.md"));
+      const minimalClaude = await fs.promises.readFile(join(testDir, "CLAUDE.md"));
 
       // Now initialize with SPARC minimal (force overwrite)
-      const sparcMinimalCommand = new Deno.Command("deno", {
+      const sparcMinimalCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -287,7 +349,7 @@ describe("Selective Mode Initialization Tests", () => {
 
       await sparcMinimalCommand.output();
 
-      const sparcMinimalClaude = await Deno.readTextFile(join(testDir, "CLAUDE.md"));
+      const sparcMinimalClaude = await fs.promises.readFile(join(testDir, "CLAUDE.md"));
 
       // SPARC version should be different from minimal-only
       assertEquals(minimalClaude === sparcMinimalClaude, false);
@@ -299,7 +361,7 @@ describe("Selective Mode Initialization Tests", () => {
   describe("Progressive initialization", () => {
     it("should support upgrading from minimal to full", async () => {
       // Start with minimal
-      const minimalCommand = new Deno.Command("deno", {
+      const minimalCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -314,11 +376,11 @@ describe("Selective Mode Initialization Tests", () => {
 
       await minimalCommand.output();
 
-      const minimalClaude = await Deno.readTextFile(join(testDir, "CLAUDE.md"));
-      const minimalMemory = await Deno.readTextFile(join(testDir, "memory-bank.md"));
+      const minimalClaude = await fs.promises.readFile(join(testDir, "CLAUDE.md"));
+      const minimalMemory = await fs.promises.readFile(join(testDir, "memory-bank.md"));
 
       // Upgrade to full with force
-      const fullCommand = new Deno.Command("deno", {
+      const fullCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -333,8 +395,8 @@ describe("Selective Mode Initialization Tests", () => {
 
       await fullCommand.output();
 
-      const fullClaude = await Deno.readTextFile(join(testDir, "CLAUDE.md"));
-      const fullMemory = await Deno.readTextFile(join(testDir, "memory-bank.md"));
+      const fullClaude = await fs.promises.readFile(join(testDir, "CLAUDE.md"));
+      const fullMemory = await fs.promises.readFile(join(testDir, "memory-bank.md"));
 
       // Should be different and longer
       assertEquals(minimalClaude === fullClaude, false);
@@ -345,7 +407,7 @@ describe("Selective Mode Initialization Tests", () => {
 
     it("should support adding SPARC to existing project", async () => {
       // Start with regular init
-      const regularCommand = new Deno.Command("deno", {
+      const regularCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -364,7 +426,7 @@ describe("Selective Mode Initialization Tests", () => {
       assertEquals(await exists(join(testDir, ".roomodes")), false);
 
       // Add SPARC with force
-      const sparcCommand = new Deno.Command("deno", {
+      const sparcCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -386,14 +448,14 @@ describe("Selective Mode Initialization Tests", () => {
       assertExists(await exists(join(testDir, ".claude/commands/sparc")));
 
       // CLAUDE.md should be SPARC-enhanced
-      const claudeContent = await Deno.readTextFile(join(testDir, "CLAUDE.md"));
+      const claudeContent = await fs.promises.readFile(join(testDir, "CLAUDE.md"));
       assertStringIncludes(claudeContent, "SPARC Development Environment");
     });
   });
 
   describe("Mode-specific file validation", () => {
     it("should validate minimal mode file sizes", async () => {
-      const command = new Deno.Command("deno", {
+      const command = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -409,9 +471,9 @@ describe("Selective Mode Initialization Tests", () => {
       await command.output();
 
       // Check that minimal files are actually smaller
-      const claudeContent = await Deno.readTextFile(join(testDir, "CLAUDE.md"));
-      const memoryContent = await Deno.readTextFile(join(testDir, "memory-bank.md"));
-      const coordContent = await Deno.readTextFile(join(testDir, "coordination.md"));
+      const claudeContent = await fs.promises.readFile(join(testDir, "CLAUDE.md"));
+      const memoryContent = await fs.promises.readFile(join(testDir, "memory-bank.md"));
+      const coordContent = await fs.promises.readFile(join(testDir, "coordination.md"));
 
       // Minimal files should be under reasonable size limits
       assertEquals(claudeContent.length < 5000, true); // Should be much smaller than full
@@ -425,7 +487,7 @@ describe("Selective Mode Initialization Tests", () => {
     });
 
     it("should validate SPARC mode file completeness", async () => {
-      const command = new Deno.Command("deno", {
+      const command = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -441,7 +503,7 @@ describe("Selective Mode Initialization Tests", () => {
       await command.output();
 
       // Check SPARC file contents
-      const claudeContent = await Deno.readTextFile(join(testDir, "CLAUDE.md"));
+      const claudeContent = await fs.promises.readFile(join(testDir, "CLAUDE.md"));
       
       // Should include all SPARC sections
       const requiredSections = [
@@ -462,7 +524,7 @@ describe("Selective Mode Initialization Tests", () => {
 
       // Check .roomodes content
       if (await exists(join(testDir, ".roomodes"))) {
-        const roomodesContent = await Deno.readTextFile(join(testDir, ".roomodes"));
+        const roomodesContent = await fs.promises.readFile(join(testDir, ".roomodes"));
         const roomodesData = JSON.parse(roomodesContent);
         
         assertEquals(typeof roomodesData.modes, "object");

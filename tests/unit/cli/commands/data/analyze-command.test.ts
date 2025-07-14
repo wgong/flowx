@@ -89,7 +89,7 @@ describe('Analyze Command', () => {
       
       expect(analyzeCommand).toBeDefined();
       expect(analyzeCommand.name).toBe('analyze');
-      expect(analyzeCommand.description).toContain('Analyze');
+      expect(analyzeCommand.description).toContain('Comprehensive data analysis');
       expect(analyzeCommand.options).toBeDefined();
       expect(analyzeCommand.handler).toBeDefined();
     });

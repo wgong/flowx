@@ -69,23 +69,24 @@ describe('Helpers', () => {
   });
 
   describe('delay', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
     it('should resolve after specified time', async () => {
-      const time = new FakeTime();
-      
       const promise = delay(1000);
-      await time.tickAsync(1000);
-      
+      jest.advanceTimersByTime(1000);
       await promise; // Should not throw
-      
-      time.restore();
     });
 
     it('should work with zero delay', async () => {
-      const start = Date.now();
-      await delay(0);
-      const elapsed = Date.now() - start;
-      
-      assertEquals(elapsed < 10, true);
+      const promise = delay(0);
+      jest.advanceTimersByTime(0);
+      await promise; // Should resolve immediately
     });
   });
 

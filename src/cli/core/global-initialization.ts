@@ -3,10 +3,13 @@
  * Streamlined service initialization with lazy loading and error recovery
  */
 
-import { IEventBus, ILogger } from '../../utils/types.ts';
-import { EventBus } from '../../core/event-bus.ts';
+import { ILogger } from '../../utils/types.ts';
+import { EventBus, IEventBus } from '../../core/event-bus.ts';
 import { Logger } from '../../core/logger.ts';
 import { PersistenceManager } from '../../core/persistence.ts';
+import { SwarmCoordinator } from '../../swarm/coordinator.ts';
+import { TaskExecutionEngine } from '../../coordination/task-execution-engine.ts';
+import { AgentProcessManager } from '../../agents/agent-process-manager.ts';
 // Remove interface import that gets stripped in Node.js strip-only mode
 // import { MemoryConfig } from '../../utils/types.ts';
 import { printInfo, printError, printSuccess } from './output-formatter.ts';
@@ -73,8 +76,11 @@ export interface GlobalServices {
   initialized: boolean;
 }
 
-// Global singleton instances
+// Global service instances
 let globalServices: GlobalServices | null = null;
+let globalSwarmCoordinator: SwarmCoordinator | null = null;
+let globalTaskEngine: TaskExecutionEngine | null = null;
+let globalAgentProcessManager: AgentProcessManager | null = null;
 let initializationPromise: Promise<GlobalServices> | null = null;
 
 /**
@@ -196,18 +202,26 @@ async function initializeServicesInternal(
 }
 
 /**
- * Create fast in-memory persistence manager
+ * Create persistence manager with proper database connectivity
  */
 function createFastPersistence(): FastPersistenceManager {
-  // Use the actual PersistenceManager instead of in-memory Map
-  const persistenceManager = new PersistenceManager('./.claude-flow');
+  // Use a consistent directory path for database files - this is critical for persistence
+  const dbPath = process.env.CLAUDE_FLOW_DATA_PATH || './.claude-flow';
+  // Create a singleton PersistenceManager to ensure shared state across invocations
+  const persistenceManager = new PersistenceManager(dbPath);
   
   return {
     initialized: false,
     
     async initialize() {
-      await persistenceManager.initialize();
-      this.initialized = true;
+      try {
+        await persistenceManager.initialize();
+        this.initialized = true;
+        console.log(`Persistence initialized successfully at ${dbPath}`);
+      } catch (error) {
+        console.error('Failed to initialize persistence manager:', error);
+        throw error;
+      }
     },
 
     async store(key: string, value: any): Promise<void> {
@@ -440,6 +454,63 @@ export async function getLogger(): Promise<ILogger> {
 export async function getEventBus(): Promise<IEventBus> {
   const services = await getGlobalServices();
   return services.eventBus;
+}
+
+export async function getSwarmCoordinator(): Promise<SwarmCoordinator> {
+  if (!globalSwarmCoordinator) {
+    globalSwarmCoordinator = new SwarmCoordinator({
+      maxAgents: 10,
+      coordinationStrategy: {
+        name: 'hybrid',
+        description: 'Hybrid coordination strategy',
+        agentSelection: 'round-robin',
+        taskScheduling: 'fifo',
+        loadBalancing: 'centralized',
+        faultTolerance: 'retry',
+        communication: 'direct'
+      }
+    });
+    await globalSwarmCoordinator.initialize();
+  }
+  return globalSwarmCoordinator;
+}
+
+export async function getTaskEngine(): Promise<TaskExecutionEngine> {
+  if (!globalTaskEngine) {
+    const logger = await getLogger();
+    const eventBus = await getEventBus();
+    globalTaskEngine = new TaskExecutionEngine({
+      maxConcurrentTasks: 10,
+      defaultTimeout: 300000,
+      retryAttempts: 3,
+      retryBackoffBase: 1000,
+      retryBackoffMax: 30000,
+      resourceLimits: {
+        memory: 1024 * 1024 * 1024, // 1GB
+        cpu: 80, // 80%
+        disk: 10 * 1024 * 1024 * 1024 // 10GB
+      },
+      enableCircuitBreaker: true,
+      enableResourceMonitoring: true,
+      enableProcessPooling: true,
+      enableBackgroundExecution: true,
+      enablePersistence: true,
+      killTimeout: 30000,
+      logPath: './logs',
+      cleanupInterval: 60000,
+      healthCheckInterval: 30000
+    }, logger, eventBus);
+    await globalTaskEngine.initialize();
+  }
+  return globalTaskEngine;
+}
+
+export async function getAgentProcessManager(): Promise<AgentProcessManager> {
+  if (!globalAgentProcessManager) {
+    const logger = await getLogger();
+    globalAgentProcessManager = new AgentProcessManager(logger);
+  }
+  return globalAgentProcessManager;
 }
 
 /**

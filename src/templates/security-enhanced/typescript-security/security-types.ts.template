@@ -1,0 +1,282 @@
+/**
+ * TypeScript Security Types and Patterns
+ * Provides type-safe security patterns and utilities
+ */
+
+// Base security types
+export interface SecureRequest<T = any> {
+  readonly data: T;
+  readonly userId: string;
+  readonly permissions: readonly string[];
+  readonly requestId: string;
+  readonly timestamp: number;
+  readonly clientIp: string;
+  readonly userAgent?: string;
+}
+
+export interface AuditEvent {
+  readonly userId: string;
+  readonly action: string;
+  readonly resource: string;
+  readonly timestamp: string;
+  readonly ip: string;
+  readonly userAgent?: string;
+  readonly requestId: string;
+  readonly success: boolean;
+  readonly error?: string;
+  readonly metadata?: Record<string, any>;
+}
+
+export interface SecurityContext {
+  readonly user: User;
+  readonly permissions: readonly string[];
+  readonly sessionId: string;
+  readonly expiresAt: number;
+  readonly roles: readonly string[];
+}
+
+export interface User {
+  readonly id: string;
+  readonly email: string;
+  readonly roles: readonly string[];
+  readonly permissions: readonly string[];
+  readonly lastLogin: Date;
+  readonly isActive: boolean;
+}
+
+// Type-safe input validation
+export type ValidatedInput<T> = {
+  readonly [K in keyof T]: T[K] extends string 
+    ? SanitizedString 
+    : T[K] extends number 
+    ? ValidatedNumber 
+    : T[K] extends boolean
+    ? ValidatedBoolean
+    : T[K] extends Date
+    ? ValidatedDate
+    : T[K];
+};
+
+export type SanitizedString = string & { __sanitized: true };
+export type ValidatedNumber = number & { __validated: true };
+export type ValidatedBoolean = boolean & { __validated: true };
+export type ValidatedDate = Date & { __validated: true };
+
+// Security decorators
+export function RequireAuth(permissions: string[] = []) {
+  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+    const originalMethod = descriptor.value;
+    descriptor.value = async function (...args: any[]) {
+      const [request] = args;
+      
+      if (!request.userId) {
+        throw new UnauthorizedError('Authentication required');
+      }
+      
+      if (permissions.length > 0 && !hasPermissions(request.permissions, permissions)) {
+        throw new ForbiddenError('Insufficient permissions');
+      }
+      
+      return originalMethod.apply(this, args);
+    };
+    return descriptor;
+  };
+}
+
+export function AuditLog(action: string, resource?: string) {
+  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+    const originalMethod = descriptor.value;
+    descriptor.value = async function (...args: any[]) {
+      const [request] = args;
+      const auditEvent: AuditEvent = {
+        userId: request.userId || 'anonymous',
+        action,
+        resource: resource || propertyKey,
+        timestamp: new Date().toISOString(),
+        ip: request.clientIp,
+        userAgent: request.userAgent,
+        requestId: request.requestId,
+        success: true
+      };
+      
+      try {
+        const result = await originalMethod.apply(this, args);
+        await logAuditEvent(auditEvent);
+        return result;
+      } catch (error) {
+        await logAuditEvent({
+          ...auditEvent,
+          success: false,
+          error: error.message
+        });
+        throw error;
+      }
+    };
+    return descriptor;
+  };
+}
+
+export function RateLimit(maxRequests: number, windowMs: number) {
+  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+    const originalMethod = descriptor.value;
+    descriptor.value = async function (...args: any[]) {
+      const [request] = args;
+      
+      await checkRateLimit(request.clientIp, maxRequests, windowMs);
+      
+      return originalMethod.apply(this, args);
+    };
+    return descriptor;
+  };
+}
+
+export function ValidateInput<T>(schema: ValidationSchema<T>) {
+  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+    const originalMethod = descriptor.value;
+    descriptor.value = async function (...args: any[]) {
+      const [request] = args;
+      
+      const validatedData = await validateAndSanitize(request.data, schema);
+      const validatedRequest = {
+        ...request,
+        data: validatedData
+      };
+      
+      return originalMethod.apply(this, [validatedRequest, ...args.slice(1)]);
+    };
+    return descriptor;
+  };
+}
+
+// Security error types
+export class SecurityError extends Error {
+  constructor(message: string, public statusCode: number = 500) {
+    super(message);
+    this.name = 'SecurityError';
+  }
+}
+
+export class UnauthorizedError extends SecurityError {
+  constructor(message: string = 'Unauthorized') {
+    super(message, 401);
+    this.name = 'UnauthorizedError';
+  }
+}
+
+export class ForbiddenError extends SecurityError {
+  constructor(message: string = 'Forbidden') {
+    super(message, 403);
+    this.name = 'ForbiddenError';
+  }
+}
+
+export class ValidationError extends SecurityError {
+  constructor(message: string = 'Validation failed') {
+    super(message, 400);
+    this.name = 'ValidationError';
+  }
+}
+
+export class RateLimitError extends SecurityError {
+  constructor(message: string = 'Rate limit exceeded') {
+    super(message, 429);
+    this.name = 'RateLimitError';
+  }
+}
+
+// Validation schema types
+export interface ValidationSchema<T> {
+  [K in keyof T]: FieldValidator<T[K]>;
+}
+
+export interface FieldValidator<T> {
+  type: 'string' | 'number' | 'boolean' | 'date' | 'array' | 'object';
+  required?: boolean;
+  min?: number;
+  max?: number;
+  pattern?: RegExp;
+  enum?: readonly T[];
+  sanitize?: boolean;
+  custom?: (value: T) => boolean;
+}
+
+// Utility functions
+export function hasPermissions(userPermissions: readonly string[], requiredPermissions: string[]): boolean {
+  return requiredPermissions.every(perm => userPermissions.includes(perm));
+}
+
+export function sanitizeString(input: string): SanitizedString {
+  return input
+    .replace(/[<>]/g, '') // Basic XSS prevention
+    .replace(/['"]/g, '') // SQL injection prevention
+    .replace(/javascript:/gi, '') // JavaScript protocol prevention
+    .replace(/data:/gi, '') // Data URL prevention
+    .trim()
+    .slice(0, 1000) as SanitizedString; // Prevent DoS via large inputs
+}
+
+export function validateNumber(input: any): ValidatedNumber {
+  const num = Number(input);
+  if (isNaN(num) || !isFinite(num)) {
+    throw new ValidationError('Invalid number');
+  }
+  return num as ValidatedNumber;
+}
+
+export function validateBoolean(input: any): ValidatedBoolean {
+  if (typeof input === 'boolean') {
+    return input as ValidatedBoolean;
+  }
+  if (input === 'true' || input === '1') {
+    return true as ValidatedBoolean;
+  }
+  if (input === 'false' || input === '0') {
+    return false as ValidatedBoolean;
+  }
+  throw new ValidationError('Invalid boolean');
+}
+
+export function validateDate(input: any): ValidatedDate {
+  const date = new Date(input);
+  if (isNaN(date.getTime())) {
+    throw new ValidationError('Invalid date');
+  }
+  return date as ValidatedDate;
+}
+
+// Security utility functions (to be implemented)
+declare function logAuditEvent(event: AuditEvent): Promise<void>;
+declare function checkRateLimit(ip: string, maxRequests: number, windowMs: number): Promise<void>;
+declare function validateAndSanitize<T>(data: any, schema: ValidationSchema<T>): Promise<ValidatedInput<T>>;
+
+// JWT types
+export interface JWTPayload {
+  sub: string;
+  email: string;
+  roles: string[];
+  permissions: string[];
+  iat: number;
+  exp: number;
+  iss: string;
+  aud: string;
+}
+
+export interface JWTOptions {
+  algorithm: 'HS256' | 'RS256' | 'ES256';
+  expiresIn: string;
+  issuer: string;
+  audience: string;
+}
+
+// Encryption types
+export interface EncryptionResult {
+  encrypted: string;
+  iv: string;
+  tag?: string;
+}
+
+export interface EncryptionOptions {
+  algorithm: 'aes-256-gcm' | 'aes-256-cbc';
+  keyDerivation: 'pbkdf2' | 'scrypt';
+  iterations?: number;
+} 

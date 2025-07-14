@@ -10,8 +10,8 @@ describe('EventBus', () => {
   let singletonInstance: EventBus;
   
   beforeEach(() => {
-    // Get a new instance for isolation in tests
-    eventBus = new EventBus();
+    // Get the singleton instance for tests
+    eventBus = EventBus.getInstance();
     
     // Save the singleton instance to restore later
     singletonInstance = EventBus.getInstance();
@@ -189,23 +189,29 @@ describe('EventBus', () => {
     // Set up a promise that will resolve when the event is emitted
     const waitPromise = eventBus.waitFor('async-test-event');
     
-    // Emit the event after a short delay
+    // Emit the event after a short delay using fake timers
     setTimeout(() => {
       eventBus.emit('async-test-event', { data: 'async-data' });
     }, 100);
     
+    // Advance timers to trigger the setTimeout
+    jest.advanceTimersByTime(100);
+    
     // Wait for the event and check the result
     const result = await waitPromise;
     expect(result).toEqual({ data: 'async-data' });
-  }, 1000); // Increase timeout for this test
+  });
   
   test('should timeout when waiting for events that do not occur', async () => {
     // Set up a promise that should timeout
     const waitPromise = eventBus.waitFor('timeout-test-event', 200);
     
+    // Advance timers to trigger the timeout
+    jest.advanceTimersByTime(200);
+    
     // Expect it to reject with a timeout error
     await expect(waitPromise).rejects.toThrow('Timeout waiting for event');
-  }, 1000); // Increase timeout for this test
+  });
 
   test('should support filtered event listeners', () => {
     const handler = jest.fn();

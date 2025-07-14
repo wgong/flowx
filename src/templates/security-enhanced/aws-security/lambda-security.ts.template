@@ -1,0 +1,158 @@
+import { Context, APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import { validateJWT, sanitizeInput, auditLog } from './security-utils';
+
+/**
+ * Secure Lambda Handler Template
+ * Includes built-in security features:
+ * - JWT validation
+ * - Input sanitization
+ * - Security headers
+ * - Audit logging
+ * - Error handling without information leakage
+ */
+
+export const secureHandler = async (
+  event: APIGatewayProxyEvent,
+  context: Context
+): Promise<APIGatewayProxyResult> => {
+  
+  // Security headers - applied to all responses
+  const securityHeaders = {
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'X-XSS-Protection': '1; mode=block',
+    'Content-Security-Policy': "default-src 'self'",
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'geolocation=(), microphone=(), camera=()',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
+  };
+
+  // CORS headers (configure as needed)
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGINS || '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Amz-Date, X-Api-Key, X-Amz-Security-Token'
+  };
+
+  const allHeaders = { ...securityHeaders, ...corsHeaders };
+
+  try {
+    // Handle preflight requests
+    if (event.httpMethod === 'OPTIONS') {
+      return {
+        statusCode: 200,
+        headers: allHeaders,
+        body: ''
+      };
+    }
+
+    // Rate limiting check (implement based on your needs)
+    const clientIp = event.requestContext.identity.sourceIp;
+    await checkRateLimit(clientIp);
+
+    // JWT validation (skip for public endpoints)
+    let user = null;
+    if (event.headers.Authorization) {
+      user = await validateJWT(event.headers.Authorization);
+    }
+
+    // Input sanitization and validation
+    const sanitizedBody = event.body ? sanitizeInput(event.body) : null;
+    const sanitizedQueryParams = sanitizeQueryParams(event.queryStringParameters);
+    const sanitizedPathParams = sanitizePathParams(event.pathParameters);
+
+    // Audit logging
+    await auditLog({
+      userId: user?.sub || 'anonymous',
+      action: event.httpMethod,
+      resource: event.path,
+      ip: clientIp,
+      userAgent: event.headers['User-Agent'],
+      timestamp: new Date().toISOString(),
+      requestId: context.awsRequestId,
+      success: true
+    });
+
+    // Your business logic here
+    const result = await processRequest({
+      body: sanitizedBody,
+      queryParams: sanitizedQueryParams,
+      pathParams: sanitizedPathParams,
+      user,
+      context
+    });
+    
+    return {
+      statusCode: 200,
+      headers: allHeaders,
+      body: JSON.stringify(result)
+    };
+    
+  } catch (error) {
+    // Audit failed request
+    await auditLog({
+      userId: 'unknown',
+      action: event.httpMethod,
+      resource: event.path,
+      ip: event.requestContext.identity.sourceIp,
+      userAgent: event.headers['User-Agent'],
+      timestamp: new Date().toISOString(),
+      requestId: context.awsRequestId,
+      success: false,
+      error: error.message
+    });
+
+    // Secure error handling - no sensitive data exposure
+    const statusCode = error.statusCode || 500;
+    const errorResponse = {
+      error: 'Request failed',
+      requestId: context.awsRequestId,
+      timestamp: new Date().toISOString()
+    };
+
+    // Log detailed error for debugging (not returned to client)
+    console.error('Lambda error:', {
+      error: error.message,
+      stack: error.stack,
+      requestId: context.awsRequestId,
+      event: JSON.stringify(event)
+    });
+
+    return {
+      statusCode,
+      headers: allHeaders,
+      body: JSON.stringify(errorResponse)
+    };
+  }
+};
+
+// Helper functions
+async function checkRateLimit(ip: string): Promise<void> {
+  // Implement rate limiting logic
+  // Could use DynamoDB, Redis, or AWS API Gateway throttling
+}
+
+function sanitizeQueryParams(params: any): any {
+  if (!params) return {};
+  const sanitized = {};
+  for (const [key, value] of Object.entries(params)) {
+    sanitized[key] = sanitizeInput(value as string);
+  }
+  return sanitized;
+}
+
+function sanitizePathParams(params: any): any {
+  if (!params) return {};
+  const sanitized = {};
+  for (const [key, value] of Object.entries(params)) {
+    sanitized[key] = sanitizeInput(value as string);
+  }
+  return sanitized;
+}
+
+async function processRequest(request: any): Promise<any> {
+  // Your business logic implementation
+  // This is where you'd implement your actual functionality
+  return { message: 'Success', data: request };
+} 

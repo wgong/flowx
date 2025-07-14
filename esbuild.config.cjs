@@ -9,13 +9,25 @@ const fixImportExtensionsPlugin = {
     build.onLoad({ filter: /\.ts$/ }, async (args) => {
       const contents = await fs.promises.readFile(args.path, 'utf8');
       
-      // Replace .ts imports with .js imports
-      const fixedContents = contents.replace(
+      // Replace .ts imports with .js imports (static imports)
+      let fixedContents = contents.replace(
         /from\s+['"]([^'"]+)\.ts['"]/g,
         'from "$1.js"'
       ).replace(
         /import\s+['"]([^'"]+)\.ts['"]/g,
         'import "$1.js"'
+      );
+      
+      // Replace .ts imports with .js imports (dynamic imports)
+      fixedContents = fixedContents.replace(
+        /import\s*\(\s*['"]([^'"]+)\.ts['"]\s*\)/g,
+        'import("$1.js")'
+      );
+      
+      // Replace export * from .ts imports
+      fixedContents = fixedContents.replace(
+        /export\s+\*\s+from\s+['"]([^'"]+)\.ts['"]/g,
+        'export * from "$1.js"'
       );
       
       return {
@@ -363,6 +375,49 @@ async function copyStaticFiles() {
       bundle: false,
       platform: 'node',
       outdir: 'dist/coordination',
+      format: 'esm',
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      banner: {
+        js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
+      }
+    });
+    
+    // Swarm modules
+    await build({
+      entryPoints: [
+        'src/swarm/index.ts',
+        'src/swarm/coordinator.ts',
+        'src/swarm/executor.ts',
+        'src/swarm/types.ts',
+        'src/swarm/memory.ts',
+        'src/swarm/prompt-copier.ts',
+        'src/swarm/prompt-utils.ts',
+        'src/swarm/prompt-manager.ts',
+        'src/swarm/prompt-cli.ts',
+        'src/swarm/claude-flow-executor.ts',
+        'src/swarm/flowx-executor.ts',
+        'src/swarm/sparc-executor.ts'
+      ],
+      bundle: false,
+      platform: 'node',
+      outdir: 'dist/swarm',
+      format: 'esm',
+      plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
+      banner: {
+        js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
+      }
+    });
+    
+    // Swarm strategies
+    await build({
+      entryPoints: [
+        'src/swarm/strategies/base.ts',
+        'src/swarm/strategies/auto.ts',
+        'src/swarm/strategies/research.ts'
+      ],
+      bundle: false,
+      platform: 'node',
+      outdir: 'dist/swarm/strategies',
       format: 'esm',
       plugins: [fixImportExtensionsPlugin, stripNpmPrefixPlugin, excludeNativeModulesPlugin, makeAllPackagesExternalPlugin],
       banner: {

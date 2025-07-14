@@ -72,6 +72,10 @@ describe('Test Infrastructure', () => {
   });
 
   describe('FakeTime', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+    
     it('should mock time correctly', () => {
       const startTime = 1000000;
       const time = new FakeTime(startTime);
@@ -87,16 +91,21 @@ describe('Test Infrastructure', () => {
     it('should support async tick', async () => {
       const time = new FakeTime(0);
       
+      const initialTime = time.now();
       time.tick(1000);
       await time.tickAsync(2000);
       
-      assertEquals(time.now(), 3000);
+      assertEquals(time.now(), initialTime + 3000);
       
       time.restore();
     });
   });
 
   describe('Utility Functions', () => {
+    beforeEach(() => {
+      jest.useRealTimers();
+    });
+    
     it('should create deferred promises', async () => {
       const deferred = createDeferred<string>();
       
@@ -108,6 +117,9 @@ describe('Test Infrastructure', () => {
     });
 
     it('should wait for conditions', async () => {
+      // Ensure real timers for this test
+      jest.useRealTimers();
+      
       let counter = 0;
       const condition = () => {
         counter++;

@@ -332,7 +332,7 @@ describe('Swarm Memory', () => {
     it('should handle invalid JSON when loading', async () => {
       // Create a special version of SwarmMemory with a custom load method
       class TestSwarmMemory extends SwarmMemory {
-        async load(): Promise<boolean> {
+        override async load(): Promise<boolean> {
           // Always simulate invalid JSON for this test
           return false;
         }
@@ -350,7 +350,7 @@ describe('Swarm Memory', () => {
     it('should handle missing file when loading', async () => {
       // Create a special version of SwarmMemory with a custom load method
       class TestSwarmMemory extends SwarmMemory {
-        async load(): Promise<boolean> {
+        override async load(): Promise<boolean> {
           // Always simulate file not found for this test
           return false;
         }

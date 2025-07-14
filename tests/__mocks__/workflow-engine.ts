@@ -66,7 +66,7 @@ export class WorkflowEngine {
         return yaml.load(content);
       }
     } catch (error) {
-      throw new Error(`Failed to load workflow file: ${error.message}`);
+      throw new Error(`Failed to load workflow file: ${(error as Error).message}`);
     }
   }
 

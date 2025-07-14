@@ -5,7 +5,7 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 
 // Mock dependencies
-jest.mock('../../../../src/cli/core/output-formatter', () => ({
+jest.mock('../../../../../src/cli/core/output-formatter', () => ({
   printSuccess: jest.fn(),
   printError: jest.fn(),
   printInfo: jest.fn(),
@@ -13,7 +13,7 @@ jest.mock('../../../../src/cli/core/output-formatter', () => ({
   formatTable: jest.fn()
 }));
 
-jest.mock('../../../../src/cli/core/global-initialization', () => ({
+jest.mock('../../../../../src/cli/core/global-initialization', () => ({
   getLogger: jest.fn(),
   getOrchestrator: jest.fn(),
   getMemoryManager: jest.fn(),
@@ -21,6 +21,11 @@ jest.mock('../../../../src/cli/core/global-initialization', () => ({
   getTaskEngine: jest.fn(),
   getMCPServer: jest.fn()
 }));
+
+// Mock process.exit to prevent tests from exiting
+const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+  throw new Error('process.exit called');
+});
 
 describe('Health Command', () => {
   let mockOutputFormatter: any;
@@ -36,8 +41,8 @@ describe('Health Command', () => {
     jest.clearAllMocks();
     
     // Get mocked modules
-    mockOutputFormatter = require('../../../../src/cli/core/output-formatter');
-    mockGlobalInit = require('../../../../src/cli/core/global-initialization');
+    mockOutputFormatter = require('../../../../../src/cli/core/output-formatter');
+    mockGlobalInit = require('../../../../../src/cli/core/global-initialization');
     
     // Setup mock instances
     mockLogger = {
@@ -132,7 +137,7 @@ describe('Health Command', () => {
         totalRequests: 150
       });
       
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       await healthCommand.handler({
         args: [],
@@ -158,7 +163,7 @@ describe('Health Command', () => {
         error: 'Memory bank corruption detected'
       });
       
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       await healthCommand.handler({
         args: [],
@@ -181,7 +186,7 @@ describe('Health Command', () => {
         }
       });
       
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       await healthCommand.handler({
         args: [],
@@ -204,7 +209,7 @@ describe('Health Command', () => {
         cpuUsage: 45.2
       });
       
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       await healthCommand.handler({
         args: [],
@@ -217,7 +222,7 @@ describe('Health Command', () => {
     });
 
     it('should handle component-specific health checks', async () => {
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       // Test orchestrator health
       await healthCommand.handler({
@@ -245,7 +250,7 @@ describe('Health Command', () => {
     });
 
     it('should handle watch mode with --watch flag', async () => {
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       // Mock process.exit to prevent actual exit
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
@@ -275,7 +280,7 @@ describe('Health Command', () => {
         components: {}
       });
       
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       await healthCommand.handler({
         args: [],
@@ -293,7 +298,7 @@ describe('Health Command', () => {
         status: 'healthy'
       });
       
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       // Test JSON format
       await healthCommand.handler({
@@ -326,7 +331,7 @@ describe('Health Command', () => {
         }
       });
       
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       await healthCommand.handler({
         args: [],
@@ -344,7 +349,7 @@ describe('Health Command', () => {
     it('should handle initialization errors gracefully', async () => {
       mockGlobalInit.getOrchestrator.mockRejectedValue(new Error('Initialization failed'));
       
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       await healthCommand.handler({
         args: [],
@@ -359,7 +364,7 @@ describe('Health Command', () => {
     it('should handle component health check errors', async () => {
       mockOrchestrator.getHealthStatus.mockRejectedValue(new Error('Health check failed'));
       
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       await healthCommand.handler({
         args: [],
@@ -372,7 +377,7 @@ describe('Health Command', () => {
     });
 
     it('should validate component names', async () => {
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       await healthCommand.handler({
         args: ['invalid-component'],
@@ -396,7 +401,7 @@ describe('Health Command', () => {
         }
       });
       
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       await healthCommand.handler({
         args: [],
@@ -414,7 +419,7 @@ describe('Health Command', () => {
         status: 'healthy'
       });
       
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       await healthCommand.handler({
         args: [],
@@ -436,7 +441,7 @@ describe('Health Command', () => {
         }
       });
       
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       await healthCommand.handler({
         args: [],
@@ -460,7 +465,7 @@ describe('Health Command', () => {
         }
       });
       
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       await healthCommand.handler({
         args: [],
@@ -486,7 +491,7 @@ describe('Health Command', () => {
         }
       });
       
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       await healthCommand.handler({
         args: [],
@@ -501,7 +506,7 @@ describe('Health Command', () => {
 
   describe('command validation', () => {
     it('should have correct command structure', () => {
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       expect(healthCommand.name).toBe('health');
       expect(healthCommand.description).toBeDefined();
@@ -510,7 +515,7 @@ describe('Health Command', () => {
     });
 
     it('should have proper options defined', () => {
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       expect(healthCommand.options).toBeDefined();
       expect(Array.isArray(healthCommand.options)).toBe(true);
@@ -523,7 +528,7 @@ describe('Health Command', () => {
     });
 
     it('should have proper examples', () => {
-      const { healthCommand } = require('../../../../src/cli/commands/system/health-command');
+      const { healthCommand } = require('../../../../../src/cli/commands/system/health-command');
       
       expect(healthCommand.examples).toBeDefined();
       expect(Array.isArray(healthCommand.examples)).toBe(true);

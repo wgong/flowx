@@ -7,54 +7,34 @@ import * as path from 'path';
 import * as fs from 'node:fs/promises';
 
 // Mock node:fs/promises
-jest.mock('node:fs/promises', () => ({
-  mkdir: jest.fn().mockResolvedValue(undefined),
-  readFile: jest.fn().mockRejectedValue(new Error('File not found')),
-  writeFile: jest.fn().mockResolvedValue(undefined),
-  unlink: jest.fn().mockResolvedValue(undefined),
-  stat: jest.fn().mockResolvedValue({ size: 0 }),
-  rename: jest.fn().mockResolvedValue(undefined),
-  readdir: jest.fn().mockResolvedValue([]),
-  open: jest.fn().mockResolvedValue({
-    write: jest.fn().mockResolvedValue({ bytesWritten: 10 }),
-    close: jest.fn().mockResolvedValue(undefined)
-  })
-}));
+// Using centralized mock system for better test isolation
 
 // Mock node:path to fix file path issues
-jest.mock('node:path', () => ({
-  ...jest.requireActual('node:path'),
-  join: jest.fn().mockImplementation((...args) => args.join('/')),
-  dirname: jest.fn().mockImplementation(p => p.split('/').slice(0, -1).join('/') || '.'),
-  basename: jest.fn().mockImplementation(p => p.split('/').pop())
-}));
+// Using centralized mock system for better test isolation
 
 // Mock the Logger class to avoid the initialization error
-jest.mock('../../../src/core/logger.ts', () => {
-  return {
-    Logger: jest.fn().mockImplementation(() => ({
-      debug: jest.fn(),
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
-      configure: jest.fn().mockResolvedValue(undefined),
-      child: jest.fn().mockReturnThis()
-    })),
-    LogLevel: {
-      DEBUG: 0,
-      INFO: 1,
-      WARN: 2,
-      ERROR: 3,
-    },
-  };
-});
+// Using centralized mock system for better test isolation
 
-// Mock process.cwd if not already mocked in jest.setup.js
-if (!process.cwd.mock) {
-  process.cwd = jest.fn().mockReturnValue('/Users/sethford/Downloads/Projects/claude-code-flow');
-}
+// Mock path for consistent path operations
+// Using centralized mock system for better test isolation
 
-import { DistributedMemorySystem } from '../../../src/memory/distributed-memory.js';
+// Mock Logger to prevent initialization errors
+jest.mock('../../../src/core/logger.ts', () => ({
+  Logger: jest.fn().mockImplementation(() => ({
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    configure: jest.fn().mockResolvedValue(undefined),
+    child: jest.fn().mockReturnThis()
+  })),
+  LogLevel: {
+    DEBUG: 0,
+    INFO: 1,
+    WARN: 2,
+    ERROR: 3,
+  },
+}));
 import { EventBus } from '../../../src/core/event-bus.js';
 import { Logger } from '../../../src/core/logger.ts';
 

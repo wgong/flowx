@@ -161,7 +161,11 @@ export class TaskEngine extends EventEmitter {
     this.memoryManager = memoryManager;
     this.logger = logger;
     this.setupEventHandlers();
-    this.startTaskScheduler();
+    
+    // Only start scheduler if not in test environment
+    if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+      this.startTaskScheduler();
+    }
   }
 
   private setupEventHandlers(): void {

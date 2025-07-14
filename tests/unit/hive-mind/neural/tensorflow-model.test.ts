@@ -2,10 +2,30 @@
  * Unit tests for TensorFlow model integration
  */
 
-import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
-import { TensorFlowModel } from '../../../../src/hive-mind/neural/tensorflow-model.js';
-import { EventBus } from '../../../../src/core/event-bus.js';
-import { PatternType } from '../../../../src/hive-mind/neural/index.js';
+import { jest, describe, test, expect, beforeEach, afterEach } from '@jest/globals';
+
+// Mock the Logger to prevent initialization errors
+jest.mock('../../../../src/core/logger', () => ({
+  Logger: {
+    getInstance: jest.fn().mockReturnValue({
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      child: jest.fn().mockReturnThis()
+    })
+  },
+  LogLevel: {
+    DEBUG: 0,
+    INFO: 1,
+    WARN: 2,
+    ERROR: 3,
+    CRITICAL: 4
+  }
+}));
+import { TensorFlowModel } from '../../../../src/hive-mind/neural/tensorflow-model';
+import { EventBus } from '../../../../src/core/event-bus';
+import { PatternType } from '../../../../src/hive-mind/neural/index';
 
 // Mock TensorFlow.js
 jest.mock('@tensorflow/tfjs-node', () => ({

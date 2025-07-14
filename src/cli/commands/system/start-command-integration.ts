@@ -147,8 +147,36 @@ export const startCommand: CLICommand = {
         setupVerboseLogging(systemMonitor);
       }
 
+      // Check for auto-start flag first - bypass interactive mode
+      if (options.autoStart || options['auto-start']) {
+        printInfo('Auto-starting all processes...');
+        await startWithProgress(processManager, 'all');
+        printSuccess('✓ All processes started');
+        
+        // Show system status
+        printInfo('\nSystem Status:');
+        await showSystemStatus(processManager);
+        
+        // Keep process running
+        printInfo('\nPress Ctrl+C to stop the system');
+        
+        // Handle shutdown gracefully
+        const shutdown = async () => {
+          printInfo('\nShutting down...');
+          systemMonitor.stop();
+          await processManager.stopAll();
+          printSuccess('✓ Shutdown complete');
+          process.exit(0);
+        };
+        
+        process.on('SIGINT', shutdown);
+        process.on('SIGTERM', shutdown);
+        
+        // Keep process alive
+        await new Promise(() => {});
+      }
       // Daemon mode
-      if (options.daemon) {
+      else if (options.daemon) {
         await launchDaemonMode(processManager, systemMonitor, options);
       } 
       // Interactive mode (default)
@@ -372,50 +400,83 @@ async function launchInteractiveMode(processManager: ProcessManager, systemMonit
   console.log();
   printInfo('Press a key to select an option...');
 
-  // Handle user input
-  process.stdin.setRawMode(true);
-  process.stdin.resume();
-  process.stdin.setEncoding('utf8');
+  // Check if setRawMode is available
+  if (typeof process.stdin.setRawMode === 'function') {
+    // Handle user input with raw mode
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.setEncoding('utf8');
 
-  for await (const chunk of process.stdin) {
-    const key = chunk.toString();
+    for await (const chunk of process.stdin) {
+      const key = chunk.toString();
 
-    switch (key) {
-      case '1':
-        printInfo('\nStarting all processes...');
-        await startWithProgress(processManager, 'all');
-        printSuccess('✓ All processes started');
-        break;
+      switch (key) {
+        case '1':
+          printInfo('\nStarting all processes...');
+          await startWithProgress(processManager, 'all');
+          printSuccess('✓ All processes started');
+          break;
 
-      case '2':
-        printInfo('\nStarting core processes...');
-        await startWithProgress(processManager, 'core');
-        printSuccess('✓ Core processes started');
-        break;
+        case '2':
+          printInfo('\nStarting core processes...');
+          await startWithProgress(processManager, 'core');
+          printSuccess('✓ Core processes started');
+          break;
 
-      case '3':
-        printInfo('\n🎨 Launching interactive dashboard...');
-        const { launchInkDashboard } = await import('../../ui/ink-cli.ts');
-        await launchInkDashboard();
-        break;
+        case '3':
+          printInfo('\n🎨 Launching interactive dashboard...');
+          const { launchInkDashboard } = await import('../../ui/ink-cli.ts');
+          await launchInkDashboard();
+          break;
 
-      case '4':
-        printInfo('\nSystem Status:');
-        await showSystemStatus(processManager);
-        break;
+        case '4':
+          printInfo('\nSystem Status:');
+          await showSystemStatus(processManager);
+          break;
 
-      case 'q':
-      case '\u0003': // Ctrl+C
-        printInfo('\nShutting down...');
-        systemMonitor.stop();
-        await processManager.stopAll();
-        printSuccess('✓ Shutdown complete');
-        process.exit(0);
-        break;
+        case 'q':
+        case '\u0003': // Ctrl+C
+          printInfo('\nShutting down...');
+          systemMonitor.stop();
+          await processManager.stopAll();
+          printSuccess('✓ Shutdown complete');
+          process.exit(0);
+          break;
 
-      default:
-        printWarning('Invalid option. Please try again.');
+        default:
+          printWarning('Invalid option. Please try again.');
+      }
     }
+  } else {
+    // Fallback for environments without setRawMode
+    printInfo('Using fallback input mode...');
+    
+    // Auto-start all processes in fallback mode
+    printInfo('\nStarting all processes...');
+    await startWithProgress(processManager, 'all');
+    printSuccess('✓ All processes started');
+    
+    // Show system status
+    printInfo('\nSystem Status:');
+    await showSystemStatus(processManager);
+    
+    // Keep process running
+    printInfo('\nPress Ctrl+C to stop the system');
+    
+    // Handle shutdown gracefully
+    const shutdown = async () => {
+      printInfo('\nShutting down...');
+      systemMonitor.stop();
+      await processManager.stopAll();
+      printSuccess('✓ Shutdown complete');
+      process.exit(0);
+    };
+    
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+    
+    // Keep process alive
+    await new Promise(() => {});
   }
 }
 
@@ -536,4 +597,4 @@ function setupVerboseLogging(monitor: SystemMonitor): void {
   monitor.on('systemMetrics', (data: any) => {
     printInfo(`System metrics: CPU ${data.cpu}%, Memory ${data.memory}MB`);
   });
-} 
+}

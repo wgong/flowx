@@ -1,0 +1,12 @@
+{
+  "swarms": [
+    {
+      "id": "hive-1752459795128-in0ijtz8t",
+      "name": "we need to get all the tests working perfectly and raise our code coverage and fix any issues the tests uncover",
+      "preset": "development",
+      "createdAt": "2025-07-14T02:23:15.136Z"
+    }
+  ],
+  "activeSwarmId": "hive-1752459795128-in0ijtz8t",
+  "lastCreated": "2025-07-14T02:23:15.136Z"
+}

@@ -5,10 +5,10 @@
  * with actual message delivery, routing, and broker features.
  */
 
-import { MessageBroker, IMessageBroker } from '../../src/communication/message-broker.js';
-import { MessageBus, MessageBusConfig } from '../../src/communication/message-bus.js';
-import { EventBus } from '../../src/core/event-bus.js';
-import { Logger } from '../../src/core/logger.js';
+import { MessageBroker, IMessageBroker } from '../../src/communication/message-broker';
+import { MessageBus, MessageBusConfig } from '../../src/communication/message-bus';
+import { EventBus } from '../../src/core/event-bus';
+import { Logger } from '../../src/core/logger';
 
 describe('Message Broker Verification Tests', () => {
   let messageBroker: IMessageBroker;

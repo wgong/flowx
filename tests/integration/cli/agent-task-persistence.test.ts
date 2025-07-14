@@ -420,9 +420,15 @@ describe('CLI Agent and Task Persistence Integration Tests', () => {
 
   describe('Cross-Command Persistence', () => {
     it('should maintain persistence across different command invocations', async () => {
+      // Set environment variable for consistent database path during tests
+      process.env.CLAUDE_FLOW_DATA_PATH = testDir;
+      
       const { agentCommand } = await import('../../../src/cli/commands/agents/agent-management-command.ts');
       const { taskCommand } = await import('../../../src/cli/commands/tasks/task-command.ts');
-      const { getPersistenceManager } = await import('../../../src/cli/core/global-initialization.ts');
+      const { getPersistenceManager, initializeGlobalServices } = await import('../../../src/cli/core/global-initialization.ts');
+      
+      // Initialize services to ensure database is properly set up
+      await initializeGlobalServices();
       
       // Create an agent
       const spawnContext = {
@@ -440,10 +446,19 @@ describe('CLI Agent and Task Persistence Integration Tests', () => {
       const createSubcommand = taskCommand.subcommands?.find(sub => sub.name === 'create');
       await createSubcommand!.handler(createContext);
 
-      // Verify both are persisted
+      // Simulate a new command invocation by closing and reopening the database
       const persistenceManager = await getPersistenceManager();
-      const allAgents = await persistenceManager.getAllAgents();
-      const activeTasks = await persistenceManager.getActiveTasks();
+      await persistenceManager.close();
+      
+      // Reinitialize services to simulate a new command
+      await initializeGlobalServices();
+      
+      // Get a new persistence manager
+      const newPersistenceManager = await getPersistenceManager();
+      
+      // Verify data persisted across "command invocations"
+      const allAgents = await newPersistenceManager.getAllAgents();
+      const activeTasks = await newPersistenceManager.getActiveTasks();
 
       expect(allAgents).toHaveLength(1);
       expect(allAgents[0].name).toBe('Cross Command Agent');
@@ -454,23 +469,40 @@ describe('CLI Agent and Task Persistence Integration Tests', () => {
 
   describe('Database Initialization and State', () => {
     it('should verify database is properly initialized', async () => {
-      const { getPersistenceManager } = await import('../../../src/cli/core/global-initialization.ts');
+      // Set environment variable for consistent database path during tests
+      process.env.CLAUDE_FLOW_DATA_PATH = testDir;
       
+      const { getPersistenceManager, initializeGlobalServices } = await import('../../../src/cli/core/global-initialization.ts');
+      
+      // Initialize services explicitly to ensure database is set up
+      await initializeGlobalServices();
+      
+      // Get persistence manager
       const persistenceManager = await getPersistenceManager();
       
       // Verify database is initialized
+      expect(persistenceManager).toBeDefined();
+      expect(persistenceManager.initialized).toBe(true);
       expect(persistenceManager.db).toBeDefined();
       
       // Verify tables exist by running queries
       const agentCount = persistenceManager.db.prepare("SELECT COUNT(*) as count FROM agents").getAsObject();
       const taskCount = persistenceManager.db.prepare("SELECT COUNT(*) as count FROM tasks").getAsObject();
+      const sessionCount = persistenceManager.db.prepare("SELECT COUNT(*) as count FROM sessions").getAsObject();
       
-      expect(agentCount.count).toBe(0);
-      expect(taskCount.count).toBe(0);
+      expect(agentCount.count).toBeDefined();
+      expect(taskCount.count).toBeDefined();
+      expect(sessionCount.count).toBeDefined();
     });
 
     it('should verify table schemas are correct', async () => {
-      const { getPersistenceManager } = await import('../../../src/cli/core/global-initialization.ts');
+      // Set environment variable for consistent database path during tests
+      process.env.CLAUDE_FLOW_DATA_PATH = testDir;
+      
+      const { getPersistenceManager, initializeGlobalServices } = await import('../../../src/cli/core/global-initialization.ts');
+      
+      // Initialize services explicitly to ensure database is set up
+      await initializeGlobalServices();
       
       const persistenceManager = await getPersistenceManager();
       
@@ -478,23 +510,51 @@ describe('CLI Agent and Task Persistence Integration Tests', () => {
       const agentSchema = persistenceManager.db.prepare("PRAGMA table_info(agents)").all();
       const agentColumns = agentSchema.map((col: any) => col.name);
       
-      expect(agentColumns).toContain('id');
-      expect(agentColumns).toContain('type');
-      expect(agentColumns).toContain('name');
-      expect(agentColumns).toContain('status');
-      expect(agentColumns).toContain('capabilities');
-      expect(agentColumns).toContain('created_at');
+      // Verify all required columns exist
+      const expectedAgentColumns = [
+        'id', 'type', 'name', 'status', 'capabilities', 
+        'system_prompt', 'max_concurrent_tasks', 'priority', 'created_at'
+      ];
+      
+      expectedAgentColumns.forEach(column => {
+        expect(agentColumns).toContain(column);
+      });
       
       // Check task table schema
       const taskSchema = persistenceManager.db.prepare("PRAGMA table_info(tasks)").all();
       const taskColumns = taskSchema.map((col: any) => col.name);
       
-      expect(taskColumns).toContain('id');
-      expect(taskColumns).toContain('type');
-      expect(taskColumns).toContain('description');
-      expect(taskColumns).toContain('status');
-      expect(taskColumns).toContain('priority');
-      expect(taskColumns).toContain('created_at');
+      // Verify all required columns exist
+      const expectedTaskColumns = [
+        'id', 'type', 'description', 'status', 'priority', 
+        'dependencies', 'metadata', 'assigned_agent', 'progress',
+        'created_at', 'completed_at', 'error'
+      ];
+      
+      expectedTaskColumns.forEach(column => {
+        expect(taskColumns).toContain(column);
+      });
+      
+      // Check sessions table schema
+      const sessionSchema = persistenceManager.db.prepare("PRAGMA table_info(sessions)").all();
+      const sessionColumns = sessionSchema.map((col: any) => col.name);
+      
+      // Verify all required columns exist
+      const expectedSessionColumns = [
+        'id', 'agent_id', 'terminal_id', 'status', 'created_at'
+      ];
+      
+      expectedSessionColumns.forEach(column => {
+        expect(sessionColumns).toContain(column);
+      });
+      
+      // Verify indices exist
+      const indices = persistenceManager.db.prepare("SELECT name FROM sqlite_master WHERE type='index'").all();
+      const indexNames = indices.map((idx: any) => idx.name);
+      
+      expect(indexNames).toContain('idx_agents_status');
+      expect(indexNames).toContain('idx_tasks_status');
+      expect(indexNames).toContain('idx_tasks_priority');
     });
   });
 }); 

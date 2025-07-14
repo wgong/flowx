@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
-import { createCommandTestRunner } from '../utils/command-test-base.js';
+import { createCommandTestRunner } from '../utils/command-test-base';
 import * as path from 'path';
 
 describe('Agent Commands E2E', () => {

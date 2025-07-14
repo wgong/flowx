@@ -37,7 +37,7 @@ class AutoStrategy extends MockStrategy {
     super('auto', config);
   }
 
-  async execute(data: any): Promise<any> {
+  override async execute(data: any): Promise<any> {
     this.events.push('execute');
     
     // Auto strategy adapts based on workload

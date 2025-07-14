@@ -2,27 +2,31 @@
  * Tests for the ConfigManager
  */
 
-import { configManager } from './config.cjs';
-import * as path from 'path';
-import * as os from 'os';
-import * as fs from 'fs/promises';
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
+
+// Mock fs/promises
+jest.mock('fs/promises', () => ({
+  readFile: jest.fn(),
+  writeFile: jest.fn(),
+  access: jest.fn(),
+  mkdir: jest.fn(),
+  mkdtemp: jest.fn(),
+  rm: jest.fn()
+}));
+
+const { configManager } = require('../../../src/core/config.js');
 
 describe('ConfigManager', () => {
-  let tempDir: string;
-  let configPath: string;
-
-  beforeEach(async () => {
-    // Setup temporary directory for test configuration files
-    tempDir = await fs.mkdtemp(path.join('src/tests/.tmp', 'config-test-'));
-    configPath = path.join(tempDir, 'config.json');
-    
-    // Reset the configManager before each test
-    configManager.reset();
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Reset the configManager before each test if it has a reset method
+    if (configManager.reset) {
+      configManager.reset();
+    }
   });
 
-  afterEach(async () => {
-    // Clean up temporary directory
-    await fs.rm(tempDir, { recursive: true, force: true });
+  afterEach(() => {
+    // Clean up any state
   });
 
   test('should return default values', () => {

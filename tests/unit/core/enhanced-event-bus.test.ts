@@ -209,16 +209,23 @@ describe('EventBus - Enhanced Tests', () => {
 
   describe('Async Event Handling', () => {
     it('should handle async handlers', async () => {
-      const handler = jest.fn(async (data) => {
-        await new Promise(resolve => setTimeout(resolve, 10));
+      let resolveHandler: (value: any) => void;
+      const handlerPromise = new Promise<any>(resolve => {
+        resolveHandler = resolve;
+      });
+      
+      const handler = jest.fn(async (data: any) => {
+        // Use a promise that resolves immediately instead of setTimeout
+        await Promise.resolve();
+        resolveHandler!(data);
         return data;
       });
       
       eventBus.on('test.async', handler);
       eventBus.emit('test.async', { data: 'test' });
       
-      // Give async handler time to complete
-      await new Promise(resolve => setTimeout(resolve, 20));
+      // Wait for the handler to complete
+      await handlerPromise;
       
       expect(handler).toHaveBeenCalledTimes(1);
       expect(handler).toHaveBeenCalledWith({ data: 'test' });
@@ -234,6 +241,9 @@ describe('EventBus - Enhanced Tests', () => {
       setTimeout(() => {
         eventBus.emit('test.wait', testData);
       }, 10);
+      
+      // Advance timers to trigger the setTimeout
+      jest.advanceTimersByTime(10);
       
       // Wait for the event
       const result = await eventPromise;
@@ -255,7 +265,7 @@ describe('EventBus - Enhanced Tests', () => {
     });
 
     it('should handle event emission during handler execution', () => {
-      const handler1 = jest.fn((data) => {
+      const handler1 = jest.fn((data: any) => {
         if (data.count < 3) {
           eventBus.emit('test.recursive', { count: data.count + 1 });
         }

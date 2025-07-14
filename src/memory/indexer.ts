@@ -2,8 +2,8 @@
  * Memory indexer for fast search and retrieval
  */
 
-import { MemoryEntry, MemoryQuery } from "../utils/types.ts";
-import { ILogger } from "../core/logger.ts";
+import { MemoryEntry, MemoryQuery } from "../utils/types.js";
+import { ILogger } from "../core/logger.js";
 
 interface Index<T> {
   get(key: T): Set<string>;
@@ -154,7 +154,7 @@ export class MemoryIndexer {
     }
 
     if (query.tags && query.tags.length > 0) {
-      const tagSets = query.tags.map(tag => this.tagIndex.get(tag));
+      const tagSets = query.tags.map((tag: string) => this.tagIndex.get(tag));
       const unionSet = this.unionSets(...tagSets);
       resultIds = this.intersectSets(resultIds, unionSet);
     }

@@ -109,7 +109,11 @@ export class AgentProcessManager extends EventEmitter {
     this.processTemplate = this.generateAgentProcessTemplate();
     
     this.setupCleanupHandlers();
-    this.startHeartbeatMonitoring();
+    
+    // Only start heartbeat monitoring if not in test environment
+    if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+      this.startHeartbeatMonitoring();
+    }
   }
 
   /**

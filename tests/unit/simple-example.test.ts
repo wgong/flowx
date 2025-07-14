@@ -1,5 +1,5 @@
-import { describe, it, beforeEach } from "https://deno.land/std@0.220.0/testing/bdd.ts";
-import { assertEquals, assertExists, assertGreater } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { describe, it, beforeEach, expect } from '@jest/globals';
+import { assertEquals, assertExists, assertGreater } from '../test.utils';
 
 // Simple utility functions to test
 function greet(name: string): string {

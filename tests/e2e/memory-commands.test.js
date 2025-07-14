@@ -6,7 +6,7 @@
 console.log(`Current working directory in memory-commands.test.js: ${process.cwd()}`);
 
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
-import { createCommandTestRunner } from '../utils/command-test-base.js';
+import { createCommandTestRunner } from '../utils/command-test-base';
 
 describe('Memory Commands E2E', () => {
   let runner;

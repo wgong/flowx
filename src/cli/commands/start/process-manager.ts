@@ -250,112 +250,144 @@ export class ProcessManager extends EventEmitter {
   }
   
   async startProcess(processId: string): Promise<void> {
-    // Get process info
     const process = this.processes.get(processId);
     if (!process) {
       throw new ProcessNotFoundError(processId);
     }
 
-    // Check if already running
     if (process.status === ProcessStatus.RUNNING) {
-      return; // Already running
+      this.emit('processAlreadyRunning', { processId });
+      return;
     }
-    
+
+    if (process.status === ProcessStatus.STARTING) {
+      this.emit('processAlreadyStarting', { processId });
+      return;
+    }
+
+    this.validateProcessConfig(processId, process);
+
     try {
-      // Validate process configuration
-      this.validateProcessConfig(processId, process);
-      
-      // Mark as starting
       process.status = ProcessStatus.STARTING;
-      process.startTime = Date.now();
-      this.emit('processStarting', { processId, process });
-      
-      // Create process environment
-      const env: Record<string, string> = {
-        ...process.env,
-        CLAUDE_FLOW_PROCESS_ID: process.id,
-        CLAUDE_FLOW_PROCESS_NAME: process.name,
-      };
-      
-      if (process.port) {
-        env.PORT = String(process.port);
+      this.emit('processStarting', { processId });
+      this.logToProcess(processId, `Starting process: ${process.name}`);
+
+      // Special handling for MCP server
+      if (processId === 'mcp-server') {
+        await this.startMCPServer(process);
+        return;
       }
-      
-      // Log the start attempt
-      this.logToProcess(processId, `Starting process ${process.name} (${process.command} ${process.args?.join(' ') || ''})...`);
-      
-      // Spawn the actual process
-      const childProcess = spawn(process.command!, process.args || [], {
-        env: { ...process.env, ...env },
+
+      if (!process.command) {
+        throw new ProcessStartError(processId, 'No command specified');
+      }
+
+      const childProcess = spawn(process.command, process.args || [], {
         cwd: process.cwd || global.process.cwd(),
-        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, ...process.env },
+        stdio: ['pipe', 'pipe', 'pipe'],
         detached: false
       });
-      
-      // Store the process handle
+
+      if (!childProcess.pid) {
+        throw new ProcessStartError(processId, 'Failed to get process PID');
+      }
+
+      process.pid = childProcess.pid;
+      process.startTime = Date.now();
+      process.status = ProcessStatus.RUNNING;
+      process.lastError = undefined;
+
       this.processHandles.set(processId, childProcess);
-      
-      // Set up stdout and stderr handlers
       this.setupProcessLogging(processId, childProcess);
-      
-      // Set up exit handler
+
+      // Handle process exit
       childProcess.on('exit', (code, signal) => {
         this.handleProcessExit(processId, code, signal);
       });
-      
-      // Set up error handler
-      childProcess.on('error', (err) => {
-        this.handleProcessError(processId, err);
+
+      // Handle process error
+      childProcess.on('error', (error) => {
+        this.handleProcessError(processId, error);
       });
-      
-      // Wait a short time to make sure the process starts correctly
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Check if process is still alive
-      if (childProcess.killed || childProcess.exitCode !== null) {
-        throw new ProcessStartError(processId, `Process failed to start or exited immediately`);
-      }
-      
-      // Update process info
-      process.status = ProcessStatus.RUNNING;
-      process.pid = childProcess.pid;
-      
-      this.emit('processStarted', { processId, process });
-      this.emit('statusChanged', { processId, status: process.status });
-      
-      // Log the startup in the process logs
-      this.logToProcess(processId, `Process started with PID ${childProcess.pid} at ${new Date().toISOString()}`);
-      
+
+      this.logToProcess(processId, `Process started with PID: ${childProcess.pid}`);
+      this.emit('processStarted', { processId, pid: childProcess.pid });
+
     } catch (error) {
-      // Update process status on failure
+      const errorMessage = error instanceof Error ? error.message : String(error);
       process.status = ProcessStatus.ERROR;
-      process.lastError = error instanceof Error ? error.message : String(error);
+      process.lastError = errorMessage;
+      this.logToProcess(processId, `Failed to start: ${errorMessage}`);
       
-      // Clean up any partial process handle
-      if (this.processHandles.has(processId)) {
-        try {
-          const handle = this.processHandles.get(processId);
-          if (handle && !handle.killed) {
-            handle.kill('SIGKILL');
-          }
-        } catch (cleanupError) {
-          this.logToProcess(processId, `Warning: Error during cleanup: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
-        }
-        this.processHandles.delete(processId);
-      }
-      
-      // Emit events
-      this.emit('processError', { processId, error: process.lastError });
-      this.emit('statusChanged', { processId, status: process.status });
-      
-      // Wrap in ProcessStartError if it's not already a ProcessError
-      if (!(error instanceof ProcessError)) {
-        throw new ProcessStartError(processId, `Failed to start process: ${process.lastError}`, 
-          error instanceof Error ? error : undefined);
-      }
-      throw error;
+      const startError = new ProcessStartError(processId, errorMessage, error instanceof Error ? error : undefined);
+      this.emit('processError', { processId, error: startError });
+      throw startError;
     }
   }
+
+     /**
+    * Special handling for MCP server startup
+    */
+   private async startMCPServer(process: ProcessInfo): Promise<void> {
+     try {
+       // Import the MCP command handler
+       const mcpModule = await import('../system/mcp-command.js');
+       const { mcpCommand } = mcpModule;
+       
+       // Find the serve subcommand
+       const serveSubcommand = mcpCommand.subcommands?.find(sub => sub.name === 'serve');
+       if (!serveSubcommand || !serveSubcommand.handler) {
+         throw new Error('MCP serve subcommand not found');
+       }
+       
+       // Create context for the MCP server
+       const context = {
+         args: [],
+         options: {
+           port: process.port || 3000,
+           transport: process.transport || 'stdio',
+           'log-level': 'info',
+           verbose: false,
+           minimal: false
+         },
+         config: {},
+         command: 'mcp',
+         subcommand: 'serve',
+         workingDirectory: process.cwd || global.process.cwd(),
+         environment: process.env || {},
+         user: { id: 'system', name: 'system' }
+       };
+
+       // Start the MCP server in the background
+       const serverPromise = serveSubcommand.handler(context);
+       
+       // Don't await the promise since the MCP server runs indefinitely
+       // Just mark the process as running
+       process.status = ProcessStatus.RUNNING;
+       process.startTime = Date.now();
+       process.pid = global.process.pid; // Use current process PID as placeholder
+       process.lastError = undefined;
+
+       this.logToProcess(process.id, `MCP Server started on port ${process.port}`);
+       this.emit('processStarted', { processId: process.id, pid: process.pid });
+
+       // Handle server errors
+       serverPromise.catch((error: any) => {
+         this.handleProcessError(process.id, error);
+       });
+
+     } catch (error) {
+       const errorMessage = error instanceof Error ? error.message : String(error);
+       process.status = ProcessStatus.ERROR;
+       process.lastError = errorMessage;
+       this.logToProcess(process.id, `Failed to start MCP server: ${errorMessage}`);
+       
+       const startError = new ProcessStartError(process.id, errorMessage, error instanceof Error ? error : undefined);
+       this.emit('processError', { processId: process.id, error: startError });
+       throw startError;
+     }
+   }
 
   async stopProcess(processId: string): Promise<void> {
     const processInfo = this.processes.get(processId);

@@ -1,0 +1,378 @@
+/**
+ * OWASP Top 10 Input Validation Templates
+ * Prevents A03: Injection attacks through comprehensive input validation
+ */
+
+import { ValidationError, SanitizedString, ValidatedNumber } from '../typescript-security/security-types';
+
+// SQL Injection Prevention
+export class SQLInjectionPrevention {
+  /**
+   * Parameterized query builder - prevents SQL injection
+   */
+  static buildParameterizedQuery(query: string, params: any[]): { query: string; params: any[] } {
+    // Validate query doesn't contain suspicious patterns
+    const suspiciousPatterns = [
+      /union\s+select/i,
+      /drop\s+table/i,
+      /delete\s+from/i,
+      /insert\s+into/i,
+      /update\s+.*\s+set/i,
+      /exec\s*\(/i,
+      /xp_cmdshell/i,
+      /sp_executesql/i,
+      /--/,
+      /\/\*/,
+      /\*\//
+    ];
+
+    for (const pattern of suspiciousPatterns) {
+      if (pattern.test(query)) {
+        throw new ValidationError('Potentially malicious SQL query detected');
+      }
+    }
+
+    // Validate parameters
+    const sanitizedParams = params.map(param => this.sanitizeParameter(param));
+    
+    return { query, params: sanitizedParams };
+  }
+
+  private static sanitizeParameter(param: any): any {
+    if (typeof param === 'string') {
+      // Remove or escape dangerous characters
+      return param
+        .replace(/'/g, "''") // Escape single quotes
+        .replace(/;/g, '') // Remove semicolons
+        .replace(/--/g, '') // Remove comment indicators
+        .replace(/\/\*/g, '') // Remove comment start
+        .replace(/\*\//g, ''); // Remove comment end
+    }
+    return param;
+  }
+}
+
+// XSS Prevention
+export class XSSPrevention {
+  /**
+   * HTML sanitization - prevents XSS attacks
+   */
+  static sanitizeHTML(input: string): SanitizedString {
+    return input
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;')
+      .replace(/\//g, '&#x2F;')
+      .replace(/&/g, '&amp;') as SanitizedString;
+  }
+
+  /**
+   * JavaScript sanitization - prevents script injection
+   */
+  static sanitizeJavaScript(input: string): SanitizedString {
+    const dangerousPatterns = [
+      /javascript:/gi,
+      /vbscript:/gi,
+      /onload=/gi,
+      /onerror=/gi,
+      /onclick=/gi,
+      /onmouseover=/gi,
+      /<script/gi,
+      /<\/script>/gi,
+      /eval\s*\(/gi,
+      /setTimeout\s*\(/gi,
+      /setInterval\s*\(/gi,
+      /Function\s*\(/gi,
+      /alert\s*\(/gi,
+      /confirm\s*\(/gi,
+      /prompt\s*\(/gi
+    ];
+
+    let sanitized = input;
+    for (const pattern of dangerousPatterns) {
+      sanitized = sanitized.replace(pattern, '');
+    }
+
+    return sanitized as SanitizedString;
+  }
+
+  /**
+   * URL sanitization - prevents malicious URLs
+   */
+  static sanitizeURL(input: string): SanitizedString {
+    const url = new URL(input);
+    
+    // Only allow safe protocols
+    const allowedProtocols = ['http:', 'https:', 'ftp:', 'ftps:'];
+    if (!allowedProtocols.includes(url.protocol)) {
+      throw new ValidationError('Invalid URL protocol');
+    }
+
+    // Remove dangerous parameters
+    url.searchParams.delete('javascript');
+    url.searchParams.delete('vbscript');
+    
+    return url.toString() as SanitizedString;
+  }
+}
+
+// NoSQL Injection Prevention
+export class NoSQLInjectionPrevention {
+  /**
+   * MongoDB query sanitization
+   */
+  static sanitizeMongoQuery(query: any): any {
+    if (typeof query !== 'object' || query === null) {
+      return query;
+    }
+
+    const sanitized = {};
+    for (const [key, value] of Object.entries(query)) {
+      // Prevent operator injection
+      if (key.startsWith('$') && !this.isAllowedOperator(key)) {
+        throw new ValidationError(`Disallowed MongoDB operator: ${key}`);
+      }
+
+      // Recursively sanitize nested objects
+      if (typeof value === 'object' && value !== null) {
+        sanitized[key] = this.sanitizeMongoQuery(value);
+      } else {
+        sanitized[key] = value;
+      }
+    }
+
+    return sanitized;
+  }
+
+  private static isAllowedOperator(operator: string): boolean {
+    const allowedOperators = [
+      '$eq', '$ne', '$gt', '$gte', '$lt', '$lte',
+      '$in', '$nin', '$and', '$or', '$not',
+      '$exists', '$type', '$regex', '$options'
+    ];
+    return allowedOperators.includes(operator);
+  }
+}
+
+// Command Injection Prevention
+export class CommandInjectionPrevention {
+  /**
+   * Command argument sanitization
+   */
+  static sanitizeCommandArgs(args: string[]): string[] {
+    return args.map(arg => this.sanitizeCommandArg(arg));
+  }
+
+  private static sanitizeCommandArg(arg: string): string {
+    // Remove dangerous characters
+    const dangerous = [';', '|', '&', '$', '`', '(', ')', '<', '>', '"', "'", '\\', '\n', '\r'];
+    let sanitized = arg;
+    
+    for (const char of dangerous) {
+      sanitized = sanitized.replace(new RegExp(char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '');
+    }
+
+    return sanitized;
+  }
+
+  /**
+   * Validate command whitelist
+   */
+  static validateCommand(command: string, allowedCommands: string[]): void {
+    if (!allowedCommands.includes(command)) {
+      throw new ValidationError(`Command not allowed: ${command}`);
+    }
+  }
+}
+
+// LDAP Injection Prevention
+export class LDAPInjectionPrevention {
+  /**
+   * LDAP filter sanitization
+   */
+  static sanitizeLDAPFilter(filter: string): string {
+    const escapeMap = {
+      '\\': '\\5c',
+      '*': '\\2a',
+      '(': '\\28',
+      ')': '\\29',
+      '\u0000': '\\00'
+    };
+
+    return filter.replace(/[\\*()\u0000]/g, match => escapeMap[match]);
+  }
+
+  /**
+   * LDAP DN sanitization
+   */
+  static sanitizeLDAPDN(dn: string): string {
+    const escapeMap = {
+      '\\': '\\\\',
+      ',': '\\,',
+      '+': '\\+',
+      '"': '\\"',
+      '<': '\\<',
+      '>': '\\>',
+      ';': '\\;',
+      '=': '\\=',
+      '\u0000': '\\00'
+    };
+
+    return dn.replace(/[\\,+"<>;=\u0000]/g, match => escapeMap[match]);
+  }
+}
+
+// XML/XXE Prevention
+export class XMLInjectionPrevention {
+  /**
+   * XML content sanitization
+   */
+  static sanitizeXML(xml: string): string {
+    // Remove DOCTYPE declarations to prevent XXE
+    const doctypeRegex = /<!DOCTYPE[^>]*>/gi;
+    let sanitized = xml.replace(doctypeRegex, '');
+
+    // Remove external entity references
+    const entityRegex = /<!ENTITY[^>]*>/gi;
+    sanitized = sanitized.replace(entityRegex, '');
+
+    // Escape dangerous characters
+    sanitized = sanitized
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;');
+
+    return sanitized;
+  }
+}
+
+// Comprehensive Input Validator
+export class InputValidator {
+  /**
+   * Validate and sanitize input based on type
+   */
+  static validateInput(input: any, type: string, options: ValidationOptions = {}): any {
+    switch (type) {
+      case 'string':
+        return this.validateString(input, options);
+      case 'number':
+        return this.validateNumber(input, options);
+      case 'email':
+        return this.validateEmail(input);
+      case 'url':
+        return this.validateURL(input);
+      case 'html':
+        return this.validateHTML(input);
+      case 'sql':
+        return this.validateSQL(input);
+      case 'json':
+        return this.validateJSON(input);
+      default:
+        throw new ValidationError(`Unknown validation type: ${type}`);
+    }
+  }
+
+  private static validateString(input: any, options: ValidationOptions): SanitizedString {
+    if (typeof input !== 'string') {
+      throw new ValidationError('Input must be a string');
+    }
+
+    let sanitized = input.trim();
+
+    // Length validation
+    if (options.minLength && sanitized.length < options.minLength) {
+      throw new ValidationError(`String too short (minimum ${options.minLength})`);
+    }
+    if (options.maxLength && sanitized.length > options.maxLength) {
+      throw new ValidationError(`String too long (maximum ${options.maxLength})`);
+    }
+
+    // Pattern validation
+    if (options.pattern && !options.pattern.test(sanitized)) {
+      throw new ValidationError('String does not match required pattern');
+    }
+
+    // Sanitization
+    if (options.sanitize !== false) {
+      sanitized = XSSPrevention.sanitizeHTML(sanitized);
+    }
+
+    return sanitized as SanitizedString;
+  }
+
+  private static validateNumber(input: any, options: ValidationOptions): ValidatedNumber {
+    const num = Number(input);
+    if (isNaN(num) || !isFinite(num)) {
+      throw new ValidationError('Invalid number');
+    }
+
+    if (options.min !== undefined && num < options.min) {
+      throw new ValidationError(`Number too small (minimum ${options.min})`);
+    }
+    if (options.max !== undefined && num > options.max) {
+      throw new ValidationError(`Number too large (maximum ${options.max})`);
+    }
+
+    return num as ValidatedNumber;
+  }
+
+  private static validateEmail(input: any): SanitizedString {
+    if (typeof input !== 'string') {
+      throw new ValidationError('Email must be a string');
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(input)) {
+      throw new ValidationError('Invalid email format');
+    }
+
+    return input.toLowerCase().trim() as SanitizedString;
+  }
+
+  private static validateURL(input: any): SanitizedString {
+    if (typeof input !== 'string') {
+      throw new ValidationError('URL must be a string');
+    }
+
+    return XSSPrevention.sanitizeURL(input);
+  }
+
+  private static validateHTML(input: any): SanitizedString {
+    if (typeof input !== 'string') {
+      throw new ValidationError('HTML must be a string');
+    }
+
+    return XSSPrevention.sanitizeHTML(input);
+  }
+
+  private static validateSQL(input: any): string {
+    if (typeof input !== 'string') {
+      throw new ValidationError('SQL must be a string');
+    }
+
+    return SQLInjectionPrevention.buildParameterizedQuery(input, []).query;
+  }
+
+  private static validateJSON(input: any): any {
+    if (typeof input === 'string') {
+      try {
+        return JSON.parse(input);
+      } catch {
+        throw new ValidationError('Invalid JSON string');
+      }
+    }
+    return input;
+  }
+}
+
+interface ValidationOptions {
+  minLength?: number;
+  maxLength?: number;
+  min?: number;
+  max?: number;
+  pattern?: RegExp;
+  sanitize?: boolean;
+} 

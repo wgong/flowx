@@ -5,11 +5,11 @@
  * including agent communication scenarios, event handling, and error recovery.
  */
 
-import { MessageBus, MessageBusConfig } from '../../src/communication/message-bus.js';
-import { MessageBroker, IMessageBroker } from '../../src/communication/message-broker.js';
-import { EventBus } from '../../src/core/event-bus.js';
-import { Logger } from '../../src/core/logger.js';
-import { AgentId } from '../../src/swarm/types.js';
+import { MessageBus, MessageBusConfig } from '../../src/communication/message-bus';
+import { MessageBroker, IMessageBroker } from '../../src/communication/message-broker';
+import { EventBus } from '../../src/core/event-bus';
+import { Logger } from '../../src/core/logger';
+import { AgentId } from '../../src/swarm/types';
 
 describe('Communication Integration Tests', () => {
   let messageBus: MessageBus;

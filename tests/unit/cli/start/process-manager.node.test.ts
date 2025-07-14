@@ -41,9 +41,9 @@ class MockProcess {
     this.kill = mockKill.mockImplementation(() => {
       this.killed = true;
       // Simulate process exit
-      const exitListener = this.on.mock.calls.find(call => call[0] === 'exit')?.[1];
+      const exitListener = this.on.mock.calls.find((call: any) => call[0] === 'exit')?.[1];
       if (exitListener) {
-        exitListener(0);
+        (exitListener as any)(0);
       }
       return true;
     });
@@ -55,7 +55,7 @@ class ProcessManager {
   processes: Map<string, any> = new Map();
   
   constructor() {
-    mockSpawn.mockImplementation((command: string, args: string[], options: any) => {
+    mockSpawn.mockImplementation((...args: any[]) => {
       const processId = Math.floor(Math.random() * 10000);
       const process = new MockProcess(processId);
       return process;
@@ -105,11 +105,11 @@ class ProcessManager {
       process,
       status: ProcessStatus.RUNNING,
       startedAt: new Date(),
-      pid: process.pid,
+      pid: (process as any).pid,
       options
     });
     
-    return process.pid;
+    return (process as any).pid;
   }
   
   async stop(id: string): Promise<boolean> {

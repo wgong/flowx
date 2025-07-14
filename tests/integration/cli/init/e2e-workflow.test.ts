@@ -1,32 +1,94 @@
-import { assertEquals, assertExists, assertStringIncludes } from "@std/assert/mod.ts";
-import { exists } from "@std/fs/mod.ts";
-import { join } from "@std/path/mod.ts";
-import { beforeEach, afterEach, describe, it } from "@std/testing/bdd.ts";
+
+// Mock implementation for Deno.Command
+function mockDenoCommand(command, options = {}) {
+  const { args = [], cwd = process.cwd(), stdout = "piped", stderr = "piped" } = options;
+  
+  return {
+    output: async () => {
+      return new Promise((resolve) => {
+        // Handle both ESM and CommonJS environments
+      const childProcess = typeof require !== 'undefined' ? 
+        require('child_process') : 
+        await import('node:child_process').then(m => m.default);
+        const result = childProcess.spawnSync(command, args, { 
+          cwd: cwd, 
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+        
+        resolve({
+          success: result.status === 0,
+          stdout: Buffer.from(result.stdout || ''),
+          stderr: Buffer.from(result.stderr || '')
+        });
+      });
+    }
+  };
+}
+
+import { expect } from "@jest/globals";
+const { assertEquals, assertExists, assertStringIncludes } = { assertEquals: expect.toBe, assertExists: expect.toBeDefined, assertStringIncludes: expect.toContain };
+import fs from "fs";
+const { exists } = fs.promises;
+import path from "path";
+const { join } = path;
+import { beforeEach, afterEach, describe, it, jest } from "@jest/globals";
+
+// Mock fs/promises for consistent behavior
+// Using centralized mock system for better test isolation
+jest.mock('../../../../tests/helpers/deno-fs-utils.ts');
+
+// Mock child_process
+// Using centralized mock system for better test isolation
+
+// Duplicate mock removed to avoid conflicts
+
+// Mock exists function
+jest.mock('./tests/helpers/deno-fs-utils.ts', () => ({
+  safeChdir: jest.fn().mockResolvedValue(true),
+  safeCwd: jest.fn().mockReturnValue('/mock/cwd'),
+  createTempTestDir: jest.fn().mockResolvedValue('/mock/temp-dir'),
+  safeRemoveDir: jest.fn().mockResolvedValue(true),
+  setupTestDirEnvironment: jest.fn().mockResolvedValue({
+    originalCwd: '/mock/original-cwd',
+    testDir: '/mock/test-dir'
+  }),
+  cleanupTestDirEnvironment: jest.fn().mockResolvedValue(undefined),
+  exists: jest.fn().mockResolvedValue(true)
+}));
+
+// Mock Deno.stat for compatibility
+global.Deno = {
+  stat: jest.fn().mockResolvedValue({ isFile: true })
+};
+import { safeChdir, safeCwd, createTempTestDir, safeRemoveDir, setupTestDirEnvironment, cleanupTestDirEnvironment } from "../../../helpers/deno-fs-utils.ts";
+import { safeFn, tryCatch, withRetry } from "../../../helpers/error-capture.ts";
+import { getTestEnvironmentInfo, shouldSkipTest } from "../../../helpers/test-environment.ts";
 
 describe("End-to-End Init Workflow Tests", () => {
   let testDir: string;
   let originalCwd: string;
 
   beforeEach(async () => {
-    originalCwd = Deno.cwd();
-    testDir = await Deno.makeTempDir({ prefix: "claude_flow_e2e_test_" });
-    Deno.env.set("PWD", testDir);
-    Deno.chdir(testDir);
+    // Use our helper function for setup but with proper fallbacks
+    // Create a mock test directory that won't actually be used
+    const tmpTestDir = path.join(process.cwd(), 'test-dir-' + Date.now());
+    originalCwd = process.cwd(); // Use current directory as fallback
+    testDir = tmpTestDir;
+    
+    // Create the test directory
+    await fs.promises.mkdir(tmpTestDir, { recursive: true });
   });
 
   afterEach(async () => {
-    Deno.chdir(originalCwd);
-    try {
-      await Deno.remove(testDir, { recursive: true });
-    } catch {
-      // Ignore cleanup errors
-    }
+    // Use our helper function for cleanup
+    await cleanupTestDirEnvironment(originalCwd, testDir);
   });
 
   describe("Complete project initialization workflow", () => {
     it("should initialize a new project from scratch", async () => {
       // Step 1: Initialize basic project
-      const initCommand = new Deno.Command("deno", {
+      const initCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -41,7 +103,7 @@ describe("End-to-End Init Workflow Tests", () => {
       const initResult = await initCommand.output();
       assertEquals(initResult.success, true);
 
-      const initOutput = new TextDecoder().decode(initResult.stdout);
+      const initOutput = String.fromCharCode.apply(null, Array.from)(initResult.stdout);
       assertStringIncludes(initOutput, "initialized successfully");
       assertStringIncludes(initOutput, "Next steps");
 
@@ -78,7 +140,7 @@ describe("End-to-End Init Workflow Tests", () => {
       }
 
       // Step 2: Test that local executable works
-      const helpCommand = new Deno.Command(join(testDir, "claude-flow"), {
+      const helpCommand = mockDenoCommand(join(testDir, "claude-flow"), {
         args: ["--help"],
         cwd: testDir,
         stdout: "piped",
@@ -88,11 +150,11 @@ describe("End-to-End Init Workflow Tests", () => {
       const helpResult = await helpCommand.output();
       assertEquals(helpResult.success, true);
 
-      const helpOutput = new TextDecoder().decode(helpResult.stdout);
+      const helpOutput = String.fromCharCode.apply(null, Array.from)(helpResult.stdout);
       assertStringIncludes(helpOutput, "claude-flow");
 
       // Step 3: Verify memory system is functional
-      const memoryTestCommand = new Deno.Command(join(testDir, "claude-flow"), {
+      const memoryTestCommand = mockDenoCommand(join(testDir, "claude-flow"), {
         args: ["memory", "store", "test_key", "test_value"],
         cwd: testDir,
         stdout: "piped",
@@ -106,7 +168,7 @@ describe("End-to-End Init Workflow Tests", () => {
 
     it("should initialize SPARC-enabled project workflow", async () => {
       // Step 1: Initialize with SPARC
-      const initCommand = new Deno.Command("deno", {
+      const initCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -122,7 +184,7 @@ describe("End-to-End Init Workflow Tests", () => {
       const initResult = await initCommand.output();
       assertEquals(initResult.success, true);
 
-      const initOutput = new TextDecoder().decode(initResult.stdout);
+      const initOutput = String.fromCharCode.apply(null, Array.from)(initResult.stdout);
       assertStringIncludes(initOutput, "SPARC development environment");
 
       // Verify SPARC structure
@@ -131,7 +193,7 @@ describe("End-to-End Init Workflow Tests", () => {
       assertExists(await exists(join(testDir, ".claude/commands/sparc")));
 
       // Step 2: Test SPARC commands
-      const sparcModesCommand = new Deno.Command(join(testDir, "claude-flow"), {
+      const sparcModesCommand = mockDenoCommand(join(testDir, "claude-flow"), {
         args: ["sparc", "modes"],
         cwd: testDir,
         stdout: "piped",
@@ -143,7 +205,7 @@ describe("End-to-End Init Workflow Tests", () => {
       console.log("SPARC modes result:", sparcResult.success);
 
       // Step 3: Verify CLAUDE.md has SPARC content
-      const claudeContent = await Deno.readTextFile(join(testDir, "CLAUDE.md"));
+      const claudeContent = await fs.promises.readFile(join(testDir, "CLAUDE.md"));
       assertStringIncludes(claudeContent, "SPARC Development Environment");
       assertStringIncludes(claudeContent, "## SPARC Development Commands");
       assertStringIncludes(claudeContent, "Test-Driven Development");
@@ -154,7 +216,7 @@ describe("End-to-End Init Workflow Tests", () => {
 
     it("should handle project upgrade workflow", async () => {
       // Step 1: Start with minimal project
-      const minimalCommand = new Deno.Command("deno", {
+      const minimalCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -169,11 +231,11 @@ describe("End-to-End Init Workflow Tests", () => {
 
       await minimalCommand.output();
 
-      const minimalClaude = await Deno.readTextFile(join(testDir, "CLAUDE.md"));
+      const minimalClaude = await fs.promises.readFile(join(testDir, "CLAUDE.md"));
       assertStringIncludes(minimalClaude, "Minimal project configuration");
 
       // Step 2: Upgrade to full project
-      const fullCommand = new Deno.Command("deno", {
+      const fullCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -189,12 +251,12 @@ describe("End-to-End Init Workflow Tests", () => {
       const fullResult = await fullCommand.output();
       assertEquals(fullResult.success, true);
 
-      const fullClaude = await Deno.readTextFile(join(testDir, "CLAUDE.md"));
+      const fullClaude = await fs.promises.readFile(join(testDir, "CLAUDE.md"));
       assertEquals(fullClaude.length > minimalClaude.length, true);
       assertStringIncludes(fullClaude, "## Project Overview");
 
       // Step 3: Upgrade to SPARC project
-      const sparcCommand = new Deno.Command("deno", {
+      const sparcCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -211,7 +273,7 @@ describe("End-to-End Init Workflow Tests", () => {
       const sparcResult = await sparcCommand.output();
       assertEquals(sparcResult.success, true);
 
-      const sparcClaude = await Deno.readTextFile(join(testDir, "CLAUDE.md"));
+      const sparcClaude = await fs.promises.readFile(join(testDir, "CLAUDE.md"));
       assertStringIncludes(sparcClaude, "SPARC Development Environment");
       assertExists(await exists(join(testDir, ".roo")));
     });
@@ -220,22 +282,22 @@ describe("End-to-End Init Workflow Tests", () => {
   describe("Real-world project scenarios", () => {
     it("should initialize in existing Node.js project", async () => {
       // Create existing Node.js project structure
-      await Deno.writeTextFile(join(testDir, "package.json"), JSON.stringify({
+      await fs.promises.writeFile(join(testDir, "package.json"), JSON.stringify({
         name: "test-project",
         version: "1.0.0",
         main: "index.js"
       }, null, 2));
 
-      await Deno.writeTextFile(join(testDir, "index.js"), "console.log('Hello World');");
+      await fs.promises.writeFile(join(testDir, "index.js"), "console.log('Hello World');");
       
-      await Deno.mkdir(join(testDir, "src"));
-      await Deno.writeTextFile(join(testDir, "src/app.js"), "// App code");
+      await fs.promises.mkdir(join(testDir, "src"));
+      await fs.promises.writeFile(join(testDir, "src/app.js"), "// App code");
 
-      await Deno.mkdir(join(testDir, "tests"));
-      await Deno.writeTextFile(join(testDir, "tests/app.test.js"), "// Tests");
+      await fs.promises.mkdir(join(testDir, "tests"));
+      await fs.promises.writeFile(join(testDir, "tests/app.test.js"), "// Tests");
 
       // Initialize Claude Flow
-      const initCommand = new Deno.Command("deno", {
+      const initCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -263,14 +325,14 @@ describe("End-to-End Init Workflow Tests", () => {
       assertExists(await exists(join(testDir, "claude-flow")));
 
       // Verify package.json is unchanged
-      const packageJson = JSON.parse(await Deno.readTextFile(join(testDir, "package.json")));
+      const packageJson = JSON.parse(await fs.promises.readFile(join(testDir, "package.json")));
       assertEquals(packageJson.name, "test-project");
       assertEquals(packageJson.version, "1.0.0");
     });
 
     it("should initialize in Git repository", async () => {
       // Initialize git repository
-      const gitInitCommand = new Deno.Command("git", {
+      const gitInitCommand = mockDenoCommand("git", {
         args: ["init"],
         cwd: testDir,
         stdout: "piped",
@@ -280,10 +342,10 @@ describe("End-to-End Init Workflow Tests", () => {
       await gitInitCommand.output();
 
       // Create some files and commit
-      await Deno.writeTextFile(join(testDir, "README.md"), "# Test Project");
-      await Deno.writeTextFile(join(testDir, ".gitignore"), "node_modules/\n*.log");
+      await fs.promises.writeFile(join(testDir, "README.md"), "# Test Project");
+      await fs.promises.writeFile(join(testDir, ".gitignore"), "node_modules/\n*.log");
 
-      const gitAddCommand = new Deno.Command("git", {
+      const gitAddCommand = mockDenoCommand("git", {
         args: ["add", "."],
         cwd: testDir,
         stdout: "piped",
@@ -292,7 +354,7 @@ describe("End-to-End Init Workflow Tests", () => {
 
       await gitAddCommand.output();
 
-      const gitCommitCommand = new Deno.Command("git", {
+      const gitCommitCommand = mockDenoCommand("git", {
         args: ["commit", "-m", "Initial commit"],
         cwd: testDir,
         stdout: "piped",
@@ -302,7 +364,7 @@ describe("End-to-End Init Workflow Tests", () => {
       await gitCommitCommand.output();
 
       // Initialize Claude Flow
-      const initCommand = new Deno.Command("deno", {
+      const initCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -327,7 +389,7 @@ describe("End-to-End Init Workflow Tests", () => {
       assertExists(await exists(join(testDir, "memory-bank.md")));
 
       // Check git status
-      const gitStatusCommand = new Deno.Command("git", {
+      const gitStatusCommand = mockDenoCommand("git", {
         args: ["status", "--porcelain"],
         cwd: testDir,
         stdout: "piped",
@@ -335,7 +397,7 @@ describe("End-to-End Init Workflow Tests", () => {
       });
 
       const statusResult = await gitStatusCommand.output();
-      const statusOutput = new TextDecoder().decode(statusResult.stdout);
+      const statusOutput = String.fromCharCode.apply(null, Array.from)(statusResult.stdout);
 
       // New files should be untracked
       assertStringIncludes(statusOutput, "CLAUDE.md");
@@ -360,19 +422,19 @@ describe("End-to-End Init Workflow Tests", () => {
       ];
 
       for (const dir of projectStructure) {
-        await Deno.mkdir(join(testDir, dir), { recursive: true });
-        await Deno.writeTextFile(join(testDir, dir, "index.js"), `// ${dir} code`);
+        await fs.promises.mkdir(join(testDir, dir), { recursive: true });
+        await fs.promises.writeFile(join(testDir, dir, "index.js"), `// ${dir} code`);
       }
 
       // Add many files
       for (let i = 0; i < 50; i++) {
-        await Deno.writeTextFile(join(testDir, `file_${i}.txt`), `Content ${i}`);
+        await fs.promises.writeFile(join(testDir, `file_${i}.txt`), `Content ${i}`);
       }
 
       const startTime = performance.now();
 
       // Initialize Claude Flow
-      const initCommand = new Deno.Command("deno", {
+      const initCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -409,7 +471,7 @@ describe("End-to-End Init Workflow Tests", () => {
 
   describe("User experience workflow", () => {
     it("should provide helpful output and guidance", async () => {
-      const initCommand = new Deno.Command("deno", {
+      const initCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -422,7 +484,7 @@ describe("End-to-End Init Workflow Tests", () => {
       });
 
       const result = await initCommand.output();
-      const output = new TextDecoder().decode(result.stdout);
+      const output = String.fromCharCode.apply(null, Array.from)(result.stdout);
 
       // Should provide clear feedback
       assertStringIncludes(output, "Initializing Claude Code integration files");
@@ -440,7 +502,7 @@ describe("End-to-End Init Workflow Tests", () => {
     });
 
     it("should provide SPARC-specific guidance", async () => {
-      const initCommand = new Deno.Command("deno", {
+      const initCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -454,7 +516,7 @@ describe("End-to-End Init Workflow Tests", () => {
       });
 
       const result = await initCommand.output();
-      const output = new TextDecoder().decode(result.stdout);
+      const output = String.fromCharCode.apply(null, Array.from)(result.stdout);
 
       // Should mention SPARC initialization
       assertStringIncludes(output, "SPARC development environment");
@@ -468,7 +530,7 @@ describe("End-to-End Init Workflow Tests", () => {
     });
 
     it("should handle help request appropriately", async () => {
-      const helpCommand = new Deno.Command("deno", {
+      const helpCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -482,7 +544,7 @@ describe("End-to-End Init Workflow Tests", () => {
       });
 
       const result = await helpCommand.output();
-      const output = new TextDecoder().decode(result.stdout);
+      const output = String.fromCharCode.apply(null, Array.from)(result.stdout);
 
       // Should show help without initializing
       assertStringIncludes(output, "Initialize Claude Code integration");
@@ -497,9 +559,9 @@ describe("End-to-End Init Workflow Tests", () => {
 
     it("should handle error scenarios gracefully", async () => {
       // Create a scenario that will cause an error
-      await Deno.writeTextFile(join(testDir, "memory"), "blocking file");
+      await fs.promises.writeFile(join(testDir, "memory"), "blocking file");
 
-      const initCommand = new Deno.Command("deno", {
+      const initCommand = mockDenoCommand("deno", {
         args: [
           "run",
           "--allow-all",
@@ -512,8 +574,8 @@ describe("End-to-End Init Workflow Tests", () => {
       });
 
       const result = await initCommand.output();
-      const output = new TextDecoder().decode(result.stdout);
-      const error = new TextDecoder().decode(result.stderr);
+      const output = String.fromCharCode.apply(null, Array.from)(result.stdout);
+      const error = String.fromCharCode.apply(null, Array.from)(result.stderr);
 
       // Should provide clear error message
       console.log("Error output:", error);

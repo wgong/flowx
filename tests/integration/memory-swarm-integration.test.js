@@ -4,10 +4,10 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import { EventBus } from '../../src/core/event-bus.js';
-import { Logger } from '../../src/core/logger.js';
-import { MemoryManager } from '../../src/memory/manager.js';
-import { SwarmCoordinator } from '../../src/swarm/coordinator.js';
+import { EventBus } from '../../src/core/event-bus';
+import { Logger } from '../../src/core/logger';
+import { MemoryManager } from '../../src/memory/manager';
+import { SwarmCoordinator } from '../../src/swarm/coordinator';
 import * as fs from 'node:fs/promises';
 import * as path from 'path';
 import * as os from 'os';

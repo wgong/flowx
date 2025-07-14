@@ -1,26 +1,47 @@
 /**
- * Unit tests for Neural Workflow
+ * Unit tests for neural workflow integration
  */
 
-import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
-import { NeuralWorkflow } from '../../../../src/hive-mind/neural/neural-workflow.js';
-import { PatternRecognizer } from '../../../../src/hive-mind/neural/pattern-recognizer.js';
-import { NeuralManager } from '../../../../src/hive-mind/neural/neural-manager.js';
-import { EventBus } from '../../../../src/core/event-bus.js';
-import { Logger } from '../../../../src/core/logger.js';
+import { jest, describe, test, expect, beforeEach, afterEach } from '@jest/globals';
+
+// Mock the Logger to prevent initialization errors
+const mockLogger = {
+  debug: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+  child: jest.fn().mockReturnThis()
+};
+
+jest.mock('../../../../src/core/logger', () => ({
+  Logger: {
+    getInstance: jest.fn().mockReturnValue(mockLogger)
+  },
+  LogLevel: {
+    DEBUG: 0,
+    INFO: 1,
+    WARN: 2,
+    ERROR: 3,
+    CRITICAL: 4
+  }
+}));
+
+import { NeuralWorkflow } from '../../../../src/hive-mind/neural/neural-workflow';
+import { PatternRecognizer } from '../../../../src/hive-mind/neural/pattern-recognizer';
+import { NeuralManager } from '../../../../src/hive-mind/neural/neural-manager';
+import { EventBus } from '../../../../src/core/event-bus';
+import { Logger } from '../../../../src/core/logger';
 
 // Mock dependencies
 jest.mock('../../../../src/hive-mind/neural/pattern-recognizer.js');
 jest.mock('../../../../src/hive-mind/neural/neural-manager.js');
 jest.mock('../../../../src/core/event-bus.js');
-jest.mock('../../../../src/core/logger.js');
 
 describe('NeuralWorkflow', () => {
   let workflow: NeuralWorkflow;
   let mockPatternRecognizer: jest.Mocked<PatternRecognizer>;
   let mockNeuralManager: jest.Mocked<NeuralManager>;
   let mockEventBus: jest.Mocked<EventBus>;
-  let mockLogger: jest.Mocked<Logger>;
 
   beforeEach(() => {
     // Create mock instances
@@ -28,6 +49,7 @@ describe('NeuralWorkflow', () => {
       recognizePattern: jest.fn(),
       getStatus: jest.fn(),
     } as any;
+    
     mockNeuralManager = {
       initialize: jest.fn(),
       recognizePattern: jest.fn(),
@@ -39,13 +61,6 @@ describe('NeuralWorkflow', () => {
       emit: jest.fn(),
       on: jest.fn(),
       off: jest.fn(),
-    } as any;
-
-    mockLogger = {
-      info: jest.fn(),
-      debug: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
     } as any;
 
     // Create workflow instance with proper config
@@ -80,10 +95,22 @@ describe('NeuralWorkflow', () => {
     jest.clearAllMocks();
   });
 
+  describe('basic functionality', () => {
+    it('should create workflow instance', () => {
+      expect(workflow).toBeDefined();
+    });
+
+    it('should have mock eventBus', () => {
+      expect(mockEventBus.emit).toBeDefined();
+      expect(typeof mockEventBus.emit).toBe('function');
+    });
+  });
+
   describe('initialization', () => {
     it('should initialize successfully', async () => {
       await workflow.initialize();
       
+      expect(mockNeuralManager.initialize).toHaveBeenCalled();
       expect(mockEventBus.emit).toHaveBeenCalledWith('neural:workflow:initialized', expect.objectContaining({
         timestamp: expect.any(String),
         config: expect.any(Object)
@@ -91,12 +118,9 @@ describe('NeuralWorkflow', () => {
     });
 
     it('should handle initialization errors', async () => {
-      // Test should pass since initialize() only initializes neural manager
-      await workflow.initialize();
-      expect(mockEventBus.emit).toHaveBeenCalledWith('neural:workflow:initialized', expect.objectContaining({
-        timestamp: expect.any(String),
-        config: expect.any(Object)
-      }));
+      mockNeuralManager.initialize.mockRejectedValue(new Error('Init failed'));
+      
+      await expect(workflow.initialize()).rejects.toThrow('Init failed');
     });
   });
 
@@ -242,14 +266,19 @@ describe('NeuralWorkflow', () => {
     it('should shutdown all components gracefully', async () => {
       await workflow.shutdown();
       
+      expect(mockNeuralManager.shutdown).toHaveBeenCalled();
       expect(mockEventBus.emit).toHaveBeenCalledWith('neural:workflow:shutdown', expect.objectContaining({
         timestamp: expect.any(String)
       }));
     });
 
     it('should handle shutdown errors gracefully', async () => {
+      // Mock the shutdown method to reject with an error
+      mockNeuralManager.shutdown.mockRejectedValue(new Error('Shutdown failed'));
+      
       await workflow.shutdown();
       
+      expect(mockNeuralManager.shutdown).toHaveBeenCalled();
       expect(mockEventBus.emit).toHaveBeenCalledWith('neural:workflow:shutdown', expect.objectContaining({
         timestamp: expect.any(String)
       }));
