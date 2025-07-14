@@ -254,7 +254,7 @@ export const analyzeCommand: CLICommand = {
       if (options.verbose) {
         console.error(error);
       }
-      process.exit(1);
+      throw error;
     }
   }
 };

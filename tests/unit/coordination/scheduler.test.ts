@@ -42,7 +42,7 @@ describe('Task Coordinator', () => {
       resourceTimeout: 30000
     };
 
-    scheduler = new TaskScheduler(config, mockEventBus, mockLogger);
+    scheduler = new TaskCoordinator(config, mockEventBus, mockLogger);
   });
 
   afterEach(() => {

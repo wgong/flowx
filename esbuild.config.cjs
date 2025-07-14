@@ -214,7 +214,15 @@ async function copyStaticFiles() {
     
     // Utils
     await build({
-      entryPoints: ['src/utils/helpers.ts', 'src/utils/types.ts', 'src/utils/errors.ts'],
+      entryPoints: [
+        'src/utils/helpers.ts', 
+        'src/utils/types.ts', 
+        'src/utils/errors.ts',
+        'src/utils/colors.ts',
+        'src/utils/logger.ts',
+        'src/utils/formatters.ts',
+        'src/utils/event-bus.ts'
+      ],
       bundle: false,
       platform: 'node',
       outdir: 'dist/utils',
@@ -244,7 +252,10 @@ async function copyStaticFiles() {
         'src/terminal/manager.ts',
         'src/terminal/session.ts',
         'src/terminal/pool.ts',
-        'src/terminal/vscode-bridge.ts'
+        'src/terminal/vscode-bridge.ts',
+        'src/terminal/adapters/base.ts',
+        'src/terminal/adapters/vscode.ts',
+        'src/terminal/adapters/native.ts'
       ],
       bundle: false,
       platform: 'node',
@@ -264,7 +275,11 @@ async function copyStaticFiles() {
         'src/memory/indexer.ts',
         'src/memory/memory-vault.ts',
         'src/memory/distributed-memory.ts',
-        'src/memory/swarm-memory.ts'
+        'src/memory/swarm-memory.ts',
+        'src/memory/backends/base.ts',
+        'src/memory/backends/markdown.ts',
+        'src/memory/backends/sqlite.ts',
+        'src/memory/backends/sqljs.ts'
       ],
       bundle: false,
       platform: 'node',
@@ -330,7 +345,20 @@ async function copyStaticFiles() {
         'src/coordination/conflict-resolution.ts',
         'src/coordination/dependency-graph.ts',
         'src/coordination/swarm-monitor.ts',
-        'src/coordination/multi-model-orchestrator.ts'
+        'src/coordination/multi-model-orchestrator.ts',
+        'src/coordination/messaging.ts',
+        'src/coordination/manager.ts',
+        'src/coordination/work-stealing.ts',
+        'src/coordination/resources.ts',
+        'src/coordination/load-balancer.ts',
+        'src/coordination/circuit-breaker.ts',
+        'src/coordination/hive-orchestrator.ts',
+        'src/coordination/message-coordinator.ts',
+        'src/coordination/task-coordinator.ts',
+        'src/coordination/index.ts',
+        'src/coordination/task-execution-engine.ts',
+        'src/coordination/task-orchestrator.ts',
+        'src/coordination/metrics.ts'
       ],
       bundle: false,
       platform: 'node',
