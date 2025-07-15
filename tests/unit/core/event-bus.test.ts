@@ -10,6 +10,9 @@ describe('EventBus', () => {
   let singletonInstance: EventBus;
   
   beforeEach(() => {
+    // Set up fake timers for tests that need them
+    jest.useFakeTimers();
+    
     // Get the singleton instance for tests
     eventBus = EventBus.getInstance();
     
@@ -28,6 +31,9 @@ describe('EventBus', () => {
         clearInterval(typedBus.cleanupInterval);
       }
     }
+    
+    // Restore real timers
+    jest.useRealTimers();
   });
   
   // Clear intervals from any singletons when all tests are done

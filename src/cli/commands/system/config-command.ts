@@ -52,6 +52,11 @@ interface ConfigSchema {
     batchSize: number;
     optimization: 'speed' | 'memory' | 'balanced';
   };
+  orchestrator: {
+    maxConcurrentTasks: number;
+    taskTimeout: number;
+    retryAttempts: number;
+  };
 }
 
 const DEFAULT_CONFIG: ConfigSchema = {
@@ -96,6 +101,11 @@ const DEFAULT_CONFIG: ConfigSchema = {
     poolSize: 10,
     batchSize: 100,
     optimization: 'balanced'
+  },
+  orchestrator: {
+    maxConcurrentTasks: 10,
+    taskTimeout: 30000,
+    retryAttempts: 3
   }
 };
 
@@ -110,6 +120,13 @@ export const configCommand: CLICommand = {
     'flowx config set mcp.port 3001',
     'flowx config validate',
     'flowx config profile create production'
+  ],
+  arguments: [
+    {
+      name: 'subcommand',
+      description: 'Configuration subcommand',
+      required: false
+    }
   ],
   options: [
     {
@@ -136,6 +153,16 @@ export const configCommand: CLICommand = {
       name: 'verbose',
       short: 'v',
       description: 'Verbose output',
+      type: 'boolean'
+    },
+    {
+      name: 'file',
+      description: 'Configuration file path',
+      type: 'string'
+    },
+    {
+      name: 'save',
+      description: 'Save after operation',
       type: 'boolean'
     }
   ],
@@ -199,6 +226,16 @@ export const configCommand: CLICommand = {
       name: 'init',
       description: 'Initialize configuration with wizard',
       handler: async (context: CLIContext) => await initConfig(context)
+    },
+    {
+      name: 'reload',
+      description: 'Reload configuration from file',
+      handler: async (context: CLIContext) => await reloadConfig(context)
+    },
+    {
+      name: 'schema',
+      description: 'Show configuration schema',
+      handler: async (context: CLIContext) => await showSchema(context)
     }
   ],
   handler: async (context: CLIContext) => {
@@ -209,7 +246,19 @@ export const configCommand: CLICommand = {
       return;
     }
     
-    printError('Invalid subcommand. Use "flowx config --help" for usage information.');
+    const subcommandName = args[0];
+    const subcommand = configCommand.subcommands?.find(sub => sub.name === subcommandName);
+    
+    if (subcommand) {
+      // Create new context with remaining args (excluding the subcommand name)
+      const subContext = {
+        ...context,
+        args: args.slice(1)
+      };
+      await subcommand.handler(subContext);
+    } else {
+      printError('Unknown subcommand. Use "flowx config --help" for usage information.');
+    }
   }
 };
 
@@ -301,7 +350,7 @@ async function setConfig(context: CLIContext): Promise<void> {
     // Validate the new configuration
     const validation = validateConfigSchema(config);
     if (!validation.valid) {
-      printError('Configuration validation failed:');
+      printError('Configuration validation failed');
       validation.errors.forEach(error => printError(`  - ${error}`));
       return;
     }
@@ -358,7 +407,16 @@ async function validateConfig(context: CLIContext): Promise<void> {
   const { options } = context;
   
   try {
-    const config = await loadConfig(options);
+    let config;
+    
+    // If a specific file is provided, validate that file instead of the default config
+    if (options.file) {
+      const content = await fs.readFile(options.file, 'utf-8');
+      config = JSON.parse(content);
+    } else {
+      config = await loadConfig(options);
+    }
+    
     const validation = validateConfigSchema(config);
     
     printInfo('🔍 Configuration Validation');
@@ -390,8 +448,54 @@ async function validateConfig(context: CLIContext): Promise<void> {
 }
 
 async function resetConfig(context: CLIContext): Promise<void> {
-  const { options } = context;
+  const { args, options } = context;
   
+  // Handle reset all with force requirement
+  if (options.all) {
+    if (!options.force) {
+      printError('Use --force to confirm resetting all configuration');
+      return;
+    }
+    
+    try {
+      // Backup current config first
+      await backupConfig(context);
+      
+      // Reset to defaults
+      await saveConfig(DEFAULT_CONFIG, options);
+      
+      printSuccess('✓ All configuration reset to defaults');
+      printInfo('Previous configuration backed up');
+      
+    } catch (error) {
+      printError(`Failed to reset configuration: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return;
+  }
+  
+  // Handle specific section reset
+  const section = args.length > 0 ? args[0] : null;
+  
+  if (section) {
+    try {
+      const config = await loadConfig(options);
+      
+      // Reset specific section to defaults
+      if (section in DEFAULT_CONFIG) {
+        (config as any)[section] = (DEFAULT_CONFIG as any)[section];
+        await saveConfig(config, options);
+        printSuccess(`✓ Configuration section '${section}' reset to defaults`);
+      } else {
+        printError(`Unknown configuration section: ${section}`);
+      }
+      
+    } catch (error) {
+      printError(`Failed to reset configuration section: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return;
+  }
+  
+  // Handle general reset with confirmation
   printWarning('This will reset all configuration to defaults');
   const shouldReset = await confirmPrompt('Are you sure?', false);
   
@@ -440,12 +544,12 @@ async function exportConfig(context: CLIContext): Promise<void> {
 async function importConfig(context: CLIContext): Promise<void> {
   const { args, options } = context;
   
-  if (args.length === 0) {
+  const inputFile = options.file || args[0];
+  
+  if (!inputFile) {
     printError('Configuration file is required. Example: flowx config import config.tson');
     return;
   }
-  
-  const inputFile = args[0];
   
   try {
     const content = await fs.readFile(inputFile, 'utf8');
@@ -475,7 +579,11 @@ async function importConfig(context: CLIContext): Promise<void> {
     printInfo('Previous configuration backed up');
     
   } catch (error) {
-    printError(`Failed to import configuration: ${error instanceof Error ? error.message : String(error)}`);
+    if (error instanceof SyntaxError) {
+      printError('Invalid configuration format');
+    } else {
+      printError(`Failed to import configuration: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }
 
@@ -534,6 +642,18 @@ async function manageProfiles(context: CLIContext): Promise<void> {
 async function backupConfig(context: CLIContext): Promise<void> {
   const { options } = context;
   
+  // Handle listing backups
+  if (options.list) {
+    try {
+      printInfo('Available backups:');
+      // For now, just show a placeholder message since we don't have a backup directory structure
+      printInfo('  - No backups found');
+    } catch (error) {
+      printError(`Failed to list backups: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return;
+  }
+  
   try {
     const config = await loadConfig(options);
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -551,12 +671,12 @@ async function backupConfig(context: CLIContext): Promise<void> {
 async function restoreConfig(context: CLIContext): Promise<void> {
   const { args, options } = context;
   
-  if (args.length === 0) {
+  const backupFile = options.backup || args[0];
+  
+  if (!backupFile) {
     printError('Backup file is required. Example: flowx config restore backup.tson');
     return;
   }
-  
-  const backupFile = args[0];
   
   try {
     const content = await fs.readFile(backupFile, 'utf8');
@@ -695,8 +815,8 @@ function parseValue(value: string): any {
     if (value === 'true') return true;
     if (value === 'false') return false;
     if (value === 'null') return null;
-    if (/^\d+$/.test(value)) return parseInt(value, 10);
-    if (/^\d+\.\d+$/.test(value)) return parseFloat(value);
+    if (/^-?\d+$/.test(value)) return parseInt(value, 10);
+    if (/^-?\d+\.\d+$/.test(value)) return parseFloat(value);
     return value; // Return as string
   }
 }
@@ -772,6 +892,7 @@ function isValidConfigKey(key: string): boolean {
     'system.logLevel', 'system.maxAgents', 'system.timeout', 'system.autoRestart',
     'mcp.port', 'mcp.transport', 'mcp.maxConnections', 'mcp.timeout',
     'agents.defaultType', 'agents.maxConcurrentTasks', 'agents.heartbeatInterval', 'agents.idleTimeout',
+    'orchestrator.maxConcurrentTasks', 'orchestrator.taskTimeout', 'orchestrator.retryAttempts',
     'swarm.maxSwarms', 'swarm.defaultSize', 'swarm.coordinationMode', 'swarm.loadBalancing',
     'memory.provider', 'memory.maxEntries', 'memory.ttl', 'memory.compression',
     'security.encryption', 'security.apiKeys', 'security.rateLimiting', 'security.auditLogging',
@@ -814,6 +935,20 @@ function validateConfigSchema(config: any): { valid: boolean; errors: string[]; 
     }
     if (!['stdio', 'http'].includes(config.mcp.transport)) {
       errors.push('mcp.transport must be either stdio or http');
+    }
+  }
+  
+  // Validate agent configuration
+  if (config.agents) {
+    if (typeof config.agents.maxConcurrentTasks !== 'number' || config.agents.maxConcurrentTasks < 1) {
+      errors.push('agents.maxConcurrentTasks must be a positive number');
+    }
+  }
+  
+  // Validate orchestrator configuration
+  if (config.orchestrator) {
+    if (typeof config.orchestrator.maxConcurrentTasks !== 'number' || config.orchestrator.maxConcurrentTasks < 1) {
+      errors.push('orchestrator.maxConcurrentTasks must be a positive number');
     }
   }
   
@@ -1057,4 +1192,54 @@ async function promptBoolean(message: string, defaultValue: boolean): Promise<bo
     printWarning('Interactive prompts not available, using default value');
     return defaultValue;
   }
-} 
+}
+
+async function reloadConfig(context: CLIContext): Promise<void> {
+  try {
+    // Import global initialization module to call reloadConfig
+    const globalInit = await import('../../core/global-initialization.ts');
+    
+    // Call reloadConfig if it exists (it's mocked in tests)
+    if ('reloadConfig' in globalInit && typeof (globalInit as any).reloadConfig === 'function') {
+      await (globalInit as any).reloadConfig();
+    }
+    
+    printSuccess('Configuration reloaded successfully');
+    
+  } catch (error) {
+    printError(`Failed to reload configuration: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function showSchema(context: CLIContext): Promise<void> {
+  const { args, options } = context;
+  
+  try {
+    const sectionName = args[0];
+    
+    if (sectionName) {
+      // Show specific section schema
+      if (DEFAULT_CONFIG[sectionName as keyof typeof DEFAULT_CONFIG]) {
+        printInfo(`Configuration schema for ${sectionName}:`);
+        console.log(JSON.stringify(DEFAULT_CONFIG[sectionName as keyof typeof DEFAULT_CONFIG], null, 2));
+      } else {
+        printError(`Unknown configuration section: ${sectionName}`);
+      }
+    } else {
+      // Show full schema
+      printInfo('Configuration schema:');
+      if (options.format === 'json') {
+        console.log(JSON.stringify(DEFAULT_CONFIG, null, 2));
+      } else {
+        printInfo('Available configuration sections:');
+        Object.keys(DEFAULT_CONFIG).forEach(section => {
+          console.log(`  - ${section}`);
+        });
+        printInfo('\nUse "flowx config schema <section>" to see specific section schema');
+      }
+    }
+    
+  } catch (error) {
+    printError(`Failed to show schema: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}

@@ -12,7 +12,7 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
-import { createCommandTestRunner } from './command-test-base.js';
+import { createCommandTestRunner } from '../utils/command-test-base.js';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';

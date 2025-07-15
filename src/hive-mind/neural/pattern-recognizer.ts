@@ -1,7 +1,7 @@
 import { DatabaseManager } from '../database/database-manager.js';
 import { NeuralPattern, PatternType, CognitiveModel, PatternMatch, LearningSession } from '../types.js';
 import { EventBus } from '../../core/event-bus.js';
-import { Logger } from '../../core/logger.js';
+import { Logger, logger } from '../../core/logger.js';
 import { TensorFlowModel, TensorFlowModelConfig } from './tensorflow-model.js';
 
 export interface PatternRecognitionConfig {
@@ -32,11 +32,7 @@ export class PatternRecognizer {
   ) {
     this.db = db;
     this.eventBus = eventBus;
-    this.logger = new Logger({
-      level: 'info',
-      format: 'json',
-      destination: 'console'
-    }, { component: 'PatternRecognizer' });
+    this.logger = new Logger();
     this.config = config;
     
     this.initializeCognitiveModels();

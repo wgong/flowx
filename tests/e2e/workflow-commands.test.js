@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
-import { createCommandTestRunner } from '../utils/command-test-base';
+import { createCommandTestRunner } from '../utils/command-test-base.js';
 import * as path from 'path';
 
 describe('Workflow Commands E2E', () => {
@@ -16,6 +16,7 @@ describe('Workflow Commands E2E', () => {
       timeout: 60000 // Longer timeout for workflow operations
     });
     await runner.setup();
+    runner.clearWorkflowStore(); // Clear workflow state between tests
   });
   
   afterEach(async () => {
@@ -67,13 +68,13 @@ describe('Workflow Commands E2E', () => {
     });
     
     test('should require workflow name', async () => {
-      const { stdout, code } = await runner.runCommand([
+      const { stderr, code } = await runner.runCommand([
         'workflow', 'create'
         // Missing required --name parameter
       ]);
       
       expect(code).not.toBe(0);
-      expect(stdout).toContain('Workflow name is required');
+      expect(stderr).toContain('Workflow name is required');
     });
   });
   
@@ -530,13 +531,13 @@ describe('Workflow Commands E2E', () => {
   
   describe('error handling', () => {
     test('should handle missing required arguments', async () => {
-      const { stdout, code } = await runner.runCommand([
+      const { stderr, code } = await runner.runCommand([
         'workflow', 'show'
         // Missing required workflow ID
       ]);
       
       expect(code).not.toBe(0);
-      expect(stdout).toContain('Workflow ID is required');
+      expect(stderr).toContain('Workflow ID is required');
     });
     
     test('should handle invalid JSON variables', async () => {
@@ -555,14 +556,14 @@ describe('Workflow Commands E2E', () => {
         return;
       }
       
-      const { stdout, code } = await runner.runCommand([
+      const { stderr, code } = await runner.runCommand([
         'workflow', 'run',
         workflowId,
         '--variables', '{invalid-json'
       ]);
       
       expect(code).not.toBe(0);
-      expect(stdout).toContain('Invalid variables JSON format');
+      expect(stderr).toContain('Invalid variables JSON format');
     });
   });
 });

@@ -29,6 +29,7 @@ import { AuthManager, IAuthManager } from "./auth.ts";
 import { LoadBalancer, ILoadBalancer, RequestQueue } from "./load-balancer.ts";
 import { createFlowXTools, FlowXToolContext } from "./flowx-tools.ts";
 import { createSwarmTools, SwarmToolContext } from "./swarm-tools.ts";
+import { createNeuralTools } from "./neural-tools.js";
 import { createFilesystemTools } from "./tools/filesystem/index.ts";
 import { createWebTools } from "./tools/web/index.ts";
 import { createDatabaseTools } from "./tools/database/index.ts";
@@ -617,6 +618,13 @@ export class MCPServer implements IMCPServer {
       this.registerTool(tool);
     }
     this.logger.info('Registered Database tools', { count: databaseTools.length });
+    
+    // Register Neural Network Tools (imported from original claude-flow)
+    const neuralTools = createNeuralTools(this.logger);
+    for (const tool of neuralTools) {
+      this.registerTool(tool);
+    }
+    this.logger.info('Registered Neural Network tools', { count: neuralTools.length });
   }
 
   private errorToMCPError(error: unknown): MCPError {

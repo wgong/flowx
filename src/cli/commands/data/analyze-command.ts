@@ -169,6 +169,16 @@ export const analyzeCommand: CLICommand = {
       type: 'boolean'
     },
     {
+      name: 'system',
+      description: 'Include system analysis',
+      type: 'boolean'
+    },
+    {
+      name: 'performance',
+      description: 'Include performance analysis',
+      type: 'boolean'
+    },
+    {
       name: 'verbose',
       short: 'v',
       description: 'Verbose output with debug info',

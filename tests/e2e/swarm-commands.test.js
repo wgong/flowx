@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
-import { createCommandTestRunner } from '../utils/command-test-base';
+import { createCommandTestRunner } from '../utils/command-test-base.js';
 import * as path from 'path';
 
 describe('Swarm Commands E2E', () => {

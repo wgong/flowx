@@ -1194,7 +1194,7 @@ export const hiveMindCommand: CLICommand = {
 export async function handleHiveMindStatus(): Promise<void> {
   try {
     // Import the hive-mind module - this will be mocked in tests
-    const hiveMindModule = await import('../../../hive-mind/index.js');
+    const hiveMindModule = await import('../../../hive-mind/index.ts');
     
     // In tests, the mock will provide the methods directly on the module
     // Use type assertion to handle the mock interface
@@ -1244,7 +1244,7 @@ export async function handleHiveMindStatus(): Promise<void> {
 
 export async function handleHiveMindNeural(): Promise<void> {
   try {
-    const hiveMindModule = await import('../../../hive-mind/index.js');
+    const hiveMindModule = await import('../../../hive-mind/index.ts');
     const hiveMind = hiveMindModule as any;
     
     const neuralStatus = hiveMind.getNeuralStatus();
@@ -1271,7 +1271,7 @@ export async function handleHiveMindNeural(): Promise<void> {
 
 export async function handleHiveMindDatabase(): Promise<void> {
   try {
-    const hiveMindModule = await import('../../../hive-mind/index.js');
+    const hiveMindModule = await import('../../../hive-mind/index.ts');
     const hiveMind = hiveMindModule as any;
     
     const databaseStatus = hiveMind.getDatabaseStatus();
@@ -1291,7 +1291,7 @@ export async function handleHiveMindDatabase(): Promise<void> {
 
 export async function handleHiveMindQueen(): Promise<void> {
   try {
-    const hiveMindModule = await import('../../../hive-mind/index.js');
+    const hiveMindModule = await import('../../../hive-mind/index.ts');
     const hiveMind = hiveMindModule as any;
     
     const queenStatus = hiveMind.getQueenStatus();

@@ -32,14 +32,42 @@ jest.mock('../../../../../src/memory/manager', () => ({
 
 // Mock global initialization
 jest.mock('../../../../../src/cli/core/global-initialization', () => ({
-  getLogger: jest.fn(),
-  getMemoryManager: jest.fn(),
-  getPersistenceManager: jest.fn()
+  getLogger: jest.fn(() => Promise.resolve({
+    info: jest.fn(),
+    debug: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn()
+  })),
+  getMemoryManager: jest.fn(() => Promise.resolve({
+    query: jest.fn(() => Promise.resolve([])),
+    search: jest.fn(() => Promise.resolve([])),
+    getMemoryBanks: jest.fn(() => Promise.resolve([])),
+    analyzeMemoryUsage: jest.fn(() => Promise.resolve({}))
+  })),
+  getPersistenceManager: jest.fn(() => Promise.resolve({
+    getActiveTasks: jest.fn(() => Promise.resolve([])),
+    getActiveAgents: jest.fn(() => Promise.resolve([])),
+    getTaskHistory: jest.fn(() => Promise.resolve([])),
+    getAgentHistory: jest.fn(() => Promise.resolve([])),
+    getSystemLogs: jest.fn(() => Promise.resolve([]))
+  }))
 }));
 
-// Mock task engine
+// Mock task engine with proper constructor mocking
+const mockTaskEngine = {
+  listTasks: jest.fn(() => Promise.resolve({ 
+    tasks: [], 
+    total: 0, 
+    hasMore: false 
+  })),
+  analyzeTask: jest.fn(() => Promise.resolve({})),
+  getTaskStatistics: jest.fn(() => Promise.resolve({})),
+  getTaskMetrics: jest.fn(() => Promise.resolve({})),
+  getActiveTasks: jest.fn(() => Promise.resolve([]))
+};
+
 jest.mock('../../../../../src/task/engine', () => ({
-  TaskEngine: jest.fn()
+  TaskEngine: jest.fn().mockImplementation(() => mockTaskEngine)
 }));
 
 // Mock filesystem
@@ -65,18 +93,29 @@ describe('Analyze Command', () => {
     mockSwarmCoordinator = new SwarmCoordinator();
     mockMemoryManager = new MemoryManager();
     
-    // Setup default mock responses
-    mockSwarmCoordinator.getAnalytics.mockResolvedValue({
-      totalAgents: 5,
-      activeAgents: 3,
-      taskMetrics: { completed: 10, failed: 2, pending: 3 }
-    });
+    // Ensure mock methods exist and setup default mock responses
+    if (mockSwarmCoordinator.getAnalytics) {
+      mockSwarmCoordinator.getAnalytics.mockResolvedValue({
+        totalAgents: 5,
+        activeAgents: 3,
+        taskMetrics: { completed: 10, failed: 2, pending: 3 }
+      });
+    }
     
-    mockMemoryManager.analyzeMemoryUsage.mockResolvedValue({
-      totalMemory: 1000,
-      usedMemory: 600,
-      freeMemory: 400
-    });
+    if (mockMemoryManager.analyzeMemoryUsage) {
+      mockMemoryManager.analyzeMemoryUsage.mockResolvedValue({
+        totalMemory: 1000,
+        usedMemory: 600,
+        freeMemory: 400
+      });
+    }
+
+    // Reset taskEngine mock - ensure it has the method
+    (mockTaskEngine.listTasks as jest.MockedFunction<any>).mockResolvedValue({ tasks: [] });
+    (mockTaskEngine.analyzeTask as jest.MockedFunction<any>).mockResolvedValue({});
+    (mockTaskEngine.getTaskStatistics as jest.MockedFunction<any>).mockResolvedValue({});
+    (mockTaskEngine.getTaskMetrics as jest.MockedFunction<any>).mockResolvedValue({});
+    (mockTaskEngine.getActiveTasks as jest.MockedFunction<any>).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -94,11 +133,12 @@ describe('Analyze Command', () => {
       expect(analyzeCommand.handler).toBeDefined();
     });
 
-    it('should have system analysis option', async () => {
+    it('should have system analysis support via target argument', async () => {
       const { analyzeCommand } = require('../../../../../src/cli/commands/data/analyze-command');
       
-      const systemOption = analyzeCommand.options.find((opt: any) => opt.name === 'system');
-      expect(systemOption).toBeDefined();
+      // System analysis is done via target argument, not option
+      expect(analyzeCommand.arguments[0].name).toBe('target');
+      expect(analyzeCommand.arguments[0].description).toContain('system');
     });
 
     it('should have performance analysis option', async () => {

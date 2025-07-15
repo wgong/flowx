@@ -92,17 +92,9 @@ describe('Validation Functions', () => {
   let tempDir: string;
   
   beforeEach(async () => {
-    // Create temporary directory for tests
-    tempDir = path.join(os.tmpdir(), `validation-test-${Date.now()}`);
+    // Create temporary directory for tests - use mkdtemp for safer temp directory creation
     try {
-      await fs.mkdir(tempDir, { recursive: true });
-      
-      // Verify it was created
-      const exists = existsSync(tempDir);
-      
-      if (!exists) {
-        throw new Error('Failed to create temp directory');
-      }
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'validation-test-'));
     } catch (error) {
       console.error('Error creating tempDir:', error);
       throw error;

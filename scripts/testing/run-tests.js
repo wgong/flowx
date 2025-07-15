@@ -61,6 +61,9 @@ if (fs.existsSync(path.join(process.cwd(), 'node_modules/.bin/jest'))) {
 // Build Jest arguments
 const jestArgs = [];
 
+// Add config file
+jestArgs.push('--config', 'jest.config.cjs');
+
 // Add test patterns based on selected test types
 const testPatterns = [];
 if (options.unit) {

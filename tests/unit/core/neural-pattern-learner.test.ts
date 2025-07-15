@@ -233,7 +233,7 @@ describe('NeuralPatternLearner', () => {
   });
 
   describe('Event handling', () => {
-    it('should handle workflow completed events', () => {
+    it('should handle workflow completed events', async () => {
       const learnSpy = jest.spyOn(learner, 'learnFromWorkflow');
       
       eventBus.emit('workflow.completed', {
@@ -242,13 +242,12 @@ describe('NeuralPatternLearner', () => {
         context: { source: 'event' }
       });
 
-      // Need to wait for async processing
-      setTimeout(() => {
-        expect(learnSpy).toHaveBeenCalled();
-      }, 10);
+      // Wait for async processing
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(learnSpy).toHaveBeenCalled();
     });
 
-    it('should handle workflow failed events', () => {
+    it('should handle workflow failed events', async () => {
       const learnSpy = jest.spyOn(learner, 'learnFromWorkflow');
       
       eventBus.emit('workflow.failed', {
@@ -257,10 +256,9 @@ describe('NeuralPatternLearner', () => {
         context: { error: 'test' }
       });
 
-      // Need to wait for async processing
-      setTimeout(() => {
-        expect(learnSpy).toHaveBeenCalled();
-      }, 10);
+      // Wait for async processing
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(learnSpy).toHaveBeenCalled();
     });
   });
 

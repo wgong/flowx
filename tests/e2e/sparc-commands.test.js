@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
-import { createCommandTestRunner } from '../utils/command-test-base';
+import { createCommandTestRunner } from '../utils/command-test-base.js';
 
 describe('SPARC Commands E2E', () => {
   let runner;
@@ -225,23 +225,23 @@ describe('SPARC Commands E2E', () => {
   
   describe('error handling', () => {
     test('should handle invalid mode gracefully', async () => {
-      const { stdout, code } = await runner.runCommand([
+      const { stderr, code } = await runner.runCommand([
         'sparc', 'invalid-mode',
         '"Some task"'
       ]);
       
       expect(code).not.toBe(0);
-      expect(stdout).toContain('Unknown SPARC mode');
+      expect(stderr).toContain('Unknown SPARC mode');
     });
     
     test('should require task description for mode execution', async () => {
-      const { stdout, code } = await runner.runCommand([
+      const { stderr, code } = await runner.runCommand([
         'sparc', 'code'
         // Missing task description
       ]);
       
       expect(code).not.toBe(0);
-      expect(stdout).toContain('Task description required');
+      expect(stderr).toContain('Task description required');
     });
   });
 });

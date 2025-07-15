@@ -251,6 +251,13 @@ export class LoadBalancer extends EventEmitter {
    * Register a new agent with the load balancer
    */
   registerAgent(agent: AgentState): void {
+    if (!agent || !agent.id || !agent.id.id) {
+      this.logger.error('Invalid agent object in registerAgent', { 
+        agent: JSON.stringify(agent, null, 2) 
+      });
+      throw new Error(`Invalid agent object: missing id property`);
+    }
+    
     const agentLoad: AgentLoad = {
       agentId: agent.id.id,
       currentLoad: 0,

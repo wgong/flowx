@@ -2,7 +2,7 @@
  * E2E tests for swarm commands
  */
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
-import { createCommandTestRunner } from '../utils/command-test-base';
+import { createCommandTestRunner } from '../../utils/command-test-base.js';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
@@ -18,7 +18,7 @@ describe('Swarm Commands E2E', () => {
   });
   
   afterEach(async () => {
-    await runner.cleanup();
+    await runner.teardown();
   });
   
   test('should create and execute a basic swarm', async () => {
@@ -234,7 +234,7 @@ describe('Swarm Commands E2E', () => {
       ]
     };
     
-    const configPath = path.join(runner.tempDir(), 'swarm-config.json');
+    const configPath = path.join(runner.tempDir, 'swarm-config.json');
     await fs.writeFile(configPath, JSON.stringify(configData, null, 2));
     
     // Run swarm with config file

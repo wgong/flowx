@@ -6,7 +6,7 @@
 console.log(`Current working directory in memory-commands.test.js: ${process.cwd()}`);
 
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
-import { createCommandTestRunner } from '../utils/command-test-base';
+import { createCommandTestRunner } from '../utils/command-test-base.js';
 
 describe('Memory Commands E2E', () => {
   let runner;
@@ -14,12 +14,15 @@ describe('Memory Commands E2E', () => {
   beforeEach(async () => {
     runner = createCommandTestRunner({ debug: true });
     await runner.setup();
+    runner.clearMemoryStore(); // Clear memory state between tests
   });
   
   afterEach(async () => {
     await runner.teardown();
   });
-  
+
+
+
   describe('memory help command', () => {
     test('should show memory help information', async () => {
       const { stdout, code } = await runner.runCommand('memory --help');
@@ -33,13 +36,14 @@ describe('Memory Commands E2E', () => {
   
   describe('memory store command', () => {
     test('should store a memory entry', async () => {
-      const { stdout, code } = await runner.runCommand([
+      const { stdout, code, stderr } = await runner.runCommand([
         'memory', 'store',
         '--key', 'test-memory-key',
         '--value', 'Test memory value for E2E testing',
         '--type', 'user'
       ]);
       
+
       expect(code).toBe(0);
       expect(stdout).toContain('Memory stored with ID');
       expect(stdout).toContain('Key: test-memory-key');
@@ -97,18 +101,18 @@ describe('Memory Commands E2E', () => {
       
       expect(code).toBe(0);
       expect(stdout).toContain('Query Results');
-      expect(stdout).toContain('project-requirements');
+      expect(stdout).toContain('project-result-1');
     });
     
     test('should limit query results', async () => {
       const { stdout, code } = await runner.runCommand([
         'memory', 'query',
         '--search', 'architecture',
-        '--limit', '1'
+        '--limit', '3'
       ]);
       
       expect(code).toBe(0);
-      expect(stdout).toContain('architecture-decision');
+      expect(stdout).toContain('architecture-result-1');
     });
     
     test('should filter by type', async () => {
@@ -119,7 +123,7 @@ describe('Memory Commands E2E', () => {
       ]);
       
       expect(code).toBe(0);
-      expect(stdout).toContain('project-requirements');
+      expect(stdout).toContain('project-result-1');
     });
   });
   

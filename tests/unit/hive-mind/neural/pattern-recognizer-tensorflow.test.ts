@@ -7,17 +7,12 @@ import { PatternRecognizer } from '../../../../src/hive-mind/neural/pattern-reco
 import { EventBus } from '../../../../src/core/event-bus';
 import { DatabaseManager } from '../../../../src/hive-mind/database/database-manager';
 
-// Mock dependencies
+// Mock dependencies  
 jest.mock('../../../../src/core/event-bus');
 jest.mock('../../../../src/hive-mind/database/database-manager');
-jest.mock('../../../../src/core/logger', () => ({
-  Logger: jest.fn().mockImplementation(() => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-  })),
-}));
+jest.mock('../../../../src/core/logger', () => {
+  return require('../../../helpers/logger-mock.js');
+});
 
 describe('PatternRecognizer with TensorFlow', () => {
   let patternRecognizer: PatternRecognizer;

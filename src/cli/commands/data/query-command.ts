@@ -42,6 +42,11 @@ export const queryCommand: CLICommand = {
   ],
   options: [
     {
+      name: 'query-type',
+      description: 'Type of data to query',
+      type: 'string'
+    },
+    {
       name: 'sql',
       description: 'Execute raw SQL query',
       type: 'string'
@@ -91,6 +96,13 @@ export const queryCommand: CLICommand = {
     {
       name: 'output',
       description: 'Output format (table, json, csv, yaml)',
+      type: 'string',
+      choices: ['table', 'json', 'csv', 'yaml'],
+      default: 'table'
+    },
+    {
+      name: 'format',
+      description: 'Result format',
       type: 'string',
       choices: ['table', 'json', 'csv', 'yaml'],
       default: 'table'

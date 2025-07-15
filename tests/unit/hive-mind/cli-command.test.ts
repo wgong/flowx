@@ -12,7 +12,7 @@ jest.mock('../../../src/cli/core/output-formatter', () => ({
   printWarning: jest.fn()
 }));
 
-jest.mock('../../../src/hive-mind/index', () => {
+jest.mock('../../../src/hive-mind/index.ts', () => {
   return {
     HiveMind: jest.fn(),
     getNeuralStatus: jest.fn(),
@@ -30,7 +30,7 @@ describe('Hive Mind CLI Commands', () => {
     jest.clearAllMocks();
     
     // Get the mock functions from the module mock
-    const { HiveMind, getNeuralStatus, getDatabaseStatus, getQueenStatus, getCoordinationStatus } = require('../../../src/hive-mind/index');
+    const { HiveMind, getNeuralStatus, getDatabaseStatus, getQueenStatus, getCoordinationStatus } = require('../../../src/hive-mind/index.ts');
     const { printSuccess, printError, printInfo } = require('../../../src/cli/core/output-formatter');
     
     // Configure mock return values
@@ -77,7 +77,7 @@ describe('Hive Mind CLI Commands', () => {
       syncStatus: 'synchronized'
     });
     
-    // Store references for test assertions
+    // Store references for test assertions  
     mockHiveMind = { getNeuralStatus, getDatabaseStatus, getQueenStatus, getCoordinationStatus };
     mockOutputFormatter = { printSuccess, printError, printInfo };
   });
@@ -95,10 +95,11 @@ describe('Hive Mind CLI Commands', () => {
       await handleHiveMindStatus();
       
       // Verify all status methods were called
-      expect(mockHiveMind.getNeuralStatus).toHaveBeenCalled();
-      expect(mockHiveMind.getDatabaseStatus).toHaveBeenCalled();
-      expect(mockHiveMind.getQueenStatus).toHaveBeenCalled();
-      expect(mockHiveMind.getCoordinationStatus).toHaveBeenCalled();
+      const { getNeuralStatus, getDatabaseStatus, getQueenStatus, getCoordinationStatus } = require('../../../src/hive-mind/index.ts');
+      expect(getNeuralStatus).toHaveBeenCalled();
+      expect(getDatabaseStatus).toHaveBeenCalled();
+      expect(getQueenStatus).toHaveBeenCalled();
+      expect(getCoordinationStatus).toHaveBeenCalled();
       
       // Verify output formatting
       expect(mockOutputFormatter.printSuccess).toHaveBeenCalledWith(
@@ -181,7 +182,8 @@ describe('Hive Mind CLI Commands', () => {
       
       await handleHiveMindNeural();
       
-      expect(mockHiveMind.getNeuralStatus).toHaveBeenCalled();
+      const { getNeuralStatus } = require('../../../src/hive-mind/index.ts');
+      expect(getNeuralStatus).toHaveBeenCalled();
       expect(mockOutputFormatter.printSuccess).toHaveBeenCalledWith(
         expect.stringContaining('🧠 Neural System Status')
       );
@@ -210,7 +212,8 @@ describe('Hive Mind CLI Commands', () => {
       
       await handleHiveMindDatabase();
       
-      expect(mockHiveMind.getDatabaseStatus).toHaveBeenCalled();
+      const { getDatabaseStatus } = require('../../../src/hive-mind/index.ts');
+      expect(getDatabaseStatus).toHaveBeenCalled();
       expect(mockOutputFormatter.printSuccess).toHaveBeenCalledWith(
         expect.stringContaining('🗄️ Database System Status')
       );
@@ -236,7 +239,8 @@ describe('Hive Mind CLI Commands', () => {
       
       await handleHiveMindQueen();
       
-      expect(mockHiveMind.getQueenStatus).toHaveBeenCalled();
+      const { getQueenStatus } = require('../../../src/hive-mind/index.ts');
+      expect(getQueenStatus).toHaveBeenCalled();
       expect(mockOutputFormatter.printSuccess).toHaveBeenCalledWith(
         expect.stringContaining('👑 Queen Agent Status')
       );

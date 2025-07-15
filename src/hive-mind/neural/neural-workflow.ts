@@ -5,7 +5,7 @@
  */
 
 import { EventBus } from '../../core/event-bus.js';
-import { Logger } from '../../core/logger.js';
+import { Logger, logger } from '../../core/logger.js';
 import { PatternRecognizer } from './pattern-recognizer.js';
 import { NeuralManager } from './neural-manager.js';
 import { PatternType, PatternMatch } from '../types.js';
@@ -64,11 +64,7 @@ export class NeuralWorkflow {
     this.eventBus = eventBus;
     this.config = config;
     
-    this.logger = Logger.getInstance({
-      level: 'info',
-      format: 'json',
-      destination: 'console'
-    });
+    this.logger = Logger.getInstance();
     
     this.setupEventListeners();
   }

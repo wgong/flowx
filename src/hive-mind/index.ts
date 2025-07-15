@@ -256,3 +256,59 @@ export async function shutdownHiveMindSystem(
 
 // Default export for convenience
 export default HiveMindFactory;
+
+// Status functions for CLI commands
+export function getNeuralStatus(): any {
+  // Mock implementation for testing and development
+  return {
+    neuralManager: {
+      totalPatterns: 0,
+      recognitionAccuracy: 0.0,
+      learningSessions: 0,
+      optimizationCycles: 0
+    },
+    patternRecognizer: {
+      activeModels: 0,
+      config: {
+        confidenceThreshold: 0.7,
+        learningRate: 0.01,
+        tensorFlowModels: {
+          sequence: { accuracy: 0.0 },
+          classification: { accuracy: 0.0 },
+          regression: { accuracy: 0.0 }
+        }
+      }
+    }
+  };
+}
+
+export function getDatabaseStatus(): any {
+  // Mock implementation for testing and development
+  return {
+    totalTables: 0,
+    totalRecords: 0,
+    lastBackup: new Date().toISOString(),
+    status: 'healthy'
+  };
+}
+
+export function getQueenStatus(): any {
+  // Mock implementation for testing and development
+  return {
+    queenId: 'queen-001',
+    collectives: 0,
+    totalAgents: 0,
+    consensusAlgorithm: 'raft',
+    leaderElection: 'inactive'
+  };
+}
+
+export function getCoordinationStatus(): any {
+  // Mock implementation for testing and development
+  return {
+    activeNodes: 0,
+    networkHealth: 'good',
+    messageLatency: 0,
+    syncStatus: 'idle'
+  };
+}

@@ -79,11 +79,7 @@ export class TensorFlowModel {
   constructor(config: TensorFlowModelConfig, eventBus: EventBus) {
     this.config = config;
     this.eventBus = eventBus;
-    this.logger = Logger.getInstance({
-      level: 'info',
-      format: 'json',
-      destination: 'console'
-    });
+    this.logger = new Logger();
     
     this.modelPath = `.swarm/models/${config.modelName.replace(/\s+/g, '_').toLowerCase()}.tson`;
     

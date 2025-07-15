@@ -37,6 +37,7 @@ jest.mock('../../../src/core/logger.ts', () => ({
 }));
 import { EventBus } from '../../../src/core/event-bus.js';
 import { Logger } from '../../../src/core/logger.ts';
+import { DistributedMemorySystem } from '../../../original-claude-flow/src/memory/distributed-memory.js';
 
 describe('DistributedMemorySystem Integration', () => {
   let eventBus;
@@ -46,7 +47,16 @@ describe('DistributedMemorySystem Integration', () => {
   beforeEach(async () => {
     // Create dependencies
     eventBus = new EventBus();
-    logger = new Logger();
+    
+    // Create mock logger directly
+    logger = {
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      configure: jest.fn().mockResolvedValue(undefined),
+      child: jest.fn().mockReturnThis()
+    };
     
     // Set up test configuration with specific paths that will be mocked
     const testConfig = {

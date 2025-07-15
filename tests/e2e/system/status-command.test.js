@@ -2,7 +2,7 @@
  * E2E tests for the system status command
  */
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
-import { createCommandTestRunner } from '../utils/command-test-base';
+import { createCommandTestRunner } from '../../utils/command-test-base.js';
 
 describe('System Status Command E2E', () => {
   let runner;
@@ -16,7 +16,7 @@ describe('System Status Command E2E', () => {
   });
   
   afterEach(async () => {
-    await runner.cleanup();
+    await runner.teardown();
   });
   
   test('should show basic status information', async () => {
@@ -75,6 +75,6 @@ describe('System Status Command E2E', () => {
     const { stderr, code } = await runner.runCommand(['system', 'status', '--invalid-option']);
     
     expect(code).not.toBe(0);
-    expect(stderr).toContain('error');
+    expect(stderr).toContain('Invalid option');
   });
 });

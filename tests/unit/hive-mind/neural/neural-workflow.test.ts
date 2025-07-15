@@ -4,27 +4,10 @@
 
 import { jest, describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 
-// Mock the Logger to prevent initialization errors
-const mockLogger = {
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-  child: jest.fn().mockReturnThis()
-};
-
-jest.mock('../../../../src/core/logger', () => ({
-  Logger: {
-    getInstance: jest.fn().mockReturnValue(mockLogger)
-  },
-  LogLevel: {
-    DEBUG: 0,
-    INFO: 1,
-    WARN: 2,
-    ERROR: 3,
-    CRITICAL: 4
-  }
-}));
+// Mock the Logger using the centralized mock
+jest.mock('../../../../src/core/logger', () => {
+  return require('../../../helpers/logger-mock.js');
+});
 
 import { NeuralWorkflow } from '../../../../src/hive-mind/neural/neural-workflow';
 import { PatternRecognizer } from '../../../../src/hive-mind/neural/pattern-recognizer';
@@ -44,6 +27,9 @@ describe('NeuralWorkflow', () => {
   let mockEventBus: jest.Mocked<EventBus>;
 
   beforeEach(() => {
+    // Clear all mocks
+    jest.clearAllMocks();
+    
     // Create mock instances
     mockPatternRecognizer = {
       recognizePattern: jest.fn(),
@@ -51,7 +37,7 @@ describe('NeuralWorkflow', () => {
     } as any;
     
     mockNeuralManager = {
-      initialize: jest.fn(),
+      initialize: jest.fn().mockImplementation(async () => {}),
       recognizePattern: jest.fn(),
       getStatus: jest.fn(),
       shutdown: jest.fn(),
