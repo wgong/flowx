@@ -3,7 +3,7 @@
 <div align="center">
 
 [![🌟 Star on GitHub](https://img.shields.io/github/stars/sethdford/claude-code-flow?style=for-the-badge&logo=github&color=gold)](https://github.com/sethdford/claude-code-flow)
-[![📦 NPM Package](https://img.shields.io/npm/v/claude-code-flow?style=for-the-badge&logo=npm&color=blue&label=v8.0.2)](https://www.npmjs.com/package/claude-code-flow)
+[![📦 NPM Package](https://img.shields.io/npm/v/claude-code-flow?style=for-the-badge&logo=npm&color=blue&label=v8.0.3)](https://www.npmjs.com/package/claude-code-flow)
 [![⚡ Claude Code](https://img.shields.io/badge/Claude%20Code-Ready-green?style=for-the-badge&logo=anthropic)](https://github.com/sethdford/claude-code-flow)
 [![🧠 Neural Memory](https://img.shields.io/badge/Memory-Neural%20Enhanced-purple?style=for-the-badge&logo=brain)](https://github.com/sethdford/claude-code-flow)
 [![🏗️ Enterprise](https://img.shields.io/badge/Enterprise-Data%20Pipelines-orange?style=for-the-badge&logo=pipeline)](https://github.com/sethdford/claude-code-flow)
@@ -21,7 +21,7 @@
 
 ### 📦 **NPM Package Information**
 - **Package Name**: `claude-code-flow`
-- **Current Version**: `8.0.2`
+- **Current Version**: `8.0.3`
 - **Command Aliases**: `flowx`, `claude-flow`, `claude-code-flow`
 - **Node.js Requirement**: `>=18.0.0`
 - **Installation**: `npm install -g claude-code-flow`
