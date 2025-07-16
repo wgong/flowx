@@ -186,9 +186,10 @@ export class PersistenceManager {
    */
   private validateSchema(): void {
     try {
-      // Check agents table schema
-      const agentSchema = this.db.prepare("PRAGMA table_info(agents)").all();
-      const agentColumns = agentSchema.map((col: any) => col.name);
+      // Check agents table schema using sql.js exec API
+      const agentSchemaResults = this.db.exec("PRAGMA table_info(agents)");
+      const agentColumns = agentSchemaResults.length > 0 ? 
+        agentSchemaResults[0].values.map((row: any) => row[1]) : []; // column 1 is the name
       
       const requiredAgentColumns = [
         'id', 'type', 'name', 'status', 'capabilities', 
@@ -202,8 +203,9 @@ export class PersistenceManager {
       }
       
       // Check tasks table schema
-      const taskSchema = this.db.prepare("PRAGMA table_info(tasks)").all();
-      const taskColumns = taskSchema.map((col: any) => col.name);
+      const taskSchemaResults = this.db.exec("PRAGMA table_info(tasks)");
+      const taskColumns = taskSchemaResults.length > 0 ? 
+        taskSchemaResults[0].values.map((row: any) => row[1]) : []; // column 1 is the name
       
       const requiredTaskColumns = [
         'id', 'type', 'description', 'status', 'priority', 
@@ -218,8 +220,9 @@ export class PersistenceManager {
       }
       
       // Check sessions table schema
-      const sessionSchema = this.db.prepare("PRAGMA table_info(sessions)").all();
-      const sessionColumns = sessionSchema.map((col: any) => col.name);
+      const sessionSchemaResults = this.db.exec("PRAGMA table_info(sessions)");
+      const sessionColumns = sessionSchemaResults.length > 0 ? 
+        sessionSchemaResults[0].values.map((row: any) => row[1]) : []; // column 1 is the name
       
       const requiredSessionColumns = [
         'id', 'agent_id', 'terminal_id', 'status', 'created_at'
