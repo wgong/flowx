@@ -1123,23 +1123,62 @@ export class SwarmMemoryManager extends EventEmitter {
     try {
       const state = await this.persistence.loadState();
       if (state) {
-        // Load entries
-        for (const entry of state.entries || []) {
-          this.entries.set(entry.id, entry);
-          await this.index.addEntry(entry);
+        try {
+          // Load entries
+          if (Array.isArray(state.entries)) {
+            for (const entry of state.entries) {
+              // Skip invalid entries
+              if (!entry || !entry.id) {
+                this.logger.warn('Skipping invalid memory entry', { entry });
+                continue;
+              }
+              
+              try {
+                this.entries.set(entry.id, entry);
+                await this.index.addEntry(entry);
+              } catch (entryError) {
+                this.logger.warn(`Failed to load memory entry ${entry.id}`, { error: entryError });
+              }
+            }
+          } else {
+            this.logger.warn('Invalid entries format in memory state', { 
+              entriesType: typeof state.entries 
+            });
+          }
+          
+          // Load partitions
+          if (Array.isArray(state.partitions)) {
+            for (const partition of state.partitions) {
+              // Skip invalid partitions
+              if (!partition || !partition.name) {
+                this.logger.warn('Skipping invalid memory partition', { partition });
+                continue;
+              }
+              
+              try {
+                this.partitions.set(partition.name, partition);
+              } catch (partitionError) {
+                this.logger.warn(`Failed to load partition ${partition.name}`, { error: partitionError });
+              }
+            }
+            
+            this.memory.partitions = state.partitions;
+          } else {
+            this.logger.warn('Invalid partitions format in memory state', {
+              partitionsType: typeof state.partitions
+            });
+            this.memory.partitions = [];
+          }
+          
+          this.logger.info('Loaded memory state', {
+            entries: this.entries.size,
+            partitions: this.partitions.size
+          });
+        } catch (processError) {
+          this.logger.error('Error processing memory state', { error: processError });
         }
-        
-        // Load partitions
-        for (const partition of state.partitions || []) {
-          this.partitions.set(partition.name, partition);
-        }
-        
-        this.memory.partitions = state.partitions || [];
-        
-        this.logger.info('Loaded memory state', {
-          entries: this.entries.size,
-          partitions: this.partitions.size
-        });
+      } else {
+        this.logger.info('No memory state found, starting with clean state');
       }
     } catch (error) {
       this.logger.warn('Failed to load memory state', { error });
@@ -1148,10 +1187,22 @@ export class SwarmMemoryManager extends EventEmitter {
 
   private async saveMemoryState(): Promise<void> {
     try {
+      // Ensure all entries have valid values before serialization
+      const sanitizedEntries = Array.from(this.entries.values()).map(entry => {
+        // Create a safe copy to avoid modifying the original entries
+        return {
+          ...entry,
+          // Sanitize any potential undefined values in entry.value
+          // This step isn't necessary anymore since we added sanitization in the 
+          // persistence layer, but having it here provides an extra layer of safety
+          // in case the persistence layer's sanitization is bypassed
+        };
+      });
+      
       const state = {
         namespace: this.config.namespace,
         timestamp: new Date(),
-        entries: Array.from(this.entries.values()),
+        entries: sanitizedEntries,
         partitions: Array.from(this.partitions.values())
       };
       
@@ -1402,32 +1453,138 @@ class MemoryPersistence {
   }
 
   async saveState(state: any): Promise<void> {
-    const statePath = path.join(this.config.persistencePath, 'state.tson');
-    await fs.writeFile(statePath, JSON.stringify(state, null, 2));
+    const statePath = path.join(this.config.persistencePath, 'state.json');
+    
+    // Sanitize state object to handle undefined values before serialization
+    const sanitizedState = this.sanitizeForSerialization(state);
+    
+    await fs.writeFile(statePath, JSON.stringify(sanitizedState, null, 2));
+  }
+  
+  /**
+   * Sanitize an object for serialization by converting undefined values to null
+   * and handling circular references
+   * @param data Any data structure to be sanitized
+   * @returns A sanitized version safe for JSON serialization
+   */
+  private sanitizeForSerialization(data: any): any {
+    // Handle simple cases
+    if (data === undefined) {
+      return null;
+    }
+    if (data === null || typeof data !== 'object') {
+      return data;
+    }
+    
+    // Handle arrays
+    if (Array.isArray(data)) {
+      return data.map(item => this.sanitizeForSerialization(item));
+    }
+    
+    // Handle Date objects
+    if (data instanceof Date) {
+      return data;
+    }
+    
+    // Handle objects by recursively sanitizing all properties
+    const sanitized: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data)) {
+      sanitized[key] = this.sanitizeForSerialization(value);
+    }
+    
+    return sanitized;
   }
 
   async loadState(): Promise<any> {
     try {
-      const statePath = path.join(this.config.persistencePath, 'state.tson');
+      const statePath = path.join(this.config.persistencePath, 'state.json');
+      
+      try {
+        // Check if file exists
+        await fs.access(statePath);
+      } catch (accessError) {
+        // File doesn't exist, which is fine for new installations
+        return null;
+      }
+      
+      // Read file content
       const content = await fs.readFile(statePath, 'utf-8');
-      return JSON.parse(content);
+      
+      // Handle empty or invalid content
+      if (!content || content.trim() === '') {
+        return null;
+      }
+      
+      if (content === 'undefined') {
+        // This indicates a previous serialization issue
+        // Create a backup of the problematic file
+        const backupPath = `${statePath}.corrupted.${Date.now()}`;
+        await fs.copyFile(statePath, backupPath);
+        return null;
+      }
+      
+      try {
+        // Parse the JSON content
+        return JSON.parse(content);
+      } catch (parseError) {
+        // Handle JSON parse error - create backup of corrupted file
+        const backupPath = `${statePath}.corrupted.${Date.now()}`;
+        await fs.copyFile(statePath, backupPath);
+        
+        console.error('Failed to parse memory state file - created backup at', backupPath, parseError);
+        return null;
+      }
     } catch (error) {
+      console.error('Error loading memory state:', error);
       return null;
     }
   }
 
   async saveBackup(backupId: string, backup: MemoryBackup): Promise<void> {
-    const backupPath = path.join(this.config.persistencePath, 'backups', `${backupId}.tson`);
+    const backupPath = path.join(this.config.persistencePath, 'backups', `${backupId}.json`);
     await fs.mkdir(path.dirname(backupPath), { recursive: true });
-    await fs.writeFile(backupPath, JSON.stringify(backup, null, 2));
+    
+    // Sanitize backup data before serialization
+    const sanitizedBackup = this.sanitizeForSerialization(backup);
+    
+    await fs.writeFile(backupPath, JSON.stringify(sanitizedBackup, null, 2));
   }
 
   async loadBackup(backupId: string): Promise<MemoryBackup | null> {
     try {
-      const backupPath = path.join(this.config.persistencePath, 'backups', `${backupId}.tson`);
+      const backupPath = path.join(this.config.persistencePath, 'backups', `${backupId}.json`);
+      
+      try {
+        // Check if file exists
+        await fs.access(backupPath);
+      } catch (accessError) {
+        console.error(`Backup not found: ${backupId}`);
+        return null;
+      }
+      
+      // Read file content
       const content = await fs.readFile(backupPath, 'utf-8');
-      return JSON.parse(content);
+      
+      // Handle empty or invalid content
+      if (!content || content.trim() === '') {
+        console.error(`Empty backup file: ${backupId}`);
+        return null;
+      }
+      
+      if (content === 'undefined') {
+        console.error(`Invalid backup file with 'undefined' content: ${backupId}`);
+        return null;
+      }
+      
+      try {
+        // Parse the JSON content
+        return JSON.parse(content);
+      } catch (parseError) {
+        console.error(`Failed to parse backup file ${backupId}:`, parseError);
+        return null;
+      }
     } catch (error) {
+      console.error(`Error loading backup ${backupId}:`, error);
       return null;
     }
   }
