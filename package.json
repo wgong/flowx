@@ -1,11 +1,12 @@
 {
-  "name": "flowx",
+  "name": "claude-code-flow",
   "version": "8.0.2",
   "description": "Advanced AI agent orchestration system - FlowX",
   "main": "cli.js",
   "bin": {
     "flowx": "./cli.js",
-    "claude-flow": "./cli.js"
+    "claude-flow": "./cli.js",
+    "claude-code-flow": "./cli.js"
   },
   "scripts": {
     "dev": "tsx src/cli/main.ts",
