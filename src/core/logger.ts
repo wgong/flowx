@@ -8,7 +8,7 @@ import { Buffer } from 'node:buffer';
 import * as process from 'node:process';
 // Remove interface import that gets stripped in Node.js strip-only mode
 // import { LoggingConfig } from "../utils/types.ts";
-import { formatBytes } from "../utils/helpers.ts";
+import { formatBytes } from "../utils/helpers.js";
 import { EventEmitter } from 'node:events';
 
 export interface ILogger {

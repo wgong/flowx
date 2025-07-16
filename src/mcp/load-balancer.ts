@@ -38,12 +38,15 @@ export interface ILoadBalancer {
 
 /**
  * Circuit breaker state
+ * Convert enum to const object for Node.js strip-only mode compatibility
  */
-enum CircuitBreakerState {
-  CLOSED = 'closed',
-  OPEN = 'open',
-  HALF_OPEN = 'half_open',
-}
+const CircuitBreakerState = {
+  CLOSED: 'closed',
+  OPEN: 'open',
+  HALF_OPEN: 'half_open',
+} as const;
+
+type CircuitBreakerState = typeof CircuitBreakerState[keyof typeof CircuitBreakerState];
 
 /**
  * Rate limiter using token bucket algorithm
@@ -51,11 +54,15 @@ enum CircuitBreakerState {
 class RateLimiter {
   private tokens: number;
   private lastRefill: number;
+  private maxTokens: number;
+  private refillRate: number;
 
   constructor(
-    private maxTokens: number,
-    private refillRate: number, // tokens per second
+    maxTokens: number,
+    refillRate: number, // tokens per second
   ) {
+    this.maxTokens = maxTokens;
+    this.refillRate = refillRate;
     this.tokens = maxTokens;
     this.lastRefill = Date.now();
   }
@@ -92,16 +99,24 @@ class RateLimiter {
  * Circuit breaker implementation
  */
 class CircuitBreaker {
-  private state = CircuitBreakerState.CLOSED;
+  private state: CircuitBreakerState = CircuitBreakerState.CLOSED;
   private failureCount = 0;
   private lastFailureTime = 0;
   private successCount = 0;
 
+  private failureThreshold: number;
+  private recoveryTimeout: number;
+  private halfOpenMaxRequests: number;
+
   constructor(
-    private failureThreshold: number,
-    private recoveryTimeout: number, // milliseconds
-    private halfOpenMaxRequests = 3,
-  ) {}
+    failureThreshold: number,
+    recoveryTimeout: number, // milliseconds
+    halfOpenMaxRequests = 3,
+  ) {
+    this.failureThreshold = failureThreshold;
+    this.recoveryTimeout = recoveryTimeout;
+    this.halfOpenMaxRequests = halfOpenMaxRequests;
+  }
 
   canExecute(): boolean {
     const now = Date.now();
@@ -174,11 +189,15 @@ export class LoadBalancer implements ILoadBalancer {
   private requestsInLastSecond = 0;
   private lastSecondTimestamp = 0;
   private cleanupInterval?: NodeJS.Timeout;
+  private config: MCPLoadBalancerConfig;
+  private logger: ILogger;
 
   constructor(
-    private config: MCPLoadBalancerConfig,
-    private logger: ILogger,
+    config: MCPLoadBalancerConfig,
+    logger: ILogger,
   ) {
+    this.config = config;
+    this.logger = logger;
     this.rateLimiter = new RateLimiter(
       config.maxRequestsPerSecond,
       config.maxRequestsPerSecond,
@@ -422,13 +441,15 @@ export class RequestQueue {
   private processing = false;
   private maxQueueSize: number;
   private requestTimeout: number;
+  private logger: ILogger;
 
   constructor(
     maxQueueSize = 1000,
     requestTimeout = 30000, // 30 seconds
-    private logger: ILogger,
+    logger: ILogger,
   ) {
     this.maxQueueSize = maxQueueSize;
+    this.logger = logger;
     this.requestTimeout = requestTimeout;
 
     // Clean up expired requests periodically

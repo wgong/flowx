@@ -206,7 +206,7 @@ async function initializeServicesInternal(
  */
 function createFastPersistence(): FastPersistenceManager {
   // Use a consistent directory path for database files - this is critical for persistence
-  const dbPath = process.env.CLAUDE_FLOW_DATA_PATH || './.claude-flow';
+  const dbPath = process.env.FLOWX_DATA_PATH || './.flowx';
   // Create a singleton PersistenceManager to ensure shared state across invocations
   const persistenceManager = new PersistenceManager(dbPath);
   

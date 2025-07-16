@@ -45,6 +45,7 @@ export const mcpCommand: CLICommand = {
   examples: [
     'flowx mcp start',
     'flowx mcp start --port 3030',
+    'flowx mcp start --wrapper',
     'flowx mcp stop',
     'flowx mcp status',
     'flowx mcp tools'
@@ -73,6 +74,28 @@ export const mcpCommand: CLICommand = {
           name: 'background',
           short: 'b',
           description: 'Run server in background',
+          type: 'boolean',
+          default: false
+        },
+        {
+          name: 'wrapper',
+          short: 'w',
+          description: 'Use Claude Code wrapper mode for passing context to Claude Code',
+          type: 'boolean',
+          default: false
+        },
+        {
+          name: 'transport',
+          short: 't',
+          description: 'Transport type (stdio, http)',
+          type: 'string',
+          choices: ['stdio', 'http'],
+          default: 'stdio'
+        },
+        {
+          name: 'verbose',
+          short: 'v',
+          description: 'Verbose output',
           type: 'boolean',
           default: false
         }
@@ -899,7 +922,7 @@ async function serveMcpServer(context: CLIContext): Promise<void> {
         logger
       };
       
-      // Start MCP server
+      // Start MCP server (this sets up request handlers)
       await server.start();
       mcpServer.isRunning = true;
       
@@ -908,43 +931,83 @@ async function serveMcpServer(context: CLIContext): Promise<void> {
         printInfo('🔗 Ready for Claude Code integration');
       }
       
-      // Keep process alive for STDIO communication
-      process.stdin.resume();
+      // Send immediate server capabilities for Claude Code
+      const serverInfo = {
+        name: 'flowx',
+        version: '8.0.2',
+        protocolVersion: '2024-11-05',
+        capabilities: {
+          tools: {},
+          prompts: {},
+          resources: {},
+          logging: {}
+        }
+      };
       
-      // Handle graceful shutdown
+      // For STDIO transport, the server handles everything automatically
+      // Just wait for the server to handle connections
+      
+      // Handle process termination gracefully
       process.on('SIGINT', async () => {
         if (verbose) {
-          printInfo('🛑 Shutting down MCP server...');
+          logger.info('Shutting down MCP server...');
         }
-        await server.stop();
+        if (mcpServer?.isRunning) {
+          await (server as any).stop();
+          mcpServer.isRunning = false;
+        }
         process.exit(0);
       });
       
-      process.on('SIGTERM', async () => {
-        if (verbose) {
-          printInfo('🛑 Shutting down MCP server...');
-        }
-        await server.stop();
-        process.exit(0);
+      // Keep the process alive
+      return new Promise(() => {
+        // This promise never resolves, keeping the process running
       });
-      
-    } else if (transport === 'http') {
-      // HTTP transport
-      if (verbose) {
-        printInfo('🌐 Using HTTP transport');
-      }
-      
-      // Use the existing HTTP server implementation
-      await startMcpServer(context);
       
     } else {
-      throw new Error(`Unsupported transport: ${transport}`);
-    }
-    
-  } catch (error) {
-    printError(`Failed to start MCP server: ${error instanceof Error ? error.message : String(error)}`);
-    throw error;
-  }
-}
-
-export default mcpCommand;
+      // HTTP transport
+      if (verbose) {
+        printInfo(`📡 Using HTTP transport on ${port}`);
+      }
+      
+      // Create Express app
+      const { default: express } = await import('express');
+      const app = express();
+      
+      // Create HTTP server
+      const server = createServer(app);
+      
+      // Create Socket.IO server
+      const io = new Server(server, {
+        cors: {
+          origin: '*',
+          methods: ['GET', 'POST']
+        }
+      });
+      
+      // Configure Express middleware
+      const { default: cors } = await import('cors');
+      app.use(cors());
+      app.use(express.json());
+      
+      // Initialize MCP server for HTTP
+      mcpServer = {
+        app,
+        server,
+        io,
+        tools: new Map(),
+        isRunning: false,
+        port,
+        host: 'localhost',
+        logger
+      };
+      
+             // Start HTTP server
+       return await startMcpServer(context);
+     }
+   } catch (error) {
+     throw new Error(`Failed to start MCP server: ${error instanceof Error ? error.message : String(error)}`);
+   }
+ }
+ 
+ export default mcpCommand;

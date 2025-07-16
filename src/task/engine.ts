@@ -4,8 +4,8 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { Task, TaskStatus, AgentProfile, Resource } from "../utils/types.ts";
-import { generateId } from "../utils/helpers.ts";
+import { Task, TaskStatus, AgentProfile, Resource } from "../utils/types.js";
+import { generateId } from "../utils/helpers.js";
 
 export interface TaskDependency {
   taskId: string;
@@ -521,7 +521,7 @@ export class TaskEngine extends EventEmitter {
   private async processScheduledTasks(): Promise<void> {
     const now = new Date();
     
-    for (const task of this.tasks.values()) {
+    for (const task of Array.from(this.tasks.values())) {
       // Skip tasks that are already queued or running
       if (task.status !== 'pending') continue;
       
@@ -960,7 +960,7 @@ export class TaskEngine extends EventEmitter {
   private async checkTimeoutTasks(): Promise<void> {
     const now = Date.now();
     
-    for (const taskId of this.runningTasks) {
+    for (const taskId of Array.from(this.runningTasks)) {
       const task = this.tasks.get(taskId);
       const execution = this.executions.get(taskId);
       
@@ -1017,7 +1017,7 @@ export class TaskEngine extends EventEmitter {
     if (!dependents || dependents.size === 0) return;
     
     // Check each dependent task to see if it can be scheduled
-    for (const depTaskId of dependents) {
+    for (const depTaskId of Array.from(dependents)) {
       const depTask = this.tasks.get(depTaskId);
       if (!depTask || depTask.status !== 'pending') continue;
       

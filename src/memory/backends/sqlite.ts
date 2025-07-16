@@ -4,13 +4,24 @@
  * and Insight Particles (IPs) for 34% performance improvement
  */
 
-import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
-import { IMemoryBackend } from "./base.ts";
-import { MemoryEntry, MemoryQuery } from "../../utils/types.ts";
-import { ILogger } from "../../core/logger.ts";
-import { MemoryBackendError } from "../../utils/errors.ts";
+import { IMemoryBackend } from "./base.js";
+import { MemoryEntry, MemoryQuery } from "../../utils/types.js";
+import { ILogger } from "../../core/logger.js";
+import { MemoryBackendError } from "../../utils/errors.js";
+
+// Dynamic import for better-sqlite3 to avoid ESM/CommonJS issues
+const Database = require('better-sqlite3');
+type DatabaseInstance = any; // Use any for now to bypass type issues
+
+/**
+ * Interface to type SQLite exec() results
+ */
+interface SqliteExecResult {
+  columns: string[];
+  values: any[][];
+}
 
 /**
  * Cognitive Weave Insight Particle - Semantically rich memory unit
@@ -102,7 +113,7 @@ class SimpleSemanticOracle implements SemanticOracleInterface {
       resonanceKeys.push(`agent:${context.agent_id}`);
     }
 
-    return [...new Set(resonanceKeys)]; // Remove duplicates
+    return Array.from(new Set(resonanceKeys)); // Remove duplicates
   }
 
   async extractSignifiers(content: string, domain: string): Promise<string[]> {
@@ -240,7 +251,7 @@ class SimpleSemanticOracle implements SemanticOracleInterface {
  * SQLite-based memory backend
  */
 export class SQLiteBackend implements IMemoryBackend {
-  private db: Database.Database | null = null;
+  private db: DatabaseInstance | null = null;
   private initialized = false;
   private semanticOracle: SemanticOracleInterface;
 
@@ -263,10 +274,17 @@ export class SQLiteBackend implements IMemoryBackend {
       }
 
       // Open database without verbose callback to avoid type issues
-      this.db = new Database(this.dbPath);
+      // Database is directly the constructor function in CommonJS
+      this.db = new (Database as any)(this.dbPath);
 
+      // Set pragmas for optimal performance and reliability
+      this.setPragmas();
+      
       // Create tables
       this.createTables();
+      
+      // Validate schema to ensure compatibility
+      this.validateSchema();
 
       this.initialized = true;
       this.logger.info('SQLite backend initialized');
@@ -587,8 +605,7 @@ export class SQLiteBackend implements IMemoryBackend {
 
     try {
       const stmt = this.db.prepare(sql);
-      const rows = stmt.all(params) as Record<string, unknown>[];
-      
+      const rows = stmt.all(...params) as Record<string, unknown>[];
       return rows.map(row => this.rowToEntry(row));
     } catch (error) {
       throw new MemoryBackendError('Failed to query entries', { error });
@@ -614,10 +631,33 @@ export class SQLiteBackend implements IMemoryBackend {
     healthy: boolean; 
     error?: string; 
     metrics?: Record<string, number>;
+    schemaVersion?: number;
+    schemaStatus?: string;
   }> {
     try {
       if (!this.db) {
         return { healthy: false, error: 'Database not initialized' };
+      }
+
+      // Get schema version
+      let schemaVersion = 0;
+      let schemaStatus = 'unknown';
+      let tableCount = 0;
+      try {
+        const versionResult = this.db.exec('PRAGMA user_version') as unknown as SqliteExecResult[];
+        schemaVersion = (versionResult && versionResult.length > 0) ? 
+          versionResult[0].values[0][0] as number : 0;
+        
+        // Validate schema integrity
+        const tablesResult = this.db.exec(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('memory_entries', 'relational_strands', 'insight_aggregates')"
+        ) as unknown as SqliteExecResult[];
+        
+        tableCount = (tablesResult && tablesResult.length > 0) ? tablesResult[0].values.length : 0;
+        schemaStatus = tableCount === 3 ? 'valid' : 'incomplete';
+      } catch (schemaError) {
+        schemaStatus = 'error';
+        this.logger.warn('Schema health check failed', { error: schemaError });
       }
 
       // Test basic query
@@ -636,15 +676,19 @@ export class SQLiteBackend implements IMemoryBackend {
 
       return {
         healthy: true,
+        schemaVersion,
+        schemaStatus,
         metrics: {
           totalEntries: count,
           fileSizeBytes: fileSize,
+          tableCount: tableCount || 0
         }
       };
     } catch (error) {
       return { 
         healthy: false, 
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        schemaStatus: 'error'
       };
     }
   }
@@ -768,6 +812,150 @@ export class SQLiteBackend implements IMemoryBackend {
       return deduplicatedCount;
     } catch (error) {
       throw new MemoryBackendError('Failed to deduplicate memories', { error });
+    }
+  }
+
+  /**
+   * Set optimal pragmas for SQLite performance and reliability
+   */
+  private setPragmas(): void {
+    if (!this.db) return;
+    
+    try {
+      // Enable WAL mode for better concurrency and performance
+      this.db.exec('PRAGMA journal_mode = WAL');
+      
+      // Set synchronous mode for balance of performance and safety
+      this.db.exec('PRAGMA synchronous = NORMAL');
+      
+      // Enable foreign keys for referential integrity
+      this.db.exec('PRAGMA foreign_keys = ON');
+      
+      // Check if schema migration is needed
+      this.checkAndMigrateSchema();
+      
+      this.logger.debug('SQLite pragmas configured');
+    } catch (error) {
+      this.logger.warn('Failed to set SQLite pragmas', { error });
+    }
+  }
+  
+  /**
+   * Check schema version and perform migrations if needed
+   */
+  private checkAndMigrateSchema(): void {
+    if (!this.db) return;
+    
+    try {
+      // Get current schema version
+      const versionResult = this.db.exec('PRAGMA user_version') as unknown as SqliteExecResult[];
+      const currentVersion = versionResult.length > 0 ?
+        versionResult[0].values[0][0] as number : 0;
+      
+      // Latest schema version
+      const LATEST_VERSION = 1;
+      
+      // Perform migrations if needed
+      if (currentVersion < LATEST_VERSION) {
+        this.logger.info('SQLite schema migration required', { 
+          from: currentVersion, 
+          to: LATEST_VERSION 
+        });
+        
+        // Perform migrations based on current version
+        if (currentVersion < 1) {
+          // Migration to version 1 (no migration needed for first version)
+          this.logger.debug('Migrating schema to version 1');
+        }
+        
+        // Update schema version
+        this.db.exec(`PRAGMA user_version = ${LATEST_VERSION}`);
+        this.logger.info('Schema migration completed', { version: LATEST_VERSION });
+      }
+    } catch (error) {
+      this.logger.error('Schema migration check failed', { error });
+    }
+  }
+
+  /**
+   * Validate the database schema to ensure all required tables and columns exist
+   */
+  private validateSchema(): void {
+    if (!this.db) return;
+    
+    try {
+      // First check if tables exist
+      const tablesResult = this.db.exec(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('memory_entries', 'relational_strands', 'insight_aggregates')"
+      ) as unknown as SqliteExecResult[];
+      
+      // If no tables found, they will be created by createTables(), so validation can be skipped
+      if (tablesResult.length === 0 || tablesResult[0].values.length === 0) {
+        this.logger.debug('No tables found, schema validation skipped');
+        return;
+      }
+      
+      // Map of existing tables
+      const existingTables = new Set(
+        tablesResult[0].values.map((row: any[]) => row[0] as string)
+      );
+      
+      // Check memory_entries table schema if it exists
+      if (existingTables.has('memory_entries')) {
+        const entriesSchemaResults = this.db.exec('PRAGMA table_info(memory_entries)') as unknown as SqliteExecResult[];
+        const entryColumns = entriesSchemaResults.length > 0 ?
+          entriesSchemaResults[0].values.map((row: any[]) => row[1]) : []; // column 1 is the name
+        
+        const requiredEntryColumns = [
+          'id', 'agent_id', 'session_id', 'type', 'content', 
+          'context', 'timestamp', 'tags', 'version'
+        ];
+        
+        for (const column of requiredEntryColumns) {
+          if (!entryColumns.includes(column)) {
+            throw new Error(`Required column '${column}' missing from memory_entries table`);
+          }
+        }
+      }
+      
+      // Check relational_strands table schema if it exists
+      if (existingTables.has('relational_strands')) {
+        const strandsSchemaResults = this.db.exec('PRAGMA table_info(relational_strands)') as unknown as SqliteExecResult[];
+        const strandColumns = strandsSchemaResults.length > 0 ?
+          strandsSchemaResults[0].values.map((row: any[]) => row[1]) : [];
+        
+        const requiredStrandColumns = [
+          'id', 'source_id', 'target_id', 'relation_type', 'strength'
+        ];
+        
+        for (const column of requiredStrandColumns) {
+          if (!strandColumns.includes(column)) {
+            throw new Error(`Required column '${column}' missing from relational_strands table`);
+          }
+        }
+      }
+      
+      // Check insight_aggregates table schema if it exists
+      if (existingTables.has('insight_aggregates')) {
+        const aggregatesSchemaResults = this.db.exec('PRAGMA table_info(insight_aggregates)') as unknown as SqliteExecResult[];
+        const aggregateColumns = aggregatesSchemaResults.length > 0 ?
+          aggregatesSchemaResults[0].values.map((row: any[]) => row[1]) : [];
+        
+        const requiredAggregateColumns = [
+          'id', 'name', 'member_particles'
+        ];
+        
+        for (const column of requiredAggregateColumns) {
+          if (!aggregateColumns.includes(column)) {
+            throw new Error(`Required column '${column}' missing from insight_aggregates table`);
+          }
+        }
+      }
+      
+      this.logger.debug('SQLite schema validation successful');
+    } catch (error) {
+      this.logger.error('Schema validation failed', { error });
+      throw new Error(`SQLite schema validation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

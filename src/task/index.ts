@@ -12,6 +12,9 @@ export type { TaskCommandContext } from "./commands.ts";
 export { TaskCoordinator } from "./coordination.ts";
 export type { CoordinationContext, TodoItem } from "./coordination.ts";
 
+export { TodoSyncService, type TodoTaskMapping, type SyncConfiguration } from "./todo-sync-service.js";
+export { TodoSyncIntegration, createTodoSyncIntegration, enableTodoTaskSync } from "./todo-sync-integration.js";
+
 
 // Import the types we need for the functions below
 import { TaskEngine } from "./engine.ts";

@@ -35,6 +35,7 @@ describe('MCP Integration Tests', () => {
       debug: jest.fn(),
       warn: jest.fn(),
       error: jest.fn(),
+      configure: jest.fn(),
     } as any;
 
     // Basic MCP configuration

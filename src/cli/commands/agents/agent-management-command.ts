@@ -170,7 +170,26 @@ async function spawnAgent(context: CLIContext): Promise<void> {
     
     printInfo(`🚀 Spawning ${agentType} agent using real process manager...`);
     
-    // Create agent configuration
+    // Create agent configuration with security integration
+    const baseEnvironment = options.env ? JSON.parse(options.env) : {};
+    
+    // SECURITY INTEGRATION: Add security context to agent environment
+    const securityEnvironment = {
+      SECURE_AGENT_MODE: 'true',
+      SECURITY_LEVEL: agentType === 'security' ? 'critical' : 'high',
+      OWASP_COMPLIANCE: 'TOP_10_2023',
+      ENFORCE_CLEAN_ARCHITECTURE: 'true',
+      ENFORCE_SOLID: 'true',
+      MIN_TEST_COVERAGE: agentType === 'test' ? '98' : '85',
+      REQUIRE_TESTS: 'true',
+      SECURITY_VALIDATION: 'real-time',
+      CLAUDE_AGENT_ID: agentId,
+      CLAUDE_AGENT_TYPE: agentType,
+      CLAUDE_AGENT_MODE: 'true',
+      CLAUDE_AGENT_SPECIALIZATION: options.specialization || 'general',
+      ...baseEnvironment
+    };
+
     const agentConfig: AgentProcessConfig = {
       id: agentId,
       type: agentType as 'backend' | 'frontend' | 'devops' | 'test' | 'security' | 'documentation' | 'general',
@@ -179,10 +198,10 @@ async function spawnAgent(context: CLIContext): Promise<void> {
       maxConcurrentTasks: options.maxTasks ? parseInt(options.maxTasks) : 3,
       timeout: options.timeout ? parseInt(options.timeout) : undefined,
       workingDirectory: options.workDir,
-      environment: options.env ? JSON.parse(options.env) : undefined,
+      environment: securityEnvironment,
       claudeConfig: {
-        model: options.model,
-        temperature: options.temperature ? parseFloat(options.temperature) : undefined,
+        model: options.model || 'claude-3-5-sonnet-20241022', // Use latest secure model
+        temperature: options.temperature ? parseFloat(options.temperature) : 0.1, // Lower temp for deterministic secure code
         maxTokens: options.maxTokens ? parseInt(options.maxTokens) : undefined
       }
     };
@@ -215,11 +234,17 @@ async function spawnAgent(context: CLIContext): Promise<void> {
     printInfo(`Status: ${agentInfo.status}`);
     printInfo(`Type: ${agentInfo.type}`);
     printInfo(`Working Directory: ${agentConfig.workingDirectory || 'default'}`);
+    printSuccess(`🛡️ Security Level: ${securityEnvironment.SECURITY_LEVEL}`);
+    printInfo(`🔒 OWASP Compliance: ${securityEnvironment.OWASP_COMPLIANCE}`);
+    printInfo(`🏗️ Clean Architecture: ${securityEnvironment.ENFORCE_CLEAN_ARCHITECTURE}`);
     
     if (options.verbose) {
       printInfo(`Memory Limit: ${agentConfig.maxMemory || 'unlimited'} MB`);
       printInfo(`Max Concurrent Tasks: ${agentConfig.maxConcurrentTasks}`);
       printInfo(`Claude Model: ${agentConfig.claudeConfig?.model || 'default'}`);
+      printInfo(`Temperature: ${agentConfig.claudeConfig?.temperature}`);
+      printInfo(`Test Coverage: ${securityEnvironment.MIN_TEST_COVERAGE}%`);
+      printInfo(`Security Validation: ${securityEnvironment.SECURITY_VALIDATION}`);
     }
     
   } catch (error) {

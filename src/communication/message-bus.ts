@@ -1624,7 +1624,7 @@ export class MessageBus extends EventEmitter {
       };
       
       // Create persistence directory if it doesn't exist
-      const persistenceDir = path.join(process.cwd(), '.claude-flow', 'message-bus');
+      const persistenceDir = path.join(process.cwd(), '.flowx', 'message-bus');
       await fs.mkdir(persistenceDir, { recursive: true });
       
       // Write persistence data to file

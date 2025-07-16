@@ -1,5 +1,6 @@
 /**
  * MCP (Model Context Protocol) server implementation
+ * Enterprise-grade implementation with comprehensive features
  */
 
 import {
@@ -52,7 +53,7 @@ export interface IMCPServer {
 }
 
 /**
- * MCP server implementation
+ * Enterprise-grade MCP server implementation
  */
 export class MCPServer implements IMCPServer {
   private transport: ITransport;
@@ -67,11 +68,8 @@ export class MCPServer implements IMCPServer {
 
   private readonly serverInfo = {
     name: 'Claude-Flow MCP Server',
-    version: '1.0.0',
+    version: '2.0.0-alpha.56',
   };
-  
-  private toolMetrics: Record<string, { count: number, errors: number, totalTime: number }> = {};
-  private errorCounts: Record<string, number> = {};
 
   private readonly supportedProtocolVersion: MCPProtocolVersion = {
     major: 2024,
@@ -87,8 +85,8 @@ export class MCPServer implements IMCPServer {
       listChanged: true,
     },
     resources: {
-      listChanged: false,
-      subscribe: false,
+      listChanged: true,
+      subscribe: true,
     },
     prompts: {
       listChanged: false,
@@ -109,7 +107,7 @@ export class MCPServer implements IMCPServer {
     // Initialize transport
     this.transport = this.createTransport();
     
-    // Initialize tool registry
+    // Initialize enhanced tool registry
     this.toolRegistry = new ToolRegistry(logger);
     
     // Initialize session manager
@@ -133,25 +131,34 @@ export class MCPServer implements IMCPServer {
       throw new MCPErrorClass('MCP server already running');
     }
 
-    this.logger.info('Starting MCP server');
+    this.logger.info('Starting enterprise MCP server', { 
+      transport: this.config.transport,
+      version: this.serverInfo.version,
+      capabilities: this.serverCapabilities
+    });
 
     try {
-      // Start session manager
-      if (this.sessionManager && 'start' in this.sessionManager) {
-        (this.sessionManager as any).start();
-      }
+      // Set up request handler
+      this.transport.onRequest(async (request) => {
+        return await this.handleRequest(request);
+      });
 
       // Start transport
       await this.transport.start();
 
-      // Register built-in tools
-      this.registerBuiltInTools();
+      // Register comprehensive tool ecosystem
+      this.registerEnterpriseTools();
 
       this.running = true;
-      this.logger.info('MCP server started successfully');
+      this.logger.info('Enterprise MCP server started successfully', {
+        toolCount: this.toolRegistry.getToolCount(),
+        transport: this.config.transport,
+        port: this.config.port,
+        host: this.config.host
+      });
     } catch (error) {
       this.logger.error('Failed to start MCP server', error);
-      throw error;
+      throw new MCPErrorClass('Failed to start MCP server', { error });
     }
   }
 
@@ -160,30 +167,15 @@ export class MCPServer implements IMCPServer {
       return;
     }
 
-    this.logger.info('Stopping MCP server');
+    this.logger.info('Stopping enterprise MCP server');
 
     try {
       // Stop transport
       await this.transport.stop();
 
-      // Stop session manager
-      if (this.sessionManager && 'stop' in this.sessionManager) {
-        (this.sessionManager as any).stop();
-      }
-
       // Clean up session manager
       if (this.sessionManager && 'destroy' in this.sessionManager) {
         (this.sessionManager as any).destroy();
-      }
-
-      // Clean up load balancer
-      if (this.loadBalancer && 'destroy' in this.loadBalancer) {
-        (this.loadBalancer as any).destroy();
-      }
-
-      // Clean up auth manager
-      if (this.authManager && 'destroy' in this.authManager) {
-        (this.authManager as any).destroy();
       }
 
       // Clean up all sessions
@@ -193,7 +185,7 @@ export class MCPServer implements IMCPServer {
 
       this.running = false;
       this.currentSession = undefined;
-      this.logger.info('MCP server stopped');
+      this.logger.info('Enterprise MCP server stopped');
     } catch (error) {
       this.logger.error('Error stopping MCP server', error);
       throw error;
@@ -256,6 +248,13 @@ export class MCPServer implements IMCPServer {
     const routerMetrics = this.router.getMetrics();
     const sessionMetrics = this.sessionManager.getSessionMetrics();
     const lbMetrics = this.loadBalancer?.getMetrics();
+    const toolMetricsArray = this.toolRegistry.getToolMetrics() as any[];
+
+    // Convert tool metrics to record format
+    const toolInvocations: Record<string, number> = {};
+    for (const metric of toolMetricsArray) {
+      toolInvocations[metric.name] = metric.totalInvocations;
+    }
 
     return {
       totalRequests: routerMetrics.totalRequests,
@@ -263,10 +262,8 @@ export class MCPServer implements IMCPServer {
       failedRequests: routerMetrics.failedRequests,
       averageResponseTime: lbMetrics?.averageResponseTime || 0,
       activeSessions: sessionMetrics.active,
-      toolInvocations: Object.fromEntries(
-        Object.entries(this.getToolInvocations()).map(([key, value]) => [key, value.count])
-      ),
-      errors: this.getErrorMetrics(),
+      toolInvocations,
+      errors: {}, // TODO: Implement error categorization
       lastReset: lbMetrics?.lastReset || new Date(),
     };
   }
@@ -316,6 +313,9 @@ export class MCPServer implements IMCPServer {
       // Update session activity
       this.sessionManager.updateActivity(session.id);
 
+      // Check authentication if enabled (simplified for now)
+      // TODO: Implement proper authentication checking when auth manager is enhanced
+
       // Check load balancer constraints
       if (this.loadBalancer) {
         const allowed = await this.loadBalancer.shouldAllowRequest(session, request);
@@ -335,15 +335,8 @@ export class MCPServer implements IMCPServer {
       const requestMetrics = this.loadBalancer?.recordRequestStart(session, request);
 
       try {
-        // Track tool metrics start time
-        const startTime = performance.now();
-        const toolName = request.method;
-        
         // Process request through router
         const result = await this.router.route(request);
-        
-        // Update tool metrics on success
-        this.updateToolMetrics(toolName, performance.now() - startTime);
         
         const response: MCPResponse = {
           jsonrpc: '2.0',
@@ -358,13 +351,6 @@ export class MCPServer implements IMCPServer {
 
         return response;
       } catch (error) {
-        // Record tool error
-        const toolName = request.method;
-        this.updateToolMetricsError(toolName);
-        
-        // Categorize error
-        this.updateErrorMetrics(error);
-        
         // Record failure
         if (requestMetrics) {
           this.loadBalancer?.recordRequestEnd(requestMetrics, undefined, error as Error);
@@ -377,10 +363,7 @@ export class MCPServer implements IMCPServer {
         method: request.method,
         error,
       });
-      
-      // Categorize error
-      this.updateErrorMetrics(error);
-      
+
       return {
         jsonrpc: '2.0',
         id: request.id,
@@ -411,18 +394,19 @@ export class MCPServer implements IMCPServer {
       // Initialize session
       this.sessionManager.initializeSession(session.id, params);
 
-      // Prepare response
+      // Prepare response with enhanced capabilities
       const result: MCPInitializeResult = {
         protocolVersion: this.supportedProtocolVersion,
         capabilities: this.serverCapabilities,
         serverInfo: this.serverInfo,
-        instructions: 'Claude-Flow MCP Server ready for tool execution',
+        instructions: 'Claude-Flow Enterprise MCP Server ready for advanced tool execution',
       };
 
       this.logger.info('Session initialized', {
         sessionId: session.id,
         clientInfo: params.clientInfo,
         protocolVersion: params.protocolVersion,
+        toolCount: this.toolRegistry.getToolCount()
       });
 
       return {
@@ -469,79 +453,15 @@ export class MCPServer implements IMCPServer {
     }
   }
 
-  private registerBuiltInTools(): void {
-    // System information tool
-    this.registerTool({
-      name: 'system/info',
-      description: 'Get system information',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
-      handler: async () => {
-        return {
-          version: '1.0.0',
-          platform: platform(),
-          arch: arch(),
-          runtime: 'Node.ts',
-          uptime: performance.now(),
-        };
-      },
-    });
+  private registerEnterpriseTools(): void {
+    this.logger.info('Registering enterprise tool ecosystem...');
 
-    // Health check tool
-    this.registerTool({
-      name: 'system/health',
-      description: 'Get system health status',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
-      handler: async () => {
-        return await this.getHealthStatus();
-      },
-    });
+    // Register core system tools
+    this.registerSystemTools();
 
-    // List tools
-    this.registerTool({
-      name: 'tools/list',
-      description: 'List all available tools',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
-      handler: async () => {
-        return this.toolRegistry.listTools();
-      },
-    });
-
-    // Tool schema
-    this.registerTool({
-      name: 'tools/schema',
-      description: 'Get schema for a specific tool',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          name: { type: 'string' },
-        },
-        required: ['name'],
-      },
-      handler: async (input: any) => {
-        const tool = this.toolRegistry.getTool(input.name);
-        if (!tool) {
-          throw new Error(`Tool not found: ${input.name}`);
-        }
-        return {
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.inputSchema,
-        };
-      },
-    });
-
-    // Register Claude-Flow specific tools if orchestrator is available
+    // Register FlowX specific tools if orchestrator is available
     if (this.orchestrator) {
-      const claudeFlowTools = createFlowXTools(
+      const flowxTools = createFlowXTools(
         this.orchestrator,
         this.swarmCoordinator,
         this.agentManager,
@@ -550,24 +470,13 @@ export class MCPServer implements IMCPServer {
         this.monitor
       );
       
-      for (const tool of claudeFlowTools) {
-        // Wrap the handler to inject orchestrator context
-        const originalHandler = tool.handler;
-        tool.handler = async (input: unknown, context?: MCPContext) => {
-          const claudeFlowContext: FlowXToolContext = {
-            ...context,
-            orchestrator: this.orchestrator,
-          } as FlowXToolContext;
-          
-          return await originalHandler(input, claudeFlowContext);
-        };
-        
+      for (const tool of flowxTools) {
         this.registerTool(tool);
       }
       
-      this.logger.info('Registered Claude-Flow tools', { count: claudeFlowTools.length });
+      this.logger.info('Registered FlowX tools', { count: flowxTools.length });
     } else {
-      this.logger.warn('Orchestrator not available - Claude-Flow tools not registered');
+      this.logger.warn('Orchestrator not available - FlowX tools not registered');
     }
 
     // Register Swarm-specific tools if swarm components are available
@@ -597,41 +506,164 @@ export class MCPServer implements IMCPServer {
     } else {
       this.logger.warn('Swarm components not available - Swarm tools not registered');
     }
-    
+
+    // Register Neural Network Tools (15 tools)
+    const neuralTools = createNeuralTools(this.logger);
+    for (const tool of neuralTools) {
+      this.registerTool(tool);
+    }
+    this.logger.info('Registered Neural Network tools', { count: neuralTools.length });
+
     // Register Filesystem Tools
     const filesystemTools = createFilesystemTools(this.logger);
     for (const tool of filesystemTools) {
       this.registerTool(tool);
     }
     this.logger.info('Registered Filesystem tools', { count: filesystemTools.length });
-    
+
     // Register Web Tools
     const webTools = createWebTools(this.logger);
     for (const tool of webTools) {
       this.registerTool(tool);
     }
     this.logger.info('Registered Web tools', { count: webTools.length });
-    
+
     // Register Database Tools
     const databaseTools = createDatabaseTools(this.logger);
     for (const tool of databaseTools) {
       this.registerTool(tool);
     }
     this.logger.info('Registered Database tools', { count: databaseTools.length });
-    
-    // Register Neural Network Tools (imported from original claude-flow)
-    const neuralTools = createNeuralTools(this.logger);
-    for (const tool of neuralTools) {
-      this.registerTool(tool);
-    }
-    this.logger.info('Registered Neural Network tools', { count: neuralTools.length });
+
+    const totalTools = this.toolRegistry.getToolCount();
+    this.logger.info('Enterprise tool ecosystem registered', { 
+      totalTools,
+      categories: this.toolRegistry.getCategories().length,
+      capabilities: ['neural', 'swarm', 'filesystem', 'web', 'database', 'enterprise']
+    });
   }
 
-  private errorToMCPError(error: unknown): MCPError {
+  private registerSystemTools(): void {
+    // System information tool
+    this.registerTool({
+      name: 'system/info',
+      description: 'Get comprehensive system information',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+      },
+      handler: async () => {
+        return {
+          version: this.serverInfo.version,
+          platform: platform(),
+          arch: arch(),
+          runtime: 'Node.js',
+          uptime: performance.now(),
+          capabilities: this.serverCapabilities,
+          toolCount: this.toolRegistry.getToolCount(),
+          sessionCount: this.sessionManager.getActiveSessions().length,
+          healthStatus: await this.getHealthStatus()
+        };
+      },
+    });
+
+    // Health check tool
+    this.registerTool({
+      name: 'system/health',
+      description: 'Get comprehensive system health status',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+      },
+      handler: async () => {
+        return await this.getHealthStatus();
+      },
+    });
+
+    // List tools with enhanced information
+    this.registerTool({
+      name: 'tools/list',
+      description: 'List all available tools with capabilities',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          category: { type: 'string', description: 'Filter by category' },
+          tag: { type: 'string', description: 'Filter by tag' }
+        },
+      },
+      handler: async (input: any) => {
+        const filters = {
+          category: input?.category,
+          tags: input?.tag ? [input.tag] : undefined
+        };
+        return this.toolRegistry.discoverTools(filters);
+      },
+    });
+
+    // Tool schema with capability information
+    this.registerTool({
+      name: 'tools/schema',
+      description: 'Get detailed schema and capability info for a specific tool',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
+        required: ['name'],
+      },
+             handler: async (input: any) => {
+         const tool = this.toolRegistry.getTool(input.name);
+         const capability = this.toolRegistry.getToolCapability(input.name);
+         if (!tool) {
+           throw new Error(`Tool not found: ${input.name}`);
+         }
+         const toolMetrics = this.toolRegistry.getToolMetrics(input.name) as any;
+         return {
+           name: tool.name,
+           description: tool.description,
+           inputSchema: tool.inputSchema,
+           capability,
+           metrics: toolMetrics
+         };
+       },
+    });
+
+    // Tool metrics
+    this.registerTool({
+      name: 'tools/metrics',
+      description: 'Get performance metrics for all tools',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+      },
+      handler: async () => {
+        return this.toolRegistry.getToolMetrics();
+      },
+    });
+
+    // Session management
+    this.registerTool({
+      name: 'session/info',
+      description: 'Get current session information',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+      },
+      handler: async () => {
+        return {
+          currentSession: this.currentSession,
+          activeSessions: this.sessionManager.getActiveSessions().length,
+          sessionMetrics: this.sessionManager.getSessionMetrics()
+        };
+      },
+    });
+  }
+
+  private errorToMCPError(error: any): MCPError {
     if (error instanceof MCPMethodNotFoundError) {
       return {
         code: -32601,
-        message: error.message,
+        message: (error instanceof Error ? error.message : String(error)),
         data: error.details,
       };
     }
@@ -639,7 +671,7 @@ export class MCPServer implements IMCPServer {
     if (error instanceof MCPErrorClass) {
       return {
         code: -32603,
-        message: error.message,
+        message: (error instanceof Error ? error.message : String(error)),
         data: error.details,
       };
     }
@@ -647,7 +679,7 @@ export class MCPServer implements IMCPServer {
     if (error instanceof Error) {
       return {
         code: -32603,
-        message: error.message,
+        message: (error instanceof Error ? error.message : String(error)),
       };
     }
 
@@ -656,70 +688,5 @@ export class MCPServer implements IMCPServer {
       message: 'Internal error',
       data: error,
     };
-  }
-  
-  private updateToolMetrics(toolName: string, executionTime: number): void {
-    if (!this.toolMetrics[toolName]) {
-      this.toolMetrics[toolName] = { count: 0, errors: 0, totalTime: 0 };
-    }
-    
-    this.toolMetrics[toolName].count++;
-    this.toolMetrics[toolName].totalTime += executionTime;
-  }
-  
-  private updateToolMetricsError(toolName: string): void {
-    if (!this.toolMetrics[toolName]) {
-      this.toolMetrics[toolName] = { count: 0, errors: 0, totalTime: 0 };
-    }
-    
-    this.toolMetrics[toolName].errors++;
-  }
-  
-  private updateErrorMetrics(error: unknown): void {
-    let category = 'unknown';
-    
-    if (error instanceof MCPMethodNotFoundError) {
-      category = 'method_not_found';
-    } else if (error instanceof MCPErrorClass) {
-      category = 'mcp_error';
-    } else if (error instanceof URIError || error instanceof TypeError) {
-      category = 'protocol_error';
-    } else if (error instanceof SyntaxError) {
-      category = 'parsing_error';
-    } else if (error instanceof Error) {
-      // Categorize common error patterns
-      const message = error.message.toLowerCase();
-      if (message.includes('permission') || message.includes('access') || message.includes('auth')) {
-        category = 'permission_denied';
-      } else if (message.includes('timeout') || message.includes('time out')) {
-        category = 'timeout';
-      } else if (message.includes('not found') || message.includes('missing')) {
-        category = 'not_found';
-      } else if (message.includes('invalid') || message.includes('bad')) {
-        category = 'invalid_input';
-      } else {
-        category = 'general_error';
-      }
-    }
-    
-    this.errorCounts[category] = (this.errorCounts[category] || 0) + 1;
-  }
-  
-  private getToolInvocations(): Record<string, { count: number; errors: number; avgTime: number }> {
-    const result: Record<string, { count: number; errors: number; avgTime: number }> = {};
-    
-    for (const [tool, metrics] of Object.entries(this.toolMetrics)) {
-      result[tool] = {
-        count: metrics.count,
-        errors: metrics.errors,
-        avgTime: metrics.count > 0 ? Math.round(metrics.totalTime / metrics.count) : 0
-      };
-    }
-    
-    return result;
-  }
-  
-  private getErrorMetrics(): Record<string, number> {
-    return { ...this.errorCounts };
   }
 }

@@ -272,7 +272,7 @@ export class TaskExecutor extends EventEmitter {
     const timeout = options.timeout || this.config.timeoutMs;
 
     // Build Claude command
-    const command = this.buildClaudeCommand(task, agent, options);
+    const command = await this.buildClaudeCommand(task, agent, options);
     
     // Create execution environment
     const env = {
@@ -451,12 +451,12 @@ export class TaskExecutor extends EventEmitter {
     });
   }
 
-  private buildClaudeCommand(
+  private async buildClaudeCommand(
     task: TaskDefinition,
     agent: AgentState,
     options: ClaudeExecutionOptions
-  ): ClaudeCommand {
-    const args: string[] = [];
+  ): Promise<ClaudeCommand> {
+    const baseArgs: string[] = [];
     let input = '';
 
     // Build prompt
@@ -467,40 +467,68 @@ export class TaskExecutor extends EventEmitter {
       input = prompt;
     } else {
       // Send prompt as argument
-      args.push('-p', prompt);
+      baseArgs.push('-p', prompt);
     }
 
     // Add tools
     if (task.requirements.tools.length > 0) {
-      args.push('--allowedTools', task.requirements.tools.join(','));
+      baseArgs.push('--allowedTools', task.requirements.tools.join(','));
     }
 
     // Add model if specified
     if (options.model) {
-      args.push('--model', options.model);
+      baseArgs.push('--model', options.model);
     }
 
     // Add max tokens if specified
     if (options.maxTokens) {
-      args.push('--max-tokens', options.maxTokens.toString());
+      baseArgs.push('--max-tokens', options.maxTokens.toString());
     }
 
     // Add temperature if specified
     if (options.temperature !== undefined) {
-      args.push('--temperature', options.temperature.toString());
+      baseArgs.push('--temperature', options.temperature.toString());
     }
 
     // Skip permissions check for swarm execution
-    args.push('--dangerously-skip-permissions');
+    baseArgs.push('--dangerously-skip-permissions');
 
     // Add output format
     if (options.outputFormat) {
-      args.push('--output-format', options.outputFormat);
+      baseArgs.push('--output-format', options.outputFormat);
+    }
+
+    // SECURITY INTEGRATION: Enhance arguments with security context
+    let finalArgs = baseArgs;
+    
+    try {
+      const { enhanceClaudeArgsWithSecurity } = await import('../agents/claude-process-integration.js');
+      
+      const context = {
+        instanceId: `swarm-${Date.now()}`,
+        task: prompt,
+        workingDirectory: process.cwd(),
+        isSwarmMode: true,
+        agentId: agent.id.id,
+        agentType: agent.type
+      };
+
+      const enhanced = await enhanceClaudeArgsWithSecurity(baseArgs, context);
+      finalArgs = enhanced.args;
+      
+      this.logger.info('Enhanced swarm Claude command with security context', {
+        taskId: task.id.id,
+        agentId: agent.id.id,
+        templatePaths: enhanced.templatePaths.length
+      });
+      
+    } catch (error) {
+      this.logger.warn('Failed to enhance swarm command with security, using base args', { error });
     }
 
     return {
       command: options.claudePath || 'claude',
-      args,
+      args: finalArgs,
       input
     };
   }

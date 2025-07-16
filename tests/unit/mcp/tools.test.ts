@@ -2,7 +2,7 @@
  * Unit tests for Tool Registry
  */
 
-import { describe, it, beforeEach, expect } from '@jest/globals';
+import { describe, it, beforeEach, expect, afterEach, afterAll } from '@jest/globals';
 import { ToolRegistry } from '../../../src/mcp/tools';
 import { MCPTool } from '../../../src/utils/types';
 import { Logger } from '../../../src/core/logger';
@@ -20,6 +20,48 @@ describe('ToolRegistry', () => {
     });
 
     registry = new ToolRegistry(logger);
+  });
+
+  afterEach(async () => {
+    // Clean up registry
+    if (registry) {
+      // Clean up any event listeners
+      registry.removeAllListeners();
+      
+      // Clear all tools
+      const tools = registry.listTools();
+      for (const tool of tools) {
+        registry.unregister(tool.name);
+      }
+    }
+    
+    // Clean up logger
+    if (logger) {
+      try {
+        await logger.close();
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    }
+  });
+
+  afterAll(async () => {
+    // Final cleanup to ensure Jest exits
+    if (logger) {
+      try {
+        await logger.close();
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    }
+    
+    // Force garbage collection if available
+    if (global.gc) {
+      global.gc();
+    }
+    
+    // Small delay to allow cleanup
+    await new Promise(resolve => setTimeout(resolve, 100));
   });
 
   describe('Tool Registration', () => {

@@ -11,7 +11,22 @@ import { DatabaseManager } from '../../../../src/hive-mind/database/database-man
 jest.mock('../../../../src/core/event-bus');
 jest.mock('../../../../src/hive-mind/database/database-manager');
 jest.mock('../../../../src/core/logger', () => {
-  return require('../../../helpers/logger-mock.js');
+  const mockLogger = {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    configure: jest.fn(() => Promise.resolve()),
+    child: jest.fn(() => mockLogger)
+  };
+  
+  const MockLogger: any = jest.fn(() => mockLogger);
+  MockLogger.getInstance = jest.fn(() => mockLogger);
+  
+  return {
+    Logger: MockLogger,
+    LogLevel: { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 }
+  };
 });
 
 describe('PatternRecognizer with TensorFlow', () => {

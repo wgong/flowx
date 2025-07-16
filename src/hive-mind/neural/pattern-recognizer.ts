@@ -32,7 +32,19 @@ export class PatternRecognizer {
   ) {
     this.db = db;
     this.eventBus = eventBus;
-    this.logger = new Logger();
+    const loggerInstance = Logger.getInstance({
+      level: 'info',
+      format: 'json',
+      destination: 'console'
+    });
+    this.logger = loggerInstance?.child({ component: 'PatternRecognizer' }) || {
+      debug: (msg: string, meta?: any) => console.debug(`[PatternRecognizer] ${msg}`, meta),
+      info: (msg: string, meta?: any) => console.info(`[PatternRecognizer] ${msg}`, meta),
+      warn: (msg: string, meta?: any) => console.warn(`[PatternRecognizer] ${msg}`, meta),
+      error: (msg: string, error?: any) => console.error(`[PatternRecognizer] ${msg}`, error),
+      configure: async () => {},
+      child: (ctx: any) => this.logger
+    } as any;
     this.config = config;
     
     this.initializeCognitiveModels();

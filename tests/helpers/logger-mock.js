@@ -11,7 +11,10 @@ const mockLogger = {
   warn: jest.fn(),
   error: jest.fn(),
   configure: jest.fn().mockResolvedValue(undefined),
-  child: jest.fn().mockReturnThis()
+  child: jest.fn().mockImplementation((context) => ({
+    ...mockLogger,
+    context
+  }))
 };
 
 // Create mock Logger class
@@ -19,8 +22,8 @@ export const Logger = jest.fn().mockImplementation(() => {
   return mockLogger;
 });
 
-// Add static getInstance method
-Logger.getInstance = jest.fn().mockReturnValue(mockLogger);
+// Add static getInstance method that handles config parameter
+Logger.getInstance = jest.fn().mockImplementation((config) => mockLogger);
 
 // Mock LogLevel enum
 export const LogLevel = {

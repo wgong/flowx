@@ -5,9 +5,16 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 
 // Define mocks for testing
-const mockCommandRegistry = {
+interface MockRegistry {
+  register: jest.Mock;
+  execute: jest.Mock;
+  get: jest.Mock;
+  getAll: jest.Mock;
+}
+
+const mockCommandRegistry: MockRegistry = {
   register: jest.fn(),
-  execute: jest.fn() as jest.Mock,
+  execute: jest.fn(),
   get: jest.fn(),
   getAll: jest.fn()
 };
@@ -138,7 +145,7 @@ describe('CLIApplication', () => {
         args: []
       });
       
-      mockCommandRegistry.execute.mockResolvedValue(null);
+      mockCommandRegistry.execute.mockImplementation(() => Promise.resolve());
       
       const exitCode = await app.run(['status']);
       
@@ -159,7 +166,7 @@ describe('CLIApplication', () => {
       });
       
       const error = new Error('Command not found');
-      mockCommandRegistry.execute.mockRejectedValue(error);
+      mockCommandRegistry.execute.mockImplementation(() => Promise.reject(error));
       
       const exitCode = await app.run(['invalid']);
       

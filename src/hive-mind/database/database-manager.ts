@@ -40,7 +40,7 @@ export class DatabaseManager implements DatabaseConnection {
   private initialized = false;
 
   private constructor(dbPath?: string) {
-    this.dbPath = dbPath || join(process.cwd(), '.claude-flow', 'hive-mind.db');
+    this.dbPath = dbPath || join(process.cwd(), '.flowx', 'hive-mind.db');
   }
 
   /**

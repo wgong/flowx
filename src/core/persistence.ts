@@ -67,7 +67,7 @@ export class PersistenceManager {
   constructor(dataDir: string = "./memory") {
     // Normalize the path to avoid issues with working directory
     const normalizedDir = dataDir.startsWith('/') ? dataDir : join(process.cwd(), dataDir);
-    this.dbPath = join(normalizedDir, "claude-flow.db");
+    this.dbPath = join(normalizedDir, "flowx.db");
   }
 
   async initialize(): Promise<void> {

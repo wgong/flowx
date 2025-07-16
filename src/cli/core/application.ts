@@ -227,13 +227,20 @@ export class CLIApplication extends EventEmitter {
    */
   async run(args = process.argv.slice(2)): Promise<any> {
     try {
-      // Handle version and help at top level
+      // Handle version at top level
       if (args.includes('--version') || args.includes('-v')) {
         console.log(`${this.name} v${VERSION}`);
         return;
       }
 
-      if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
+      // Handle empty args (show global help)
+      if (args.length === 0) {
+        this.showHelp();
+        return;
+      }
+
+      // Handle global help only if no command specified
+      if ((args.includes('--help') || args.includes('-h')) && args.length === 1) {
         this.showHelp();
         return;
       }
@@ -303,8 +310,8 @@ export class CLIApplication extends EventEmitter {
         return;
       }
 
-      // Get command from registry (including aliases)
-      const command = getCommandByNameOrAlias(commandName);
+      // Get command from application registry (including aliases)
+      const command = this.commands.get(commandName);
       if (!command) {
         this.outputFormatter.printError(`Unknown command: ${commandName}`);
         this.outputFormatter.printInfo('Run "claude-flow help" to see available commands.');
@@ -735,7 +742,7 @@ export class CLIApplication extends EventEmitter {
       priority: 1000,
       handler: async (context, next) => {
         if (context.options.help) {
-          const help = this.getHelp(context.command);
+          const help = this.formatCommandHelp(this.commands.get(context.command)!);
           console.log(help);
           return;
         }

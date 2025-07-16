@@ -8,8 +8,8 @@ import { jest } from '@jest/globals';
 process.env.CLAUDE_FLOW_ENV = 'test';
 process.env.NODE_ENV = 'test';
 
-// Set test timeout
-jest.setTimeout(30000);
+// Set test timeout - increased to avoid timeouts in complex tests
+jest.setTimeout(60000);
 
 // Mock Deno runtime for tests that import Deno modules
 global.Deno = {

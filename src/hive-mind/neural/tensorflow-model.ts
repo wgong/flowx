@@ -79,7 +79,19 @@ export class TensorFlowModel {
   constructor(config: TensorFlowModelConfig, eventBus: EventBus) {
     this.config = config;
     this.eventBus = eventBus;
-    this.logger = new Logger();
+    const loggerInstance = Logger.getInstance({
+      level: 'info',
+      format: 'json',
+      destination: 'console'
+    });
+    this.logger = loggerInstance?.child({ component: 'TensorFlowModel', modelName: config.modelName }) || {
+      debug: (msg: string, meta?: any) => console.debug(`[TensorFlowModel:${config.modelName}] ${msg}`, meta),
+      info: (msg: string, meta?: any) => console.info(`[TensorFlowModel:${config.modelName}] ${msg}`, meta),
+      warn: (msg: string, meta?: any) => console.warn(`[TensorFlowModel:${config.modelName}] ${msg}`, meta),
+      error: (msg: string, error?: any) => console.error(`[TensorFlowModel:${config.modelName}] ${msg}`, error),
+      configure: async () => {},
+      child: (ctx: any) => this.logger
+    } as any;
     
     this.modelPath = `.swarm/models/${config.modelName.replace(/\s+/g, '_').toLowerCase()}.tson`;
     

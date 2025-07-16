@@ -427,13 +427,32 @@ export class AgentProcessManager extends EventEmitter {
 
   private spawnAgentProcess(config: AgentProcessConfig, scriptPath: string, workDir: string): ChildProcess {
     this.logger.info('Spawning agent process', { agentId: config.id, scriptPath, workDir });
-    const env = {
+    
+    // Base environment
+    const baseEnv = {
       ...process.env,
       AGENT_ID: config.id,
       AGENT_TYPE: config.type,
       AGENT_SPECIALIZATION: config.specialization || '',
       ...config.environment
     };
+
+    // SECURITY INTEGRATION: Add security context to agent environment
+    const securityEnv = {
+      SECURE_AGENT_MODE: 'true',
+      SECURITY_LEVEL: 'standard',
+      OWASP_COMPLIANCE: 'TOP_10_2023',
+      ENFORCE_CLEAN_ARCHITECTURE: 'true',
+      ENFORCE_SOLID: 'true',
+      MIN_TEST_COVERAGE: '85',
+      REQUIRE_TESTS: 'true',
+      SECURITY_VALIDATION: 'real-time',
+      CLAUDE_AGENT_ID: config.id,
+      CLAUDE_AGENT_TYPE: config.type,
+      CLAUDE_AGENT_MODE: 'true'
+    };
+    
+    const env = { ...baseEnv, ...securityEnv };
 
     const nodeArgs = [];
     if (config.maxMemory) {

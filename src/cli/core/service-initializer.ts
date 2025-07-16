@@ -37,7 +37,7 @@ export class ServiceInitializer {
     }
 
     // Create data directory
-    const dataDir = join(process.cwd(), '.claude-flow');
+    const dataDir = join(process.cwd(), '.flowx');
     await mkdir(dataDir, { recursive: true });
 
     // Initialize logger

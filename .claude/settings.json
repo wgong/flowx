@@ -1,15 +1,16 @@
 {
   "env": {
-    "CLAUDE_FLOW_AUTO_COMMIT": "false",
-    "CLAUDE_FLOW_AUTO_PUSH": "false",
-    "CLAUDE_FLOW_HOOKS_ENABLED": "true",
-    "CLAUDE_FLOW_TELEMETRY_ENABLED": "true",
-    "CLAUDE_FLOW_REMOTE_EXECUTION": "true",
-    "CLAUDE_FLOW_GITHUB_INTEGRATION": "true"
+    "FLOWX_AUTO_COMMIT": "false",
+    "FLOWX_AUTO_PUSH": "false",
+    "FLOWX_HOOKS_ENABLED": "true",
+    "FLOWX_TELEMETRY_ENABLED": "true",
+    "FLOWX_REMOTE_EXECUTION": "true",
+    "FLOWX_GITHUB_INTEGRATION": "true"
   },
   "permissions": {
     "allow": [
-      "Bash(npx claude-flow *)",
+      "Bash(./cli.js *)",
+      "Bash(node cli.js *)",
       "Bash(npm run lint)",
       "Bash(npm run test:*)",
       "Bash(npm test *)",
@@ -34,50 +35,77 @@
     ]
   },
   "hooks": {
-    "preEditHook": {
-      "command": "npx",
-      "args": ["claude-flow", "hooks", "pre-edit", "--file", "${file}", "--auto-assign-agents", "true", "--load-context", "true"],
-      "alwaysRun": false,
-      "outputFormat": "json"
-    },
-    "postEditHook": {
-      "command": "npx",
-      "args": ["claude-flow", "hooks", "post-edit", "--file", "${file}", "--format", "true", "--update-memory", "true", "--train-neural", "true"],
-      "alwaysRun": true,
-      "outputFormat": "json"
-    },
-    "preCommandHook": {
-      "command": "npx",
-      "args": ["claude-flow", "hooks", "pre-command", "--command", "${command}", "--validate-safety", "true", "--prepare-resources", "true"],
-      "alwaysRun": false,
-      "outputFormat": "json"
-    },
-    "postCommandHook": {
-      "command": "npx",
-      "args": ["claude-flow", "hooks", "post-command", "--command", "${command}", "--track-metrics", "true", "--store-results", "true"],
-      "alwaysRun": false,
-      "outputFormat": "json"
-    },
-    "sessionEndHook": {
-      "command": "npx",
-      "args": ["claude-flow", "hooks", "session-end", "--generate-summary", "true", "--persist-state", "true", "--export-metrics", "true"],
-      "alwaysRun": true,
-      "outputFormat": "json"
-    }
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node cli.js hooks pre-edit --file $CLAUDE_EDITED_FILE --auto-assign-agents true --load-context true"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node cli.js hooks pre-command --command $CLAUDE_COMMAND --validate-safety true --prepare-resources true"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node cli.js hooks post-edit --file $CLAUDE_EDITED_FILE --format true --update-memory true --train-neural true"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node cli.js hooks post-command --command $CLAUDE_COMMAND --track-metrics true --store-results true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node cli.js hooks session-end --generate-summary true --persist-state true --export-metrics true"
+          }
+        ]
+      }
+    ]
   },
   "mcpServers": {
-    "claude-flow": {
-      "command": "npx",
+    "flowx": {
+      "command": "node",
       "args": [
-        "claude-flow",
+        "cli.js",
         "mcp",
-        "start"
+        "serve",
+        "--transport",
+        "stdio",
+        "--log-level",
+        "info"
       ],
       "env": {
-        "CLAUDE_FLOW_HOOKS_ENABLED": "true",
-        "CLAUDE_FLOW_TELEMETRY_ENABLED": "true",
-        "CLAUDE_FLOW_REMOTE_READY": "true",
-        "CLAUDE_FLOW_GITHUB_INTEGRATION": "true"
+        "NODE_ENV": "production",
+        "FLOWX_ENV": "mcp",
+        "FLOWX_DATA_PATH": "./.flowx",
+        "FLOWX_HOOKS_ENABLED": "true",
+        "FLOWX_TELEMETRY_ENABLED": "true",
+        "FLOWX_REMOTE_READY": "true",
+        "FLOWX_GITHUB_INTEGRATION": "true"
       }
     }
   },

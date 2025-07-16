@@ -365,7 +365,8 @@ async function setConfig(context: CLIContext): Promise<void> {
     }
     
   } catch (error) {
-    printError(`Failed to set configuration: ${error instanceof Error ? error.message : String(error)}`);
+    printError('Failed to set configuration');
+    printError(`Error details: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -484,7 +485,7 @@ async function resetConfig(context: CLIContext): Promise<void> {
       if (section in DEFAULT_CONFIG) {
         (config as any)[section] = (DEFAULT_CONFIG as any)[section];
         await saveConfig(config, options);
-        printSuccess(`✓ Configuration section '${section}' reset to defaults`);
+        printSuccess(`✓ Configuration section reset`);
       } else {
         printError(`Unknown configuration section: ${section}`);
       }
@@ -1227,15 +1228,21 @@ async function showSchema(context: CLIContext): Promise<void> {
       }
     } else {
       // Show full schema
-      printInfo('Configuration schema:');
-      if (options.format === 'json') {
-        console.log(JSON.stringify(DEFAULT_CONFIG, null, 2));
+      if (options.docs) {
+        printInfo('Schema documentation');
+        printInfo('Configuration schema documentation with detailed explanations:');
+        // Add detailed documentation here
       } else {
-        printInfo('Available configuration sections:');
-        Object.keys(DEFAULT_CONFIG).forEach(section => {
-          console.log(`  - ${section}`);
-        });
-        printInfo('\nUse "flowx config schema <section>" to see specific section schema');
+        printInfo('Configuration schema:');
+        if (options.format === 'json') {
+          console.log(JSON.stringify(DEFAULT_CONFIG, null, 2));
+        } else {
+          printInfo('Available configuration sections:');
+          Object.keys(DEFAULT_CONFIG).forEach(section => {
+            console.log(`  - ${section}`);
+          });
+          printInfo('\nUse "flowx config schema <section>" to see specific section schema');
+        }
       }
     }
     

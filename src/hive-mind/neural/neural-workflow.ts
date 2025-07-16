@@ -64,7 +64,19 @@ export class NeuralWorkflow {
     this.eventBus = eventBus;
     this.config = config;
     
-    this.logger = Logger.getInstance();
+    const loggerInstance = Logger.getInstance({
+      level: 'info',
+      format: 'json',
+      destination: 'console'
+    });
+    this.logger = loggerInstance?.child({ component: 'NeuralWorkflow' }) || {
+      debug: (msg: string, meta?: any) => console.debug(`[NeuralWorkflow] ${msg}`, meta),
+      info: (msg: string, meta?: any) => console.info(`[NeuralWorkflow] ${msg}`, meta),
+      warn: (msg: string, meta?: any) => console.warn(`[NeuralWorkflow] ${msg}`, meta),
+      error: (msg: string, error?: any) => console.error(`[NeuralWorkflow] ${msg}`, error),
+      configure: async () => {},
+      child: (ctx: any) => this.logger
+    } as any;
     
     this.setupEventListeners();
   }

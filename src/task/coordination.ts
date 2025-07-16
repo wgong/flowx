@@ -20,6 +20,8 @@ export interface TodoItem {
   memoryKey?: string;
   tags?: string[];
   metadata?: Record<string, unknown>;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface MemoryEntry {

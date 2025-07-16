@@ -1,137 +1,17 @@
 {
   "mcpServers": {
-    "flowx": {
-      "command": "node",
+    "claude-flow": {
+      "command": "./cli.js",
       "args": [
-        "./cli.js",
         "mcp",
-        "serve"
+        "start",
+        "--transport",
+        "stdio"
       ],
       "env": {
-        "FLOWX_LOG_LEVEL": "info",
-        "FLOWX_MCP_PORT": "3000",
-        "FLOWX_MCP_TRANSPORT": "stdio"
-      },
-      "capabilities": {
-        "tools": true,
-        "prompts": true,
-        "resources": true
+        "CLAUDE_FLOW_MODE": "enterprise",
+        "CLAUDE_FLOW_FEATURES": "neural,swarm,memory,monitoring"
       }
-    },
-    "flowx-debug": {
-      "command": "node",
-      "args": [
-        "./cli.js",
-        "mcp",
-        "serve",
-        "--log-level",
-        "debug",
-        "--verbose"
-      ],
-      "env": {
-        "FLOWX_LOG_LEVEL": "debug",
-        "FLOWX_MCP_TRANSPORT": "stdio",
-        "FLOWX_MEMORY_BACKEND": "sqlite",
-        "FLOWX_TERMINAL_POOL_SIZE": "10"
-      },
-      "capabilities": {
-        "tools": true,
-        "prompts": true,
-        "resources": true
-      }
-    },
-    "flowx-minimal": {
-      "command": "node",
-      "args": [
-        "./cli.js",
-        "mcp",
-        "serve",
-        "--minimal"
-      ],
-      "env": {
-        "NODE_ENV": "production"
-      },
-      "capabilities": {
-        "tools": true
-      }
-    }
-  },
-  "globalSettings": {
-    "timeout": 30000,
-    "retries": 3,
-    "logDirectory": "./logs"
-  },
-  "tools": {
-    "hive-mind": {
-      "description": "Hive-mind collective intelligence system",
-      "commands": [
-        "create",
-        "spawn",
-        "status",
-        "shutdown"
-      ]
-    },
-    "agent": {
-      "description": "Manage AI agents",
-      "commands": [
-        "spawn",
-        "list",
-        "terminate",
-        "info"
-      ]
-    },
-    "task": {
-      "description": "Manage tasks and workflows",
-      "commands": [
-        "create",
-        "list",
-        "status",
-        "cancel"
-      ]
-    },
-    "memory": {
-      "description": "Knowledge management",
-      "commands": [
-        "query",
-        "store",
-        "stats",
-        "export"
-      ]
-    },
-    "terminal": {
-      "description": "Terminal session management",
-      "commands": [
-        "execute",
-        "list",
-        "create",
-        "terminate"
-      ]
-    },
-    "workflow": {
-      "description": "Execute multi-step workflows",
-      "commands": [
-        "run",
-        "status",
-        "list"
-      ]
-    }
-  },
-  "examples": {
-    "basic": {
-      "description": "Basic MCP server setup",
-      "command": "node ./cli.js mcp serve"
-    },
-    "withConfig": {
-      "description": "MCP server with custom configuration",
-      "command": "node ./cli.js mcp serve --config ./my-config.json"
-    },
-    "debugMode": {
-      "description": "MCP server in debug mode",
-      "command": "node ./cli.js mcp serve --log-level debug --verbose"
-    },
-    "httpTransport": {
-      "description": "MCP server with HTTP transport",
-      "command": "node ./cli.js mcp serve --transport http --port 8080"
     }
   }
 }

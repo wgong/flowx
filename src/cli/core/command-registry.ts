@@ -3,7 +3,7 @@
  * Central registry for all CLI commands
  */
 
-import type { CLICommand } from '../interfaces/index.ts';
+import type { CLICommand, CLIContext } from '../interfaces/index.ts';
 
 // System Commands
 import { statusCommand } from '../commands/system/status-command.ts';
@@ -31,6 +31,7 @@ import { daemonCommand } from '../commands/system/daemon-command.ts';
 import { servicesCommand } from '../commands/system/services-command.ts';
 import { systemCommand } from '../commands/system/system-command.ts';
 import { runCommand } from '../commands/system/run-command.ts';
+import { claudeCommand } from '../commands/system/claude-command.ts';
 
 // MCP Commands
 import { mcpCommand } from '../commands/system/mcp-command.ts';
@@ -42,7 +43,7 @@ import { killCommand } from '../commands/agents/kill-command.ts';
 import { execCommand } from '../commands/agents/exec-command.ts';
 
 // Swarm Commands
-import { swarmCommand } from '../commands/swarm/swarm-management-command.ts';
+import { swarmCommand } from '../commands/swarm/swarm-claude-launcher.ts';
 
 // Memory Commands
 import { memoryCommand } from '../commands/memory/memory-management-command.ts';
@@ -53,6 +54,28 @@ import { analyzeCommand } from '../commands/data/analyze-command.ts';
 
 // Hive-Mind Commands
 import { hiveMindCommand } from '../commands/hive-mind/hive-mind-command.ts';
+
+// Hooks Commands (simplified interface compatible with strip-only mode)
+import { hooksCommand as hooksCommandSimple } from '../commands/system/hooks-command.ts';
+
+// Create a compatibility wrapper for the hooks command
+const hooksCommand: CLICommand = {
+  name: hooksCommandSimple.name,
+  description: hooksCommandSimple.description,
+  usage: hooksCommandSimple.usage,
+  examples: hooksCommandSimple.examples,
+  handler: async (context: CLIContext) => {
+    // Convert CLIContext to SimpleCLIContext
+    const simpleContext = {
+      args: context.args,
+      options: context.options
+    };
+    return hooksCommandSimple.handler(simpleContext);
+  }
+};
+
+// Import fix-hook-variables command
+import { fixHookVariablesCommand } from '../commands/system/fix-hook-variables-command.ts';
 
 /**
  * Command Registry
@@ -85,6 +108,7 @@ export const commandRegistry = new Map<string, CLICommand>([
   ['services', servicesCommand],
   ['system', systemCommand],
   ['run', runCommand],
+  ['claude', claudeCommand],
 
   // MCP Commands
   ['mcp', mcpCommand],
@@ -106,7 +130,11 @@ export const commandRegistry = new Map<string, CLICommand>([
   ['analyze', analyzeCommand],
 
   // Hive-Mind Commands
-  ['hive-mind', hiveMindCommand]
+  ['hive-mind', hiveMindCommand],
+
+  // Hooks Commands
+  ['hooks', hooksCommand],
+  ['fix-hook-variables', fixHookVariablesCommand]
 ]);
 
 // Command aliases

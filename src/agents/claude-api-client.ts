@@ -306,7 +306,7 @@ Please implement this requirement completely.
       }
 
       // Build Claude CLI command
-      const args = this.buildClaudeArgs(request, options, workDir);
+      const args = await this.buildClaudeArgs(request, options, workDir);
       
       this.logger.debug('Executing Claude CLI command', { requestId, args: args.slice(0, 3) });
 
@@ -366,7 +366,7 @@ Please implement this requirement completely.
     }
   }
 
-  private buildClaudeArgs(request: ClaudeRequest, options: TaskExecutionOptions, workDir: string): string[] {
+  private async buildClaudeArgs(request: ClaudeRequest, options: TaskExecutionOptions, workDir: string): Promise<string[]> {
     // Check for Claude CLI version to use appropriate args
     let isV1 = false;
     try {
@@ -378,52 +378,76 @@ Please implement this requirement completely.
       this.logger.warn('Failed to detect Claude CLI version, assuming latest', { error });
     }
     
-    const args: string[] = [];
+    // Base arguments
+    const baseArgs: string[] = [request.prompt];
 
     // Always use non-interactive mode for automation
-    args.push(isV1 ? '--message' : '--print');
+    baseArgs.push(isV1 ? '--message' : '--print');
     
     // Output format
     if (request.outputFormat) {
-      args.push('--output-format', request.outputFormat);
+      baseArgs.push('--output-format', request.outputFormat);
     } else {
-      args.push('--output-format', 'text');
+      baseArgs.push('--output-format', 'text');
     }
 
     // Skip permissions for automation (repository pattern)
     if (this.config.dangerouslySkipPermissions) {
-      args.push('--dangerously-skip-permissions');
+      baseArgs.push('--dangerously-skip-permissions');
     }
 
     // Add working directory context (repository pattern)
     if (workDir && workDir !== process.cwd()) {
-      args.push('--add-dir', workDir);
+      baseArgs.push('--add-dir', workDir);
     }
 
     // Model selection
     if (this.config.model) {
-      args.push('--model', this.config.model);
+      baseArgs.push('--model', this.config.model);
     }
 
     // Temperature
     if (this.config.temperature !== undefined) {
-      args.push('--temperature', this.config.temperature.toString());
+      baseArgs.push('--temperature', this.config.temperature.toString());
     }
 
     // Max tokens
     if (this.config.maxTokens) {
-      args.push('--max-tokens', this.config.maxTokens.toString());
+      baseArgs.push('--max-tokens', this.config.maxTokens.toString());
     }
 
     // Tools configuration (repository pattern)
     if (this.config.allowedTools && this.config.allowedTools.length > 0) {
-      args.push('--allowed-tools', this.config.allowedTools.join(','));
+      baseArgs.push('--allowed-tools', this.config.allowedTools.join(','));
     }
 
-    // Add the prompt as the last argument
-    args.push(request.prompt);
+    // SECURITY INTEGRATION: Enhance arguments with security context
+    try {
+      const { enhanceClaudeArgsWithSecurity } = await import('./claude-process-integration.js');
+      
+      const context = {
+        instanceId: `claude-api-${Date.now()}`,
+        task: request.prompt,
+        workingDirectory: workDir,
+        isAgentMode: true,
+        agentType: 'api-client'
+      };
 
-    return args;
+      const enhanced = await enhanceClaudeArgsWithSecurity(baseArgs, context);
+      
+      // Use enhanced arguments and environment
+      this.logger.info('Enhanced Claude arguments with security context', {
+        originalArgsLength: baseArgs.length,
+        enhancedArgsLength: enhanced.args.length,
+        templatePaths: enhanced.templatePaths.length
+      });
+
+      return enhanced.args;
+      
+    } catch (error) {
+      this.logger.warn('Failed to enhance arguments with security, using base args', { error });
+      return baseArgs;
+    }
   }
 
   private async runClaudeCommand(

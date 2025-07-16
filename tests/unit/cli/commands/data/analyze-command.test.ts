@@ -49,25 +49,42 @@ jest.mock('../../../../../src/cli/core/global-initialization', () => ({
     getActiveAgents: jest.fn(() => Promise.resolve([])),
     getTaskHistory: jest.fn(() => Promise.resolve([])),
     getAgentHistory: jest.fn(() => Promise.resolve([])),
-    getSystemLogs: jest.fn(() => Promise.resolve([]))
+    getSystemLogs: jest.fn(() => Promise.resolve([])),
+    query: jest.fn(() => Promise.resolve([])),
+    search: jest.fn(() => Promise.resolve([])),
+    store: jest.fn(() => Promise.resolve()),
+    delete: jest.fn(() => Promise.resolve()),
+    clear: jest.fn(() => Promise.resolve()),
+    getMetrics: jest.fn(() => Promise.resolve({})),
+    executeQuery: jest.fn(() => Promise.resolve([])),
+    getSchema: jest.fn(() => Promise.resolve({})),
+    getIndices: jest.fn(() => Promise.resolve([]))
   }))
 }));
 
-// Mock task engine with proper constructor mocking
-const mockTaskEngine = {
-  listTasks: jest.fn(() => Promise.resolve({ 
-    tasks: [], 
-    total: 0, 
-    hasMore: false 
-  })),
-  analyzeTask: jest.fn(() => Promise.resolve({})),
-  getTaskStatistics: jest.fn(() => Promise.resolve({})),
-  getTaskMetrics: jest.fn(() => Promise.resolve({})),
-  getActiveTasks: jest.fn(() => Promise.resolve([]))
-};
+// Create a proper mock TaskEngine class
+class MockTaskEngine {
+  listTasks = jest.fn(() => Promise.resolve({ tasks: [], total: 0, hasMore: false }));
+  analyzeTask = jest.fn(() => Promise.resolve({}));
+  getTaskStatistics = jest.fn(() => Promise.resolve({}));
+  getTaskMetrics = jest.fn(() => Promise.resolve({}));
+  getActiveTasks = jest.fn(() => Promise.resolve([]));
+  createTask = jest.fn(() => Promise.resolve({}));
+  getTaskStatus = jest.fn(() => Promise.resolve(null));
+  cancelTask = jest.fn(() => Promise.resolve());
+  executeWorkflow = jest.fn(() => Promise.resolve());
+  listWorkflows = jest.fn(() => Promise.resolve([]));
+  on = jest.fn();
+  emit = jest.fn();
+  removeListener = jest.fn();
+  
+  constructor() {
+    // Mock constructor - no implementation needed
+  }
+}
 
 jest.mock('../../../../../src/task/engine', () => ({
-  TaskEngine: jest.fn().mockImplementation(() => mockTaskEngine)
+  TaskEngine: MockTaskEngine
 }));
 
 // Mock filesystem
@@ -81,6 +98,7 @@ describe('Analyze Command', () => {
   let mockOutputFormatter: any;
   let mockSwarmCoordinator: any;
   let mockMemoryManager: any;
+  let analyzeCommand: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -110,12 +128,25 @@ describe('Analyze Command', () => {
       });
     }
 
-    // Reset taskEngine mock - ensure it has the method
-    (mockTaskEngine.listTasks as jest.MockedFunction<any>).mockResolvedValue({ tasks: [] });
-    (mockTaskEngine.analyzeTask as jest.MockedFunction<any>).mockResolvedValue({});
-    (mockTaskEngine.getTaskStatistics as jest.MockedFunction<any>).mockResolvedValue({});
-    (mockTaskEngine.getTaskMetrics as jest.MockedFunction<any>).mockResolvedValue({});
-    (mockTaskEngine.getActiveTasks as jest.MockedFunction<any>).mockResolvedValue([]);
+    // Reset TaskEngine mock methods
+    MockTaskEngine.prototype.listTasks = jest.fn(() => Promise.resolve({ tasks: [], total: 0, hasMore: false }));
+    MockTaskEngine.prototype.analyzeTask = jest.fn(() => Promise.resolve({}));
+    MockTaskEngine.prototype.getTaskStatistics = jest.fn(() => Promise.resolve({}));
+    MockTaskEngine.prototype.getTaskMetrics = jest.fn(() => Promise.resolve({}));
+    MockTaskEngine.prototype.getActiveTasks = jest.fn(() => Promise.resolve([]));
+    
+    // Ensure global initialization mocks return proper instances
+    const globalInit = require('../../../../../src/cli/core/global-initialization');
+    globalInit.getPersistenceManager.mockResolvedValue({
+      getActiveTasks: jest.fn(() => Promise.resolve([])),
+      getActiveAgents: jest.fn(() => Promise.resolve([])),
+      getTaskHistory: jest.fn(() => Promise.resolve([])),
+      getAgentHistory: jest.fn(() => Promise.resolve([])),
+      getSystemLogs: jest.fn(() => Promise.resolve([]))
+    });
+    
+    // Import the command after mocks are set up
+    analyzeCommand = require('../../../../../src/cli/commands/data/analyze-command').analyzeCommand;
   });
 
   afterEach(() => {
@@ -124,7 +155,6 @@ describe('Analyze Command', () => {
 
   describe('command structure', () => {
     it('should have correct command structure', async () => {
-      const { analyzeCommand } = require('../../../../../src/cli/commands/data/analyze-command');
       
       expect(analyzeCommand).toBeDefined();
       expect(analyzeCommand.name).toBe('analyze');
@@ -134,7 +164,6 @@ describe('Analyze Command', () => {
     });
 
     it('should have system analysis support via target argument', async () => {
-      const { analyzeCommand } = require('../../../../../src/cli/commands/data/analyze-command');
       
       // System analysis is done via target argument, not option
       expect(analyzeCommand.arguments[0].name).toBe('target');

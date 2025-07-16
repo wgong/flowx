@@ -1120,7 +1120,7 @@ export const hiveMindCommand: CLICommand = {
   description: 'Manage hive-mind collective intelligence systems',
   category: 'Hive-Mind',
   usage: 'hive-mind <command> [options]',
-  aliases: ['hm', 'swarm'],
+  aliases: ['hm'],
   handler: hiveMindHandler,
   options: [
     {

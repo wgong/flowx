@@ -35,8 +35,8 @@ export class RequestRouter {
         return await this.handleRPCMethod(method, params);
       }
 
-      // Handle tool invocations
-      if (method.startsWith('tools.')) {
+      // Handle tool invocations (both formats)
+      if (method.startsWith('tools.') || method.startsWith('tools/')) {
         return await this.handleToolMethod(method, params);
       }
 
@@ -96,12 +96,15 @@ export class RequestRouter {
   private async handleToolMethod(method: string, params: unknown): Promise<unknown> {
     switch (method) {
       case 'tools.list':
+      case 'tools/list':
         return this.toolRegistry.listTools();
 
       case 'tools.invoke':
+      case 'tools/call':
         return await this.invokeTool(params);
 
       case 'tools.describe':
+      case 'tools/describe':
         return this.describeTool(params);
 
       default:
@@ -208,12 +211,23 @@ export class RequestRouter {
    * Invokes a tool
    */
   private async invokeTool(params: unknown): Promise<unknown> {
-    if (!params || typeof params !== 'object' || !('tool' in params)) {
-      throw new Error('Invalid params: tool required');
+    if (!params || typeof params !== 'object') {
+      throw new Error('Invalid params: parameters required');
     }
 
-    const { tool, input } = params as { tool: string; input?: unknown };
-    return await this.toolRegistry.executeTool(tool, input || {});
+    // Handle MCP standard format: tools/call with name and arguments
+    if ('name' in params && 'arguments' in params) {
+      const { name, arguments: args } = params as { name: string; arguments?: unknown };
+      return await this.toolRegistry.executeTool(name, args || {});
+    }
+
+    // Handle alternative format: tools.invoke with tool and input
+    if ('tool' in params) {
+      const { tool, input } = params as { tool: string; input?: unknown };
+      return await this.toolRegistry.executeTool(tool, input || {});
+    }
+
+    throw new Error('Invalid params: either name+arguments or tool+input required');
   }
 
   /**

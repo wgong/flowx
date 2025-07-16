@@ -188,7 +188,10 @@ export const execCommand: CLICommand = {
       if (options.verbose) {
         console.error(error);
       }
-      process.exit(1);
+      // Don't call process.exit in test environment
+      if (process.env.NODE_ENV !== 'test') {
+        process.exit(1);
+      }
     }
   }
 };

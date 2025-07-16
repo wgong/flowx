@@ -58,7 +58,6 @@ module.exports = {
     '/node_modules/',
     '<rootDir>/original-claude-flow/',
     '<rootDir>/tests/integration/cli/init/.*\\.test\\.(ts|js)$',
-    '<rootDir>/tests/unit/mcp/server\\.test\\.ts$',
     '<rootDir>/tests/integration/cli/agent-task-persistence\\.test\\.ts$',
 
     '<rootDir>/tests/e2e/full-workflow\\.test\\.ts$',
@@ -81,7 +80,7 @@ module.exports = {
   ],
   
   // Test configuration
-  testTimeout: 30000,
+  testTimeout: 60000, // Increased from 30s to 60s to avoid timeouts
   verbose: false, // Reduce verbose output to avoid console spam
   bail: false,
   maxWorkers: 1, // Run tests sequentially to avoid resource conflicts

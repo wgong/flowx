@@ -15,40 +15,7 @@ const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
   throw new Error('process.exit called');
 });
 
-// Create mock objects with proper typing
-const mockPersistenceManager = {
-  query: jest.fn() as jest.MockedFunction<any>,
-  getSchema: jest.fn() as jest.MockedFunction<any>,
-  getIndices: jest.fn() as jest.MockedFunction<any>,
-  executeQuery: jest.fn() as jest.MockedFunction<any>,
-  getActiveTasks: jest.fn() as jest.MockedFunction<any>,
-  getActiveAgents: jest.fn() as jest.MockedFunction<any>,
-  getTaskHistory: jest.fn() as jest.MockedFunction<any>,
-  getAgentHistory: jest.fn() as jest.MockedFunction<any>,
-  getSystemLogs: jest.fn() as jest.MockedFunction<any>,
-  getPerformanceMetrics: jest.fn() as jest.MockedFunction<any>
-};
-
-const mockMemoryManager = {
-  query: jest.fn() as jest.MockedFunction<any>,
-  search: jest.fn() as jest.MockedFunction<any>,
-  getMemoryBanks: jest.fn() as jest.MockedFunction<any>
-};
-
-const mockSwarmCoordinator = {
-  queryAgents: jest.fn() as jest.MockedFunction<any>,
-  queryTasks: jest.fn() as jest.MockedFunction<any>,
-  queryMetrics: jest.fn() as jest.MockedFunction<any>
-};
-
-const mockTaskEngine = {
-  listTasks: jest.fn() as jest.MockedFunction<any>,
-  createTask: jest.fn() as jest.MockedFunction<any>,
-  updateTask: jest.fn() as jest.MockedFunction<any>,
-  deleteTask: jest.fn() as jest.MockedFunction<any>
-};
-
-// Mock dependencies
+// Mock dependencies  
 jest.mock('../../../../../src/cli/core/output-formatter', () => ({
   printSuccess: jest.fn(),
   printError: jest.fn(),
@@ -57,6 +24,36 @@ jest.mock('../../../../../src/cli/core/output-formatter', () => ({
   formatTable: jest.fn().mockReturnValue('formatted table')
 }));
 
+// Create mock instances that will be used by the command handler
+const mockMemoryManager = {
+  query: jest.fn(() => Promise.resolve([
+    { id: 'memory1', content: 'test result', namespace: 'default' } as any
+  ])),
+  search: jest.fn(() => Promise.resolve([])),
+  getMemoryBanks: jest.fn(() => Promise.resolve([])),
+  analyzeMemoryUsage: jest.fn(() => Promise.resolve({}))
+};
+
+const mockPersistenceManager = {
+  query: jest.fn(() => Promise.resolve([])),
+  getSchema: jest.fn(() => Promise.resolve({})),
+  getIndices: jest.fn(() => Promise.resolve([])),
+  executeQuery: jest.fn(() => Promise.resolve([])),
+  getActiveTasks: jest.fn(() => Promise.resolve([])),
+  getActiveAgents: jest.fn(() => Promise.resolve([])),
+  getTaskHistory: jest.fn(() => Promise.resolve([])),
+  getAgentHistory: jest.fn(() => Promise.resolve([])),
+  getSystemLogs: jest.fn(() => Promise.resolve([])),
+  getPerformanceMetrics: jest.fn(() => Promise.resolve([]))
+};
+
+const mockSwarmCoordinator = {
+  getAnalytics: jest.fn(() => Promise.resolve({})),
+  queryAgents: jest.fn(() => Promise.resolve([{ id: 'agent1', status: 'active' }])),
+  queryTasks: jest.fn(() => Promise.resolve([{ id: 'task1', type: 'analysis', status: 'completed' }])),
+  queryMetrics: jest.fn(() => Promise.resolve([]))
+};
+
 jest.mock('../../../../../src/cli/core/global-initialization', () => ({
   getLogger: jest.fn(() => Promise.resolve({
     info: jest.fn(),
@@ -64,33 +61,64 @@ jest.mock('../../../../../src/cli/core/global-initialization', () => ({
     warn: jest.fn(),
     error: jest.fn()
   })),
-  getMemoryManager: jest.fn(() => Promise.resolve(mockMemoryManager)),
-  getPersistenceManager: jest.fn(() => Promise.resolve(mockPersistenceManager))
-}));
-
-jest.mock('../../../../../src/core/persistence', () => ({
-  PersistenceManager: jest.fn().mockImplementation(() => mockPersistenceManager)
-}));
-
-jest.mock('../../../../../src/memory/manager', () => ({
-  MemoryManager: jest.fn().mockImplementation(() => mockMemoryManager)
+  getMemoryManager: jest.fn(() => Promise.resolve({
+    query: jest.fn(() => Promise.resolve([])),
+    search: jest.fn(() => Promise.resolve([])),
+    getMemoryBanks: jest.fn(() => Promise.resolve([])),
+    analyzeMemoryUsage: jest.fn(() => Promise.resolve({}))
+  })),
+  getPersistenceManager: jest.fn(() => Promise.resolve({
+    getActiveTasks: jest.fn(() => Promise.resolve([])),
+    getActiveAgents: jest.fn(() => Promise.resolve([])),
+    getTaskHistory: jest.fn(() => Promise.resolve([])),
+    getAgentHistory: jest.fn(() => Promise.resolve([])),
+    getSystemLogs: jest.fn(() => Promise.resolve([])),
+    query: jest.fn(() => Promise.resolve([])),
+    search: jest.fn(() => Promise.resolve([])),
+    store: jest.fn(() => Promise.resolve()),
+    delete: jest.fn(() => Promise.resolve()),
+    clear: jest.fn(() => Promise.resolve()),
+    getMetrics: jest.fn(() => Promise.resolve({})),
+    executeQuery: jest.fn(() => Promise.resolve([])),
+    getSchema: jest.fn(() => Promise.resolve({})),
+    getIndices: jest.fn(() => Promise.resolve([]))
+  }))
 }));
 
 jest.mock('../../../../../src/swarm/coordinator', () => ({
   SwarmCoordinator: jest.fn().mockImplementation(() => mockSwarmCoordinator)
 }));
 
-jest.mock('../../../../../src/task/engine', () => {
-  return {
-    TaskEngine: jest.fn().mockImplementation(() => mockTaskEngine)
-  };
-});
+// Create a proper mock TaskEngine class
+class MockTaskEngine {
+  listTasks = jest.fn(() => Promise.resolve({ tasks: [], total: 0, hasMore: false }));
+  createTask = jest.fn(() => Promise.resolve({}));
+  updateTask = jest.fn(() => Promise.resolve({}));
+  deleteTask = jest.fn(() => Promise.resolve({}));
+  getTaskStatus = jest.fn(() => Promise.resolve(null));
+  cancelTask = jest.fn(() => Promise.resolve());
+  executeWorkflow = jest.fn(() => Promise.resolve());
+  listWorkflows = jest.fn(() => Promise.resolve([]));
+  on = jest.fn();
+  emit = jest.fn();
+  removeListener = jest.fn();
+  
+  constructor() {
+    // Mock constructor - no implementation needed
+  }
+}
+
+jest.mock('../../../../../src/task/engine', () => ({
+  TaskEngine: MockTaskEngine
+}));
+
+// We'll handle the TaskEngine mocking in beforeEach by ensuring the mock constructor works properly
 
 describe('Query Command', () => {
   let mockOutputFormatter: any;
   let queryCommand: any;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
     
     // Set up default mock return values
@@ -103,7 +131,7 @@ describe('Query Command', () => {
     mockPersistenceManager.getTaskHistory.mockResolvedValue([]);
     mockPersistenceManager.getAgentHistory.mockResolvedValue([]);
     mockPersistenceManager.getSystemLogs.mockResolvedValue([]);
-    mockPersistenceManager.getPerformanceMetrics.mockResolvedValue({});
+    mockPersistenceManager.getPerformanceMetrics.mockResolvedValue([]);
 
     mockMemoryManager.query.mockResolvedValue([]);
     mockMemoryManager.search.mockResolvedValue([]);
@@ -111,29 +139,17 @@ describe('Query Command', () => {
 
     mockSwarmCoordinator.queryAgents.mockResolvedValue([]);
     mockSwarmCoordinator.queryTasks.mockResolvedValue([]);
-    mockSwarmCoordinator.queryMetrics.mockResolvedValue({});
-
-    // Ensure TaskEngine mock is properly setup
-    mockTaskEngine.listTasks.mockReset();
-    mockTaskEngine.listTasks.mockResolvedValue({ 
-      tasks: [], 
-      total: 0, 
-      hasMore: false 
-    });
-    mockTaskEngine.createTask.mockResolvedValue({});
-    mockTaskEngine.updateTask.mockResolvedValue({});
-    mockTaskEngine.deleteTask.mockResolvedValue({});
+    mockSwarmCoordinator.queryMetrics.mockResolvedValue([]);
     
-    // Debug: Verify the mock is working
-    expect(typeof mockTaskEngine.listTasks).toBe('function');
-    
-    // Verify the constructor mock
-    const { TaskEngine } = require('../../../../../src/task/engine');
-    const testInstance = new TaskEngine(10);
-    expect(typeof testInstance.listTasks).toBe('function');
+    // Make sure global initialization functions return our mock instances
+    const globalInit = require('../../../../../src/cli/core/global-initialization');
+    globalInit.getMemoryManager.mockResolvedValue(mockMemoryManager);
+    globalInit.getPersistenceManager.mockResolvedValue(mockPersistenceManager);
     
     // Get mocked modules
     mockOutputFormatter = require('../../../../../src/cli/core/output-formatter');
+    
+    // Dynamically import the command to ensure mocks are properly applied
     const commandModule = require('../../../../../src/cli/commands/data/query-command');
     queryCommand = commandModule.queryCommand;
   });
@@ -157,7 +173,7 @@ describe('Query Command', () => {
       mockOutputFormatter.printSuccess.mockImplementation(() => {});
       mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
       mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
-      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result', namespace: 'default' }]);
       
       await queryCommand.handler(context);
       } catch (error) {
@@ -185,7 +201,7 @@ describe('Query Command', () => {
       mockOutputFormatter.printSuccess.mockImplementation(() => {});
       mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
       mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
-      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result', namespace: 'default' }]);
       
       await queryCommand.handler(context);
 
@@ -204,7 +220,13 @@ describe('Query Command', () => {
       mockOutputFormatter.printSuccess.mockImplementation(() => {});
       mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
       mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
-      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      
+      // Ensure memory manager query returns proper data structure
+      mockMemoryManager.query.mockResolvedValue([{ 
+        id: 'memory1', 
+        content: 'test result',
+        namespace: 'default'
+      }]);
       
       await queryCommand.handler(context);
 
@@ -225,7 +247,7 @@ describe('Query Command', () => {
       mockOutputFormatter.printSuccess.mockImplementation(() => {});
       mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
       mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
-      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result', namespace: 'default' }]);
       
       await queryCommand.handler(context);
 
@@ -244,7 +266,7 @@ describe('Query Command', () => {
       mockOutputFormatter.printSuccess.mockImplementation(() => {});
       mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
       mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
-      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result', namespace: 'default' }]);
       
       await queryCommand.handler(context);
 
@@ -266,7 +288,7 @@ describe('Query Command', () => {
       mockOutputFormatter.printSuccess.mockImplementation(() => {});
       mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
       mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
-      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result', namespace: 'default' }]);
       
       await queryCommand.handler(context);
 
@@ -285,7 +307,7 @@ describe('Query Command', () => {
       mockOutputFormatter.printSuccess.mockImplementation(() => {});
       mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
       mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
-      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result', namespace: 'default' }]);
       
       await queryCommand.handler(context);
 
@@ -304,7 +326,7 @@ describe('Query Command', () => {
       mockOutputFormatter.printSuccess.mockImplementation(() => {});
       mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
       mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
-      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result', namespace: 'default' }]);
       
       await queryCommand.handler(context);
 
@@ -327,7 +349,7 @@ describe('Query Command', () => {
       mockOutputFormatter.printSuccess.mockImplementation(() => {});
       mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
       mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
-      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result', namespace: 'default' }]);
       
       await queryCommand.handler(context);
 
@@ -346,7 +368,7 @@ describe('Query Command', () => {
       mockOutputFormatter.printSuccess.mockImplementation(() => {});
       mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
       mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
-      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result', namespace: 'default' }]);
       
       await queryCommand.handler(context);
 
@@ -368,7 +390,7 @@ describe('Query Command', () => {
       mockOutputFormatter.printSuccess.mockImplementation(() => {});
       mockSwarmCoordinator.queryAgents.mockResolvedValue([{ id: 'agent1', status: 'active' }]);
       mockSwarmCoordinator.queryTasks.mockResolvedValue([{ id: 'task1', type: 'analysis', status: 'completed' }]);
-      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result' }]);
+      mockMemoryManager.query.mockResolvedValue([{ id: 'memory1', content: 'test result', namespace: 'default' }]);
       
       await queryCommand.handler(context);
 
