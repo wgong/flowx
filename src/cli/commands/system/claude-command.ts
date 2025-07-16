@@ -32,10 +32,28 @@ function isClaudeAvailable(): boolean {
  */
 async function ensureMCPConfig(): Promise<void> {
   const mcpConfigPath = path.join(process.cwd(), 'mcp_config', 'mcp.json');
+  const claudeSettingsPath = path.join(process.cwd(), '.claude', 'settings.json');
   
   try {
     await fs.access(mcpConfigPath);
     printInfo('✅ MCP configuration found');
+    
+    // Also check Claude settings for comprehensive validation
+    try {
+      await fs.access(claudeSettingsPath);
+      const settingsContent = await fs.readFile(claudeSettingsPath, 'utf8');
+      const settings = JSON.parse(settingsContent);
+      const mcpServers = settings.mcpServers || {};
+      const serverCount = Object.keys(mcpServers).length;
+      
+      if (serverCount > 0) {
+        printInfo(`✅ Claude settings has ${serverCount} MCP server(s): ${Object.keys(mcpServers).join(', ')}`);
+      } else {
+        printWarning('⚠️ No MCP servers configured in Claude settings');
+      }
+    } catch {
+      printWarning('⚠️ Claude settings not found, but MCP config exists');
+    }
   } catch {
     printWarning('⚠️ MCP configuration not found, Claude Code may not have FlowX tools available');
     printInfo('Run "flowx init" to create MCP configuration');

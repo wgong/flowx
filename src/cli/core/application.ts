@@ -8,7 +8,7 @@ import { CommandParser } from './command-parser.ts';
 import { printError, printInfo } from './output-formatter.ts';
 import { getCommand, getCommandByNameOrAlias } from './command-registry.ts';
 
-export const VERSION = "1.0.0";
+export const VERSION = "8.0.2";
 
 // Core interfaces
 export interface ValidationRule {

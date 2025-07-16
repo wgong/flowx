@@ -2,11 +2,11 @@
 
 <div align="center">
 
-[![🌟 Star on GitHub](https://img.shields.io/github/stars/sethdford/flowx?style=for-the-badge&logo=github&color=gold)](https://github.com/sethdford/flowx)
-[![📦 Production Ready](https://img.shields.io/npm/v/flowx?style=for-the-badge&logo=npm&color=blue&label=v1.0.0)](https://www.npmjs.com/package/flowx)
-[![⚡ Claude Code](https://img.shields.io/badge/Claude%20Code-Ready-green?style=for-the-badge&logo=anthropic)](https://github.com/sethdford/flowx)
-[![🧠 Neural Memory](https://img.shields.io/badge/Memory-Neural%20Enhanced-purple?style=for-the-badge&logo=brain)](https://github.com/sethdford/flowx)
-[![🏗️ Enterprise](https://img.shields.io/badge/Enterprise-Data%20Pipelines-orange?style=for-the-badge&logo=pipeline)](https://github.com/sethdford/flowx)
+[![🌟 Star on GitHub](https://img.shields.io/github/stars/sethdford/claude-code-flow?style=for-the-badge&logo=github&color=gold)](https://github.com/sethdford/claude-code-flow)
+[![📦 NPM Package](https://img.shields.io/npm/v/claude-code-flow?style=for-the-badge&logo=npm&color=blue&label=v8.0.2)](https://www.npmjs.com/package/claude-code-flow)
+[![⚡ Claude Code](https://img.shields.io/badge/Claude%20Code-Ready-green?style=for-the-badge&logo=anthropic)](https://github.com/sethdford/claude-code-flow)
+[![🧠 Neural Memory](https://img.shields.io/badge/Memory-Neural%20Enhanced-purple?style=for-the-badge&logo=brain)](https://github.com/sethdford/claude-code-flow)
+[![🏗️ Enterprise](https://img.shields.io/badge/Enterprise-Data%20Pipelines-orange?style=for-the-badge&logo=pipeline)](https://github.com/sethdford/claude-code-flow)
 [![🛡️ MIT License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge&logo=opensourceinitiative)](https://opensource.org/licenses/MIT)
 
 </div>
@@ -18,6 +18,13 @@
 **FlowX** is the world's most advanced AI orchestration platform, featuring breakthrough **Neural Memory Systems** and **Enterprise Data Pipeline Creation**. Transform months of development into minutes with natural language commands and intelligent agent coordination.
 
 > 🔥 **Industry First**: Neural-enhanced memory with 34% performance improvement and complete enterprise data pipeline automation in natural language!
+
+### 📦 **NPM Package Information**
+- **Package Name**: `claude-code-flow`
+- **Current Version**: `8.0.2`
+- **Command Aliases**: `flowx`, `claude-flow`, `claude-code-flow`
+- **Node.js Requirement**: `>=18.0.0`
+- **Installation**: `npm install -g claude-code-flow`
 
 ---
 
@@ -104,10 +111,24 @@ flowx sparc discovery "Real-time customer analytics from Salesforce to Snowflake
 
 ## ⚡ **Quick Start**
 
-### 🚀 **Instant Setup with Neural Memory**
+### 🚀 **Installation & Setup**
+
+#### **Global Installation (Recommended)**
 ```bash
+# Install FlowX globally from NPM
+npm install -g claude-code-flow
+
 # Initialize with advanced memory and enterprise features
-npx flowx@latest init --sparc --neural-memory --enterprise
+flowx init --sparc --neural-memory --enterprise
+
+# Start using immediately
+flowx start --ui --port 3000
+```
+
+#### **NPX - No Installation Required**
+```bash
+# Use FlowX without installing globally
+npx claude-code-flow init --sparc --neural-memory --enterprise
 
 # This creates:
 # ✓ Neural-enhanced memory system with SQLite backend
@@ -118,6 +139,13 @@ npx flowx@latest init --sparc --neural-memory --enterprise
 
 # Start using immediately
 ./flowx start --ui --port 3000
+```
+
+#### **Local Project Installation**
+```bash
+# Install in a specific project
+npm install claude-code-flow
+npx claude-code-flow init --sparc --neural-memory --enterprise
 ```
 
 ### 🧠 **Neural Memory Operations**
@@ -443,7 +471,12 @@ MIT License - see [LICENSE](./LICENSE) for details.
 **Transform your development workflow with Neural Memory and Enterprise Automation**
 
 ```bash
-npx flowx@latest init --sparc --neural-memory --enterprise
+# Install globally and initialize
+npm install -g claude-code-flow
+flowx init --sparc --neural-memory --enterprise
+
+# Or use directly with NPX
+npx claude-code-flow init --sparc --neural-memory --enterprise
 ```
 
 **Join the FlowX revolution!**

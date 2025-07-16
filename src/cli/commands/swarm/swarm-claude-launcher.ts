@@ -41,9 +41,16 @@ async function ensureMCPConfig(): Promise<void> {
     const settingsContent = await fs.readFile(claudeSettingsPath, 'utf8');
     const settings = JSON.parse(settingsContent);
     
-    if (settings.mcpServers && (settings.mcpServers['flowx'] || settings.mcpServers['claude-flow'])) {
-      const serverName = settings.mcpServers['flowx'] ? 'flowx' : 'claude-flow';
-      printInfo(`✅ MCP configuration found in Claude settings (${serverName})`);
+    // Check for any FlowX-related MCP servers
+    const mcpServers = settings.mcpServers || {};
+    const flowxServers = Object.keys(mcpServers).filter(name => 
+      name.includes('flowx') || 
+      name.includes('claude-flow') || 
+      name.includes('claude-code-flow')
+    );
+    
+    if (flowxServers.length > 0) {
+      printInfo(`✅ MCP configuration found in Claude settings (${flowxServers.join(', ')})`);
     } else {
       printWarning('⚠️ MCP server not configured in Claude settings');
       printInfo('Check .claude/settings.json for FlowX MCP server configuration');
