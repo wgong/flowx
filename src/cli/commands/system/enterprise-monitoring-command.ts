@@ -5,7 +5,7 @@
 
 import type { CLICommand, CLIContext } from '../../interfaces/index.ts';
 import { createConsoleLogger } from '../../../utils/logger.ts';
-import { EnterpriseMonitoringEngine } from '../../../monitoring/enterprise-monitoring-engine.js';
+import { EnterpriseMonitoringEngine } from '../../../monitoring/enterprise-monitoring-engine.ts';
 
 const logger = createConsoleLogger('EnterpriseMonitoringCommand');
 
@@ -41,16 +41,17 @@ function parseMonitoringOptions(context: CLIContext): MonitoringOptions {
  */
 async function launchMonitoringDashboard(options: MonitoringOptions): Promise<void> {
   logger.info('📊 Launching Enterprise Monitoring Dashboard...');
-  
   try {
-    const engine = new EnterpriseMonitoringEngine({
+    // Create enterprise monitoring configuration
+    const monitoringConfig = {
       enableRealtime: options.realtime!,
       enableSLA: options.sla!,
       enableAlerts: options.alerts!,
       updateInterval: options.interval!,
       verbose: options.verbose!
-    });
+    };
 
+    const engine = new EnterpriseMonitoringEngine(monitoringConfig);
     await engine.initialize();
 
     console.log('\n📊 Claude Flow Enterprise Monitoring Dashboard');

@@ -117,6 +117,9 @@ pids/
 claude-flow.db*
 .claude-flow/
 
+# Submodules (original reference implementation)
+original-claude-flow/
+
 # Configuration files (keep examples)
 claude-flow.config.json
 config-*.json

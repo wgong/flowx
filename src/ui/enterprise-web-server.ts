@@ -120,11 +120,11 @@ export class EnterpriseWebServer {
       const app = express.default();
 
       // Configure middleware
-      this.setupMiddleware(app);
+      await this.setupMiddleware(app);
       
       // Setup routes
       this.setupAPIRoutes(app);
-      this.setupStaticRoutes(app);
+      await this.setupStaticRoutes(app);
       
       // Create HTTP server
       this.server = createServer(app);
@@ -191,7 +191,10 @@ export class EnterpriseWebServer {
   /**
    * Setup Express middleware
    */
-  private setupMiddleware(app: any): void {
+  private async setupMiddleware(app: any): Promise<void> {
+    // Import express for middleware
+    const express = await import('express');
+    
     // CORS
     app.use((req: any, res: any, next: any) => {
       res.header('Access-Control-Allow-Origin', '*');
@@ -201,8 +204,8 @@ export class EnterpriseWebServer {
     });
 
     // JSON parsing
-    app.use(express.json({ limit: '50mb' }));
-    app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+    app.use(express.default.json({ limit: '50mb' }));
+    app.use(express.default.urlencoded({ extended: true, limit: '50mb' }));
   }
 
   /**
@@ -339,7 +342,10 @@ export class EnterpriseWebServer {
   /**
    * Setup static file routes
    */
-  private setupStaticRoutes(app: any): void {
+  private async setupStaticRoutes(app: any): Promise<void> {
+    // Import express for static serving
+    const express = await import('express');
+    
     // Serve enterprise UI assets
     const uiPath = join(process.cwd(), 'src', 'ui', 'enterprise');
     
@@ -369,7 +375,7 @@ export class EnterpriseWebServer {
     });
 
     // Static assets
-    app.use('/assets', express.static(join(process.cwd(), 'src', 'ui', 'assets')));
+    app.use('/assets', express.default.static(join(process.cwd(), 'src', 'ui', 'assets')));
   }
 
   /**
@@ -395,7 +401,7 @@ export class EnterpriseWebServer {
 
       // Handle messages
       ws.on('message', (data) => {
-        this.handleWebSocketMessage(ws, data);
+        this.handleWebSocketMessage(ws, Buffer.from(data.toString()));
       });
 
       // Handle close
