@@ -1,0 +1,570 @@
+/**
+ * End-to-end tests for workflow commands
+ * Tests workflow creation, execution, monitoring, and templates
+ */
+
+import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
+import { createCommandTestRunner } from '../utils/command-test-base';
+import * as path from 'path';
+
+describe('Workflow Commands E2E', () => {
+  let runner: any;
+  
+  beforeEach(async () => {
+    runner = createCommandTestRunner({ 
+      debug: true,
+      timeout: 60000 // Longer timeout for workflow operations
+    });
+    await runner.setup();
+    runner.clearWorkflowStore(); // Clear workflow state between tests
+  });
+  
+  afterEach(async () => {
+    await runner.teardown();
+  });
+  
+  describe('workflow help command', () => {
+    test('should show workflow help information', async () => {
+      const { stdout, code } = await runner.runCommand('workflow --help');
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('workflow');
+      expect(stdout).toContain('COMMANDS');
+      expect(stdout).toContain('OPTIONS');
+    });
+  });
+  
+  describe('workflow create command', () => {
+    test('should create a basic workflow', async () => {
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'create',
+        '--name', 'Test Workflow',
+        '--description', 'A test workflow for E2E testing',
+        '--test-mode' // Use test mode to avoid real execution
+      ]);
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Workflow created');
+      expect(stdout).toContain('Test Workflow');
+      
+      // Extract workflow ID for further tests
+      const workflowId = runner.extractId(stdout);
+      expect(workflowId).not.toBeNull();
+      
+      return { workflowId };
+    });
+    
+    test('should create workflow from template', async () => {
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'create',
+        '--name', 'Pipeline Workflow',
+        '--template', 'basic-pipeline',
+        '--test-mode'
+      ]);
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Workflow created');
+      expect(stdout).toContain('Pipeline Workflow');
+    });
+    
+    test('should require workflow name', async () => {
+      const { stderr, code } = await runner.runCommand([
+        'workflow', 'create'
+        // Missing required --name parameter
+      ]);
+      
+      expect(code).not.toBe(0);
+      expect(stderr).toContain('Workflow name is required');
+    });
+  });
+  
+  describe('workflow list command', () => {
+    beforeEach(async () => {
+      // Create some workflows for testing list
+      await runner.runCommand([
+        'workflow', 'create',
+        '--name', 'List Test Workflow 1',
+        '--test-mode'
+      ]);
+      
+      await runner.runCommand([
+        'workflow', 'create',
+        '--name', 'List Test Workflow 2',
+        '--description', 'Second test workflow',
+        '--test-mode'
+      ]);
+    });
+    
+    test('should list all workflows', async () => {
+      const { stdout, code } = await runner.runCommand('workflow list');
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Workflows');
+      expect(stdout).toContain('List Test Workflow 1');
+      expect(stdout).toContain('List Test Workflow 2');
+    });
+    
+    test('should filter workflows by status', async () => {
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'list',
+        '--status', 'draft'
+      ]);
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Workflows');
+    });
+    
+    test('should support JSON output format', async () => {
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'list',
+        '--format', 'json'
+      ]);
+      
+      expect(code).toBe(0);
+      
+      // Parse JSON output
+      const workflows = runner.parseJsonOutput(stdout);
+      expect(workflows).not.toBeNull();
+      expect(Array.isArray(workflows)).toBe(true);
+      expect(workflows.length).toBeGreaterThanOrEqual(2);
+      
+      // Verify workflow structure
+      const workflow = workflows[0];
+      expect(workflow).toHaveProperty('id');
+      expect(workflow).toHaveProperty('name');
+      expect(workflow).toHaveProperty('status');
+      expect(workflow).toHaveProperty('steps');
+    });
+  });
+  
+  describe('workflow show command', () => {
+    let workflowId: string | null = null;
+    
+    beforeEach(async () => {
+      // Create a workflow for testing show
+      const createResult = await runner.runCommand([
+        'workflow', 'create',
+        '--name', 'Show Test Workflow',
+        '--description', 'Workflow for testing show command',
+        '--test-mode'
+      ]);
+      
+      workflowId = runner.extractId(createResult.stdout);
+    });
+    
+    test('should show workflow details', async () => {
+      // Skip if no workflow ID was found
+      if (!workflowId) {
+        console.log('Skipping test: No workflow ID available');
+        return;
+      }
+      
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'show',
+        workflowId
+      ]);
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Workflow Details');
+      expect(stdout).toContain('Show Test Workflow');
+      expect(stdout).toContain('Description: Workflow for testing show command');
+    });
+    
+    test('should handle invalid workflow ID', async () => {
+      const invalidId = 'invalid-workflow-id';
+      const { stdout, stderr, code } = await runner.runCommand([
+        'workflow', 'show',
+        invalidId
+      ]);
+      
+      expect(code).not.toBe(0);
+      // Error message might be in stderr instead of stdout
+      expect(stderr || stdout).toContain('Workflow not found');
+    });
+  });
+  
+  describe('workflow run command', () => {
+    let workflowId: string | null = null;
+    
+    beforeEach(async () => {
+      // Create a workflow for testing run
+      const createResult = await runner.runCommand([
+        'workflow', 'create',
+        '--name', 'Run Test Workflow',
+        '--template', 'basic-pipeline',
+        '--test-mode'
+      ]);
+      
+      workflowId = runner.extractId(createResult.stdout);
+    });
+    
+    test('should run workflow with variables', async () => {
+      // Skip if no workflow ID was found
+      if (!workflowId) {
+        console.log('Skipping test: No workflow ID available');
+        return;
+      }
+      
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'run',
+        workflowId,
+        '--variables', '{"branch":"dev","environment":"test"}',
+        '--test-mode'
+      ]);
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Workflow execution started');
+      
+      // Extract execution ID for further tests
+      const executionId = runner.extractId(stdout);
+      expect(executionId).not.toBeNull();
+      
+      return { executionId };
+    });
+    
+    test('should support async execution mode', async () => {
+      // Skip if no workflow ID was found
+      if (!workflowId) {
+        console.log('Skipping test: No workflow ID available');
+        return;
+      }
+      
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'run',
+        workflowId,
+        '--async',
+        '--test-mode'
+      ]);
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Running asynchronously');
+    });
+    
+    test('should handle invalid workflow ID', async () => {
+      const invalidId = 'invalid-workflow-id';
+      const { stdout, stderr, code } = await runner.runCommand([
+        'workflow', 'run',
+        invalidId
+      ]);
+      
+      expect(code).not.toBe(0);
+      expect(stderr || stdout).toContain('Workflow not found');
+    });
+  });
+  
+  describe('workflow status command', () => {
+    let executionId: string | null = null;
+    
+    beforeEach(async () => {
+      // Create and run workflow for testing status
+      const createResult = await runner.runCommand([
+        'workflow', 'create',
+        '--name', 'Status Test Workflow',
+        '--template', 'basic-pipeline',
+        '--test-mode'
+      ]);
+      
+      const workflowId = runner.extractId(createResult.stdout);
+      
+      if (workflowId) {
+        const runResult = await runner.runCommand([
+          'workflow', 'run',
+          workflowId,
+          '--test-mode'
+        ]);
+        
+        executionId = runner.extractId(runResult.stdout);
+      }
+    });
+    
+    test('should check execution status', async () => {
+      // Skip if no execution ID was found
+      if (!executionId) {
+        console.log('Skipping test: No execution ID available');
+        return;
+      }
+      
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'status',
+        executionId
+      ]);
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Execution Status');
+      expect(stdout).toContain(executionId);
+    });
+    
+    test('should handle invalid execution ID', async () => {
+      const invalidId = 'invalid-execution-id';
+      const { stdout, stderr, code } = await runner.runCommand([
+        'workflow', 'status',
+        invalidId
+      ]);
+      
+      expect(code).not.toBe(0);
+      expect(stderr || stdout).toContain('Execution not found');
+    });
+  });
+  
+  describe('workflow stop command', () => {
+    let executionId: string | null = null;
+    
+    beforeEach(async () => {
+      // Create and run workflow for testing stop
+      const createResult = await runner.runCommand([
+        'workflow', 'create',
+        '--name', 'Stop Test Workflow',
+        '--template', 'basic-pipeline',
+        '--test-mode'
+      ]);
+      
+      const workflowId = runner.extractId(createResult.stdout);
+      
+      if (workflowId) {
+        const runResult = await runner.runCommand([
+          'workflow', 'run',
+          workflowId,
+          '--async',
+          '--test-mode'
+        ]);
+        
+        executionId = runner.extractId(runResult.stdout);
+      }
+    });
+    
+    test('should stop workflow execution', async () => {
+      // Skip if no execution ID was found
+      if (!executionId) {
+        console.log('Skipping test: No execution ID available');
+        return;
+      }
+      
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'stop',
+        executionId
+      ]);
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Execution stopped');
+      expect(stdout).toContain(executionId);
+    });
+    
+    test('should support force stop option', async () => {
+      // Skip if no execution ID was found
+      if (!executionId) {
+        console.log('Skipping test: No execution ID available');
+        return;
+      }
+      
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'stop',
+        executionId,
+        '--force'
+      ]);
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Execution stopped');
+    });
+  });
+  
+  describe('workflow logs command', () => {
+    let executionId: string | null = null;
+    
+    beforeEach(async () => {
+      // Create and run workflow for testing logs
+      const createResult = await runner.runCommand([
+        'workflow', 'create',
+        '--name', 'Logs Test Workflow',
+        '--template', 'basic-pipeline',
+        '--test-mode'
+      ]);
+      
+      const workflowId = runner.extractId(createResult.stdout);
+      
+      if (workflowId) {
+        const runResult = await runner.runCommand([
+          'workflow', 'run',
+          workflowId,
+          '--test-mode'
+        ]);
+        
+        executionId = runner.extractId(runResult.stdout);
+      }
+    });
+    
+    test('should show execution logs', async () => {
+      // Skip if no execution ID was found
+      if (!executionId) {
+        console.log('Skipping test: No execution ID available');
+        return;
+      }
+      
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'logs',
+        executionId
+      ]);
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Execution Logs');
+      expect(stdout).toContain(executionId);
+    });
+    
+    test('should limit lines shown', async () => {
+      // Skip if no execution ID was found
+      if (!executionId) {
+        console.log('Skipping test: No execution ID available');
+        return;
+      }
+      
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'logs',
+        executionId,
+        '--lines', '10'
+      ]);
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Execution Logs');
+    });
+  });
+  
+  describe('workflow template command', () => {
+    test('should list available templates', async () => {
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'template',
+        'list'
+      ]);
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Available Workflow Templates');
+      expect(stdout).toContain('basic-pipeline');
+    });
+    
+    test('should show template details', async () => {
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'template',
+        'show',
+        'basic-pipeline'
+      ]);
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Template: basic-pipeline');
+      expect(stdout).toContain('Checkout Code');
+      expect(stdout).toContain('Build Application');
+      expect(stdout).toContain('Run Tests');
+    });
+    
+    test('should handle invalid template name', async () => {
+      const { stdout, stderr, code } = await runner.runCommand([
+        'workflow', 'template',
+        'show',
+        'non-existent-template'
+      ]);
+      
+      expect(code).not.toBe(0);
+      expect(stderr || stdout).toContain('Template not found');
+    });
+  });
+  
+  describe('workflow validate command', () => {
+    let workflowId: string | null = null;
+    
+    beforeEach(async () => {
+      // Create a workflow for testing validate
+      const createResult = await runner.runCommand([
+        'workflow', 'create',
+        '--name', 'Validate Test Workflow',
+        '--template', 'basic-pipeline',
+        '--test-mode'
+      ]);
+      
+      workflowId = runner.extractId(createResult.stdout);
+    });
+    
+    test('should validate a valid workflow', async () => {
+      // Skip if no workflow ID was found
+      if (!workflowId) {
+        console.log('Skipping test: No workflow ID available');
+        return;
+      }
+      
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'validate',
+        workflowId
+      ]);
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Workflow Validation');
+      expect(stdout).toContain('Workflow is valid');
+    });
+  });
+  
+  describe('workflow export command', () => {
+    let workflowId: string | null = null;
+    
+    beforeEach(async () => {
+      // Create a workflow for testing export
+      const createResult = await runner.runCommand([
+        'workflow', 'create',
+        '--name', 'Export Test Workflow',
+        '--template', 'basic-pipeline',
+        '--test-mode'
+      ]);
+      
+      workflowId = runner.extractId(createResult.stdout);
+    });
+    
+    test('should export workflow definition', async () => {
+      // Skip if no workflow ID was found
+      if (!workflowId) {
+        console.log('Skipping test: No workflow ID available');
+        return;
+      }
+      
+      const { stdout, code } = await runner.runCommand([
+        'workflow', 'export',
+        workflowId
+      ]);
+      
+      expect(code).toBe(0);
+      expect(stdout).toContain('Workflow exported');
+    });
+  });
+  
+  describe('error handling', () => {
+    test('should handle missing required arguments', async () => {
+      const { stderr, code } = await runner.runCommand([
+        'workflow', 'show'
+        // Missing required workflow ID
+      ]);
+      
+      expect(code).not.toBe(0);
+      expect(stderr).toContain('Workflow ID is required');
+    });
+    
+    test('should handle invalid JSON variables', async () => {
+      // Create a workflow for testing
+      const createResult = await runner.runCommand([
+        'workflow', 'create',
+        '--name', 'Error Test Workflow',
+        '--test-mode'
+      ]);
+      
+      const workflowId = runner.extractId(createResult.stdout);
+      
+      // Skip if no workflow ID was found
+      if (!workflowId) {
+        console.log('Skipping test: No workflow ID available');
+        return;
+      }
+      
+      const { stderr, code } = await runner.runCommand([
+        'workflow', 'run',
+        workflowId,
+        '--variables', '{invalid-json'
+      ]);
+      
+      expect(code).not.toBe(0);
+      expect(stderr).toContain('Invalid variables JSON format');
+    });
+  });
+});

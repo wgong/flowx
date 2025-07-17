@@ -86,7 +86,7 @@ describe('ToolRegistry', () => {
       expect(retrievedTool?.description).toBe('A test tool');
     });
 
-    it('should prevent duplicate tool registration', () => {
+    it('should handle duplicate tool registration gracefully', () => {
       const tool: MCPTool = {
         name: 'test/duplicate',
         description: 'A duplicate tool',
@@ -99,7 +99,11 @@ describe('ToolRegistry', () => {
 
       registry.register(tool);
       
-      expect(() => registry.register(tool)).toThrow();
+      // Should not throw, just log warning and skip
+      expect(() => registry.register(tool)).not.toThrow();
+      
+      // Should still have the tool registered
+      expect(registry.getTool('test/duplicate')).toBeDefined();
     });
 
     it('should validate tool name format', () => {

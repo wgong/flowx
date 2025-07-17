@@ -9,6 +9,7 @@ import { ClaudeConnectionPool } from "./connection-pool.ts";
 import { AsyncFileManager } from "./async-file-manager.ts";
 import { TTLMap } from "./ttl-map.ts";
 import { CircularBuffer } from "./circular-buffer.ts";
+import { AgentCapabilityIndex } from "./agent-capability-index.ts";
 import PQueue from 'p-queue';
 import { 
   TaskDefinition, 
@@ -38,6 +39,21 @@ export interface ExecutorConfig {
     metricsInterval?: number;
     slowTaskThreshold?: number;
   };
+  parallelExecution?: {
+    enabled?: boolean;
+    maxParallelTasks?: number;
+    adaptiveThrottling?: boolean;
+  };
+  retryLogic?: {
+    maxRetries?: number;
+    exponentialBackoff?: boolean;
+    baseDelay?: number;
+  };
+  workloadBalancing?: {
+    enabled?: boolean;
+    agentLoadThreshold?: number;
+    predictiveScaling?: boolean;
+  };
 }
 
 export interface ExecutionMetrics {
@@ -48,36 +64,85 @@ export interface ExecutionMetrics {
   cacheHitRate: number;
   queueLength: number;
   activeExecutions: number;
+  parallelEfficiency: number;
+  retryRate: number;
+  predictedExecutionTime: number;
+  workloadDistribution: Record<string, number>;
+}
+
+export interface TaskBatch {
+  id: string;
+  tasks: TaskDefinition[];
+  priority: TaskPriority;
+  estimatedDuration: number;
+  parallelizable: boolean;
+}
+
+export interface ExecutionPrediction {
+  estimatedDuration: number;
+  confidence: number;
+  recommendedAgent: AgentId | null;
+  optimalConcurrency: number;
 }
 
 export class OptimizedExecutor extends EventEmitter {
   private logger: Logger;
   private connectionPool: ClaudeConnectionPool;
   private fileManager: AsyncFileManager;
+  private capabilityIndex: AgentCapabilityIndex;
   private executionQueue: PQueue;
+  private parallelExecutionQueue: PQueue;
   private resultCache: TTLMap<string, TaskResult>;
   private executionHistory: CircularBuffer<{
     taskId: string;
     duration: number;
-    status: 'success' | 'failed';
+    status: 'success' | 'failed' | 'retry';
     timestamp: Date;
+    agentId: string;
+    retryCount: number;
   }>;
+  private workloadTracker: Map<string, number>; // AgentId -> current load
+  private taskPredictionCache: TTLMap<string, ExecutionPrediction>;
   
   private metrics = {
     totalExecuted: 0,
     totalSucceeded: 0,
     totalFailed: 0,
+    totalRetries: 0,
     totalExecutionTime: 0,
+    parallelTasksExecuted: 0,
     cacheHits: 0,
-    cacheMisses: 0
+    cacheMisses: 0,
+    workloadBalancingActions: 0
   };
   
   private activeExecutions = new Set<string>();
+  private agentWorkloads = new Map<string, Set<string>>(); // AgentId -> Set of TaskIds
   private config: ExecutorConfig;
   
   constructor(config: ExecutorConfig = {}) {
     super();
-    this.config = config;
+    this.config = {
+      ...config,
+      parallelExecution: {
+        enabled: true,
+        maxParallelTasks: 5,
+        adaptiveThrottling: true,
+        ...config.parallelExecution
+      },
+      retryLogic: {
+        maxRetries: 3,
+        exponentialBackoff: true,
+        baseDelay: 1000,
+        ...config.retryLogic
+      },
+      workloadBalancing: {
+        enabled: true,
+        agentLoadThreshold: 3,
+        predictiveScaling: true,
+        ...config.workloadBalancing
+      }
+    };
     
     this.logger = new Logger(
       { level: 'info', format: 'json', destination: 'console' },
@@ -95,9 +160,20 @@ export class OptimizedExecutor extends EventEmitter {
       read: config.fileOperations?.concurrency || 20
     });
     
-    // Initialize execution queue
+    // Initialize capability index
+    this.capabilityIndex = new AgentCapabilityIndex({
+      performanceHistorySize: 100,
+      capabilityCacheTimeout: 300000, // 5 minutes
+      minConfidenceThreshold: 0.7
+    });
+    
+    // Initialize execution queues
     this.executionQueue = new PQueue({ 
       concurrency: config.concurrency || 10 
+    });
+    
+    this.parallelExecutionQueue = new PQueue({
+      concurrency: this.config.parallelExecution?.maxParallelTasks || 5
     });
     
     // Initialize result cache
@@ -109,14 +185,30 @@ export class OptimizedExecutor extends EventEmitter {
       }
     });
     
+    // Initialize prediction cache
+    this.taskPredictionCache = new TTLMap({
+      defaultTTL: 300000, // 5 minutes
+      maxSize: 500
+    });
+    
     // Initialize execution history
     this.executionHistory = new CircularBuffer(1000);
+    
+    // Initialize workload tracking
+    this.workloadTracker = new Map();
     
     // Start monitoring if configured
     if (config.monitoring?.metricsInterval) {
       setInterval(() => {
         this.emitMetrics();
       }, config.monitoring.metricsInterval);
+    }
+    
+    // Start adaptive throttling if enabled
+    if (this.config.parallelExecution?.adaptiveThrottling) {
+      setInterval(() => {
+        this.adjustParallelConcurrency();
+      }, 30000); // Every 30 seconds
     }
   }
   
@@ -210,7 +302,9 @@ export class OptimizedExecutor extends EventEmitter {
           taskId: task.id.id,
           duration: taskResult.executionTime,
           status: 'success',
-          timestamp: new Date()
+          timestamp: new Date(),
+          agentId: agentId.id,
+          retryCount: 0
         });
         
         // Check if slow task
@@ -266,7 +360,9 @@ export class OptimizedExecutor extends EventEmitter {
           taskId: task.id.id,
           duration: errorResult.executionTime,
           status: 'failed',
-          timestamp: new Date()
+          timestamp: new Date(),
+          agentId: agentId.id,
+          retryCount: 0
         });
         
         this.emit('task:failed', errorResult);
@@ -309,6 +405,173 @@ export class OptimizedExecutor extends EventEmitter {
     return Promise.all(
       tasks.map(task => this.executeTask(task, agentId))
     );
+  }
+
+  /**
+   * Execute multiple tasks in parallel with advanced optimization
+   */
+  async executeTaskBatch(batch: TaskBatch, agents: AgentId[]): Promise<TaskResult[]> {
+    if (!this.config.parallelExecution?.enabled) {
+      // Fallback to sequential execution
+      const results: TaskResult[] = [];
+      for (let i = 0; i < batch.tasks.length; i++) {
+        const task = batch.tasks[i];
+        const agent = agents[i % agents.length];
+        const result = await this.executeTask(task, agent);
+        results.push(result);
+      }
+      return results;
+    }
+
+    this.logger.info('Executing task batch in parallel', {
+      batchId: batch.id,
+      taskCount: batch.tasks.length,
+      agentCount: agents.length,
+      estimatedDuration: batch.estimatedDuration
+    });
+
+    // Track parallel execution metrics
+    this.metrics.parallelTasksExecuted += batch.tasks.length;
+
+    // Execute all tasks in parallel using the parallel queue
+    const promises = batch.tasks.map((task, index) => {
+      const agent = this.selectOptimalAgent(task, agents);
+      return this.parallelExecutionQueue.add(async (): Promise<TaskResult> => {
+        const startTime = Date.now();
+        try {
+          const result = await this.executeTaskWithRetry(task, agent);
+          const executionTime = Date.now() - startTime;
+          
+          // Update agent workload tracking
+          this.updateAgentWorkload(agent, task.id.id, 'remove');
+          
+          this.logger.debug('Parallel task completed', {
+            taskId: task.id.id,
+            agentId: agent.id,
+            executionTime,
+            batchId: batch.id
+          });
+          
+          return result;
+        } catch (error) {
+          this.updateAgentWorkload(agent, task.id.id, 'remove');
+          throw error;
+        }
+      });
+    });
+
+    const promiseResults = await Promise.all(promises);
+    const results = promiseResults.filter((result): result is TaskResult => result !== undefined);
+    
+    this.logger.info('Task batch execution completed', {
+      batchId: batch.id,
+      successCount: results.filter(r => r && r.metadata && r.metadata.success).length,
+      failureCount: results.filter(r => r && r.metadata && !r.metadata.success).length,
+      totalDuration: Math.max(...results.map(r => r ? r.executionTime : 0))
+    });
+
+    return results;
+  }
+
+  /**
+   * Execute task with intelligent retry logic
+   */
+  private async executeTaskWithRetry(task: TaskDefinition, agentId: AgentId, retryCount = 0): Promise<TaskResult> {
+    try {
+      const result = await this.executeTask(task, agentId);
+      
+      if (!result.metadata.success && this.shouldRetry(result, retryCount)) {
+        return this.retryTask(task, agentId, retryCount + 1);
+      }
+      
+      return result;
+    } catch (error) {
+      if (this.isRetryableError(error) && retryCount < (this.config.retryLogic?.maxRetries || 3)) {
+        return this.retryTask(task, agentId, retryCount + 1);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Retry task with exponential backoff
+   */
+  private async retryTask(task: TaskDefinition, agentId: AgentId, retryCount: number): Promise<TaskResult> {
+    this.metrics.totalRetries++;
+    
+    const delay = this.config.retryLogic?.exponentialBackoff 
+      ? (this.config.retryLogic?.baseDelay || 1000) * Math.pow(2, retryCount - 1)
+      : (this.config.retryLogic?.baseDelay || 1000);
+
+    this.logger.info('Retrying task', {
+      taskId: task.id.id,
+      agentId: agentId.id,
+      retryCount,
+      delay
+    });
+
+    // Record retry in history
+    this.executionHistory.push({
+      taskId: task.id.id,
+      duration: 0,
+      status: 'retry',
+      timestamp: new Date(),
+      agentId: agentId.id,
+      retryCount
+    });
+
+    await new Promise(resolve => setTimeout(resolve, delay));
+    return this.executeTaskWithRetry(task, agentId, retryCount);
+  }
+
+  /**
+   * Predict task execution time and recommend optimal agent
+   */
+  async predictTaskExecution(task: TaskDefinition, availableAgents: AgentId[]): Promise<ExecutionPrediction> {
+    const cacheKey = this.getTaskCacheKey(task);
+    const cached = this.taskPredictionCache.get(cacheKey);
+    
+    if (cached) {
+      return cached;
+    }
+
+    // Find similar tasks in execution history
+    const similarTasks = this.executionHistory.getAll()
+      .filter((h: any) => h.status === 'success')
+      .slice(-50); // Last 50 successful tasks
+
+    let estimatedDuration = 30000; // Default 30 seconds
+    let confidence = 0.5;
+
+    if (similarTasks.length > 0) {
+      const avgDuration = similarTasks.reduce((sum: number, t: any) => sum + t.duration, 0) / similarTasks.length;
+      estimatedDuration = avgDuration;
+      confidence = Math.min(0.9, similarTasks.length / 20); // Higher confidence with more data
+    }
+
+    // Find optimal agent using capability index
+    const optimalMatches = await this.capabilityIndex.findBestAgents(
+      task.type,
+      task.priority,
+      this.estimateTaskComplexity(task)
+    );
+
+    const recommendedAgent = optimalMatches.length > 0 ? optimalMatches[0].agentId : availableAgents[0];
+    
+    // Calculate optimal concurrency based on task type and complexity
+    const optimalConcurrency = this.calculateOptimalConcurrency(task, availableAgents.length);
+
+    const prediction: ExecutionPrediction = {
+      estimatedDuration,
+      confidence,
+      recommendedAgent,
+      optimalConcurrency
+    };
+
+    // Cache the prediction
+    this.taskPredictionCache.set(cacheKey, prediction);
+
+    return prediction;
   }
   
   private buildMessages(task: TaskDefinition): any[] {
@@ -388,26 +651,218 @@ export class OptimizedExecutor extends EventEmitter {
     
     return false;
   }
-  
+
+  /**
+   * Select optimal agent based on workload and capabilities
+   */
+  private selectOptimalAgent(task: TaskDefinition, availableAgents: AgentId[]): AgentId {
+    if (!this.config.workloadBalancing?.enabled) {
+      return availableAgents[0];
+    }
+
+    // Check current workloads
+    const agentLoads = availableAgents.map(agent => ({
+      agent,
+      load: this.agentWorkloads.get(agent.id)?.size || 0
+    }));
+
+    // Sort by load (ascending)
+    agentLoads.sort((a, b) => a.load - b.load);
+
+    // Select agent with lowest load that's under threshold
+    const threshold = this.config.workloadBalancing?.agentLoadThreshold || 3;
+    const selectedAgent = agentLoads.find(al => al.load < threshold)?.agent || agentLoads[0].agent;
+
+    // Update workload tracking
+    this.updateAgentWorkload(selectedAgent, task.id.id, 'add');
+    this.metrics.workloadBalancingActions++;
+
+    this.logger.debug('Selected optimal agent', {
+      taskId: task.id.id,
+      selectedAgentId: selectedAgent.id,
+      agentLoad: this.agentWorkloads.get(selectedAgent.id)?.size || 0,
+      availableAgents: agentLoads.map(al => ({ id: al.agent.id, load: al.load }))
+    });
+
+    return selectedAgent;
+  }
+
+  /**
+   * Update agent workload tracking
+   */
+  private updateAgentWorkload(agentId: AgentId, taskId: string, action: 'add' | 'remove'): void {
+    const agentIdStr = agentId.id;
+    
+    if (!this.agentWorkloads.has(agentIdStr)) {
+      this.agentWorkloads.set(agentIdStr, new Set());
+    }
+
+    const workload = this.agentWorkloads.get(agentIdStr)!;
+    
+    if (action === 'add') {
+      workload.add(taskId);
+    } else {
+      workload.delete(taskId);
+    }
+
+    // Update workload tracker
+    this.workloadTracker.set(agentIdStr, workload.size);
+  }
+
+  /**
+   * Estimate task complexity based on task definition
+   */
+  private estimateTaskComplexity(task: TaskDefinition): 'low' | 'medium' | 'high' {
+    const promptLength = (task.description + task.instructions).length;
+    const hasContext = Object.keys(task.context || {}).length > 0;
+    const hasConstraints = Object.keys(task.constraints || {}).length > 0;
+
+    if (promptLength > 2000 || (hasContext && hasConstraints)) {
+      return 'high';
+    } else if (promptLength > 500 || hasContext || hasConstraints) {
+      return 'medium';
+    } else {
+      return 'low';
+    }
+  }
+
+  /**
+   * Calculate optimal concurrency for task execution
+   */
+  private calculateOptimalConcurrency(task: TaskDefinition, availableAgents: number): number {
+    const complexity = this.estimateTaskComplexity(task);
+    const maxParallel = this.config.parallelExecution?.maxParallelTasks || 5;
+    
+    switch (complexity) {
+      case 'high':
+        return Math.min(2, availableAgents, maxParallel);
+      case 'medium':
+        return Math.min(3, availableAgents, maxParallel);
+      case 'low':
+        return Math.min(5, availableAgents, maxParallel);
+      default:
+        return 1;
+    }
+  }
+
+  /**
+   * Check if task should be retried
+   */
+  private shouldRetry(result: TaskResult, retryCount: number): boolean {
+    const maxRetries = this.config.retryLogic?.maxRetries || 3;
+    
+    if (retryCount >= maxRetries) {
+      return false;
+    }
+
+    const error = result.metadata.error;
+    if (!error) {
+      return false;
+    }
+
+    return error.retryable || this.isRetryableError(new Error(error.message));
+  }
+
+  /**
+   * Enhanced metrics with performance analytics
+   */
   getMetrics(): ExecutionMetrics {
-    const history = this.executionHistory.getAll();
-    const avgExecutionTime = this.metrics.totalExecuted > 0
-      ? this.metrics.totalExecutionTime / this.metrics.totalExecuted
+    const totalTasks = this.metrics.totalExecuted || 1; // Avoid division by zero
+    const cacheHitRate = this.metrics.cacheHits / (this.metrics.cacheHits + this.metrics.cacheMisses) || 0;
+    
+    // Calculate parallel efficiency
+    const parallelEfficiency = this.metrics.parallelTasksExecuted > 0 
+      ? (this.metrics.totalSucceeded / this.metrics.parallelTasksExecuted) 
       : 0;
     
-    const cacheTotal = this.metrics.cacheHits + this.metrics.cacheMisses;
-    const cacheHitRate = cacheTotal > 0
-      ? this.metrics.cacheHits / cacheTotal
+    // Calculate retry rate
+    const retryRate = this.metrics.totalRetries / totalTasks;
+    
+    // Calculate predicted execution time based on recent history
+    const recentTasks = this.executionHistory.getAll().slice(-10);
+    const predictedExecutionTime = recentTasks.length > 0
+      ? recentTasks.reduce((sum: number, t: any) => sum + t.duration, 0) / recentTasks.length
       : 0;
     
+    // Generate workload distribution
+    const workloadDistribution: Record<string, number> = {};
+    this.workloadTracker.forEach((load, agentId) => {
+      workloadDistribution[agentId] = load;
+    });
+
     return {
       totalExecuted: this.metrics.totalExecuted,
       totalSucceeded: this.metrics.totalSucceeded,
       totalFailed: this.metrics.totalFailed,
-      avgExecutionTime,
+      avgExecutionTime: this.metrics.totalExecutionTime / totalTasks,
       cacheHitRate,
       queueLength: this.executionQueue.size,
-      activeExecutions: this.activeExecutions.size
+      activeExecutions: this.activeExecutions.size,
+      parallelEfficiency,
+      retryRate,
+      predictedExecutionTime,
+      workloadDistribution
+    };
+  }
+
+  /**
+   * Get comprehensive performance report
+   */
+  getPerformanceReport(): {
+    metrics: ExecutionMetrics;
+    optimization: {
+      cacheEffectiveness: number;
+      parallelizationGains: number;
+      workloadBalance: number;
+      retryImpact: number;
+    };
+    recommendations: string[];
+  } {
+    const metrics = this.getMetrics();
+    const recommendations: string[] = [];
+    
+    // Calculate optimization metrics
+    const cacheEffectiveness = metrics.cacheHitRate;
+    const parallelizationGains = metrics.parallelEfficiency;
+    
+    // Calculate workload balance (lower variance = better balance)
+    const loads = Object.values(metrics.workloadDistribution);
+    const avgLoad = loads.reduce((sum, load) => sum + load, 0) / loads.length;
+    const variance = loads.reduce((sum, load) => sum + Math.pow(load - avgLoad, 2), 0) / loads.length;
+    const workloadBalance = Math.max(0, 1 - (variance / (avgLoad || 1)));
+    
+    const retryImpact = 1 - metrics.retryRate; // Lower retry rate = less impact
+    
+    // Generate recommendations
+    if (cacheEffectiveness < 0.3) {
+      recommendations.push("Consider increasing cache TTL or improving task similarity detection");
+    }
+    
+    if (parallelizationGains < 0.7) {
+      recommendations.push("Optimize parallel task distribution or increase concurrency limits");
+    }
+    
+    if (workloadBalance < 0.8) {
+      recommendations.push("Improve workload balancing by adjusting agent load thresholds");
+    }
+    
+    if (metrics.retryRate > 0.1) {
+      recommendations.push("Investigate frequent task failures and improve error handling");
+    }
+    
+    if (metrics.avgExecutionTime > 60000) {
+      recommendations.push("Consider breaking down complex tasks or optimizing agent capabilities");
+    }
+
+    return {
+      metrics,
+      optimization: {
+        cacheEffectiveness,
+        parallelizationGains,
+        workloadBalance,
+        retryImpact
+      },
+      recommendations
     };
   }
   
@@ -468,5 +923,33 @@ export class OptimizedExecutor extends EventEmitter {
    */
   getCacheStats() {
     return this.resultCache.getStats();
+  }
+
+  private async adjustParallelConcurrency() {
+    if (!this.config.parallelExecution?.adaptiveThrottling) {
+      return;
+    }
+
+    const currentParallelTasks = this.parallelExecutionQueue.size;
+    const maxParallelTasks = this.config.parallelExecution?.maxParallelTasks || 5;
+    const currentActiveExecutions = this.activeExecutions.size;
+
+    if (currentParallelTasks < maxParallelTasks && currentActiveExecutions > 0) {
+      const newConcurrency = Math.min(maxParallelTasks, currentActiveExecutions);
+      this.parallelExecutionQueue.concurrency = newConcurrency;
+      this.logger.debug('Adjusted parallel execution queue concurrency', {
+        currentParallelTasks,
+        maxParallelTasks,
+        newConcurrency
+      });
+    } else if (currentParallelTasks > 0 && currentActiveExecutions === 0) {
+      // If no active tasks, try to reduce concurrency to save resources
+      const newConcurrency = Math.max(1, Math.floor(currentParallelTasks / 2));
+      this.parallelExecutionQueue.concurrency = newConcurrency;
+      this.logger.debug('Reduced parallel execution queue concurrency', {
+        currentParallelTasks,
+        newConcurrency
+      });
+    }
   }
 }

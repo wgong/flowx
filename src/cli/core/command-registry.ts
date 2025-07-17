@@ -9,6 +9,9 @@ import type { CLICommand, CLIContext } from '../interfaces/index.ts';
 import { statusCommand } from '../commands/system/status-command.ts';
 import { configCommand } from '../commands/system/config-command.ts';
 import { monitorCommand } from '../commands/system/monitor-command.ts';
+import { monitorDashboardCommand } from '../commands/system/monitor-dashboard-command.ts';
+import { webUICommand } from '../commands/system/web-ui-command.ts';
+import { workflowDesignerCommand } from '../commands/system/workflow-designer-command.ts';
 import { logsCommand } from '../commands/system/logs-command.ts';
 import { initCommand } from '../commands/system/initialization-command.ts';
 import { startCommand } from '../commands/system/start-command-integration.ts';
@@ -17,6 +20,7 @@ import { restartCommand } from '../commands/system/restart-command.ts';
 import { sparcCommand } from '../commands/system/sparc-command.ts';
 import { batchCommand } from '../commands/system/batch-command.ts';
 import { taskCommand } from '../commands/tasks/task-command.ts';
+import { todoCommand } from '../commands/todo/todo-command-simple.ts';
 import { workflowCommand } from '../commands/system/workflow-command.ts';
 import { migrationCommand } from '../commands/system/migration-command.ts';
 import { uiCommand } from '../commands/system/ui-command.ts';
@@ -86,6 +90,9 @@ export const commandRegistry = new Map<string, CLICommand>([
   ['status', statusCommand],
   ['config', configCommand],
   ['monitor', monitorCommand],
+  ['monitor-dashboard', monitorDashboardCommand],
+  ['web-ui', webUICommand],
+  ['workflow-designer', workflowDesignerCommand],
   ['logs', logsCommand],
   ['init', initCommand],
   ['start', startCommand],
@@ -94,6 +101,7 @@ export const commandRegistry = new Map<string, CLICommand>([
   ['sparc', sparcCommand],
   ['batch', batchCommand],
   ['task', taskCommand],
+  ['todo', todoCommand],
   ['workflow', workflowCommand],
   ['migration', migrationCommand],
   ['ui', uiCommand],

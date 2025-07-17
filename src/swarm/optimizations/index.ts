@@ -17,3 +17,11 @@ export type { TTLMapOptions } from "./ttl-map.ts";
 export { OptimizedExecutor } from "./optimized-executor.ts";
 export type { ExecutorConfig, ExecutionMetrics } from "./optimized-executor.ts";
 
+export { AgentCapabilityIndex } from "./agent-capability-index.ts";
+export type { 
+  AgentCapability, 
+  AgentPerformanceMetrics, 
+  CapabilityMatch, 
+  IndexConfig 
+} from "./agent-capability-index.ts";
+

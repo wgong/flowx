@@ -199,7 +199,7 @@ export class NeuralTodoOptimization extends EventEmitter {
       features.push((todo.dependencies || []).length); // 1: dependency count
       features.push((todo.tags || []).length); // 2: tag count
       features.push(todo.assignedAgent ? 1 : 0); // 3: has assigned agent
-      features.push(this.encodeTimeOfCreation(todo.createdAt)); // 4: time of creation
+      features.push(this.encodeTimeOfCreation(todo.createdAt || new Date())); // 4: time of creation
       
       return features;
     });
@@ -520,13 +520,17 @@ export class NeuralTodoOptimization extends EventEmitter {
     for (let i = 0; i < model.architecture.outputSize; i++) {
       const sum = currentLayer.reduce((acc, val, idx) => 
         acc + val * (Math.cos(idx + i) * 0.5 + 0.5), 0);
-      output.push(Math.sigmoid(sum / currentLayer.length));
+      output.push(this.sigmoid(sum / currentLayer.length));
     }
     
     // Calculate confidence based on output distribution
     const confidence = model.performance.accuracy * (1 - this.calculateOutputVariance(output));
     
     return { output, confidence };
+  }
+
+  private sigmoid(x: number): number {
+    return 1 / (1 + Math.exp(-x));
   }
 
   /**

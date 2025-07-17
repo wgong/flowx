@@ -20,7 +20,7 @@ export function createSwarmTools(logger: ILogger): MCPTool[] {
   return [
     // === LEGACY SWARM TOOLS ===
     {
-      name: 'dispatch_agent',
+      name: 'swarm/dispatch-agent',
       description: 'Spawn a new agent in the swarm to handle a specific task',
       inputSchema: {
         type: 'object',
@@ -77,7 +77,7 @@ export function createSwarmTools(logger: ILogger): MCPTool[] {
     },
 
     {
-      name: 'swarm_status',
+      name: 'swarm/status',
       description: 'Get the current status of the swarm and all agents',
       inputSchema: {
         type: 'object',
@@ -710,7 +710,7 @@ export function createSwarmTools(logger: ILogger): MCPTool[] {
 
 // Legacy exports for backward compatibility
 export const dispatchAgentTool = {
-  name: 'dispatch_agent',
+  name: 'swarm/dispatch-agent',
   description: 'Spawn a new agent in the swarm to handle a specific task',
   inputSchema: {
     type: 'object',
@@ -734,41 +734,35 @@ export const dispatchAgentTool = {
 };
 
 export const memoryStoreTool = {
-  name: 'memory_store',
-  description: 'Store data in the shared swarm memory for coordination',
+  name: 'memory/store',
+  description: 'Store information in the swarm memory system',
   inputSchema: {
     type: 'object',
     properties: {
-      key: {
-        type: 'string',
-        description: 'The key to store data under',
-      },
-      value: {
-        type: 'object',
-        description: 'The data to store (JSON object)',
-      },
+      content: { type: 'string' },
+      tags: { type: 'array', items: { type: 'string' } },
+      namespace: { type: 'string', default: 'default' }
     },
-    required: ['key', 'value'],
+    required: ['content']
   },
 };
 
 export const memoryRetrieveTool = {
-  name: 'memory_retrieve',
-  description: 'Retrieve data from the shared swarm memory',
+  name: 'memory/retrieve',
+  description: 'Retrieve information from the swarm memory system',
   inputSchema: {
     type: 'object',
     properties: {
-      key: {
-        type: 'string',
-        description: 'The key to retrieve data from',
-      },
+      query: { type: 'string' },
+      tags: { type: 'array', items: { type: 'string' } },
+      namespace: { type: 'string', default: 'default' }
     },
-    required: ['key'],
+    required: ['query']
   },
 };
 
 export const swarmStatusTool = {
-  name: 'swarm_status',
+  name: 'swarm/status',
   description: 'Get the current status of the swarm and all agents',
   inputSchema: {
     type: 'object',

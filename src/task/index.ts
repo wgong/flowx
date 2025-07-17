@@ -14,6 +14,7 @@ export type { CoordinationContext, TodoItem } from "./coordination.ts";
 
 export { TodoSyncService, type TodoTaskMapping, type SyncConfiguration } from "./todo-sync-service.js";
 export { TodoSyncIntegration, createTodoSyncIntegration, enableTodoTaskSync } from "./todo-sync-integration.js";
+export { VisualProgressFormatter, type ProgressOverview, type VisualTaskGroup, type FormattingOptions } from "./visual-progress-formatter.js";
 
 
 // Import the types we need for the functions below

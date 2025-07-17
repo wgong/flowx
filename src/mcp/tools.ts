@@ -60,7 +60,8 @@ export class ToolRegistry extends EventEmitter {
    */
   register(tool: MCPTool, capability?: ToolCapability): void {
     if (this.tools.has(tool.name)) {
-      throw new MCPError(`Tool already registered: ${tool.name}`);
+      this.logger.warn(`Tool already registered, skipping: ${tool.name}`);
+      return; // Skip duplicate registration instead of throwing error
     }
 
     // Validate tool schema

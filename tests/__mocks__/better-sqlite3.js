@@ -2,7 +2,14 @@
  * Comprehensive better-sqlite3 mock for Jest
  */
 
-const { jest } = require('@jest/globals');
+// Import jest from globals
+const createMockFn = () => {
+  const fn = function(...args) { return fn.mockReturnValue || null; };
+  fn.mockReturnValue = function(value) { fn.mockReturnValue = value; return fn; };
+  fn.mockImplementation = function(impl) { fn.mockImplementation = impl; return fn; };
+  fn.mockReturnThis = function() { fn.mockReturnValue = fn; return fn; };
+  return fn;
+};
 
 class MockStatement {
   constructor(sql) {

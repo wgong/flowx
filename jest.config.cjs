@@ -49,8 +49,8 @@ module.exports = {
   // Test file patterns - include both main and tests directory
   roots: ['<rootDir>/tests', '<rootDir>/src'],
   testMatch: [
-    '<rootDir>/tests/**/*.test.{ts,js}',
-    '<rootDir>/tests/**/*.spec.{ts,js}'
+    '<rootDir>/tests/**/*.test.{ts,js,tsx,jsx}',
+    '<rootDir>/tests/**/*.spec.{ts,js,tsx,jsx}'
   ],
   
   // Temporarily ignore the most problematic test files

@@ -858,7 +858,7 @@ async function serveMcpServer(context: CLIContext): Promise<void> {
   const { options } = context;
   const port = options.port || 3000;
   const transport = options.transport || 'stdio';
-  const logLevel = options['log-level'] || 'info';
+  const logLevel = options.logLevel || 'info';
   const verbose = options.verbose || false;
   const minimal = options.minimal || false;
   
@@ -885,14 +885,115 @@ async function serveMcpServer(context: CLIContext): Promise<void> {
       // STDIO transport for Claude Code integration
       if (verbose) {
         printInfo('📡 Using STDIO transport for Claude Code integration');
+        printInfo('🔧 Initializing orchestration components...');
       }
       
-      // Initialize MCP server for STDIO
-      const { MCPServer } = await import('../../../mcp/server.ts');
+      // Initialize core components for full orchestration
       const { EventBus } = await import('../../../core/event-bus.ts');
+      const { TerminalManager } = await import('../../../terminal/manager.ts');
+      const { MemoryManager } = await import('../../../memory/manager.ts');
+      const { CoordinationManager } = await import('../../../coordination/manager.ts');
+      const { SwarmCoordinator } = await import('../../../swarm/coordinator.ts');
+      const { AgentProcessManager } = await import('../../../agents/agent-process-manager.ts');
+      const { Orchestrator } = await import('../../../core/orchestrator.ts');
+      const { MCPServer } = await import('../../../mcp/server.ts');
+      const { configManager } = await import('../../../core/config.ts');
       
       const eventBus = EventBus.getInstance();
-      const config = {
+      const config = configManager.get();
+      
+      // Initialize all orchestration components
+      if (verbose) {
+        printInfo('🔧 Initializing terminal manager...');
+      }
+      // FIXED: Ensure terminal type is explicitly set to native
+      const terminalConfig = {
+        // Start with config defaults
+        ...(config.terminal || {}),
+        // Override critical settings to avoid VSCode detection issues
+        type: 'native' as const,
+        poolSize: (config.terminal?.poolSize) || 5,
+        recycleAfter: (config.terminal?.recycleAfter) || 10,
+        healthCheckInterval: (config.terminal?.healthCheckInterval) || 60000,
+        commandTimeout: (config.terminal?.commandTimeout) || 300000
+      };
+      
+      const terminalManager = new TerminalManager(
+        terminalConfig,
+        eventBus,
+        logger
+      );
+      await terminalManager.initialize();
+      
+      if (verbose) {
+        printInfo('🧠 Initializing memory manager...');
+      }
+             const memoryManager = new MemoryManager(
+         { 
+           ...(config.memory || {}),
+           backend: 'markdown', // Use markdown backend to avoid SQLite issues
+           markdownDir: './memory'
+         },
+         eventBus,
+         logger
+       );
+      await memoryManager.initialize();
+      
+      if (verbose) {
+        printInfo('⚡ Initializing coordination manager...');
+      }
+             const coordinationManager = new CoordinationManager(
+         {
+           coordination: {
+             ...(config.coordination || {}),
+             maxConcurrentTasks: 10,
+             defaultTimeout: 30000,
+             enableWorkStealing: true,
+             enableCircuitBreaker: true,
+             retryAttempts: 3,
+             schedulingStrategy: 'capability',
+             maxRetries: 3,
+             retryDelay: 1000,
+             resourceTimeout: 30000
+           },
+           workStealing: {
+             enabled: true,
+             stealThreshold: 3,
+             maxStealBatch: 2,
+             stealInterval: 10000,
+             minTasksToSteal: 1,
+           },
+           circuitBreaker: {
+             failureThreshold: 5,
+             successThreshold: 3,
+             timeout: 60000,
+             halfOpenLimit: 2,
+           },
+           enableAdvancedFeatures: true,
+         },
+         eventBus,
+         logger
+       );
+      await coordinationManager.initialize();
+      
+      if (verbose) {
+        printInfo('🤖 Initializing swarm coordinator...');
+      }
+      const swarmCoordinator = new SwarmCoordinator({
+        name: 'FlowX-Swarm',
+        maxAgents: 10,
+        maxConcurrentTasks: 5
+      });
+      
+      if (verbose) {
+        printInfo('👥 Initializing agent manager...');
+      }
+      const agentManager = new AgentProcessManager(logger);
+      
+      if (verbose) {
+        printInfo('🎯 Initializing main orchestrator...');
+      }
+      const mcpConfig = {
         transport: 'stdio' as const,
         host: 'localhost',
         port,
@@ -908,7 +1009,34 @@ async function serveMcpServer(context: CLIContext): Promise<void> {
         },
       };
       
-      const server = new MCPServer(config, eventBus, logger);
+      // Create MCP server with ALL orchestration components wired in
+      const server = new MCPServer(
+        mcpConfig,
+        eventBus,
+        logger,
+        // THIS IS THE FIX: Wire in all the orchestration components
+        null, // orchestrator - will be initialized below
+        swarmCoordinator,
+        agentManager,
+        coordinationManager, // resourceManager
+        eventBus, // messageBus
+        null, // monitor - can be added later
+      );
+      
+      // Create orchestrator with all components
+      const orchestrator = new Orchestrator(
+        config,
+        terminalManager,
+        memoryManager,
+        coordinationManager,
+        server,
+        eventBus,
+        logger
+      );
+      await orchestrator.initialize();
+      
+      // Update server with orchestrator reference
+      (server as any).orchestrator = orchestrator;
       
       // Register server for cleanup
       mcpServer = {
@@ -922,38 +1050,31 @@ async function serveMcpServer(context: CLIContext): Promise<void> {
         logger
       };
       
-      // Start MCP server (this sets up request handlers)
+      // Start MCP server (this sets up request handlers and registers tools)
       await server.start();
       mcpServer.isRunning = true;
       
       if (verbose) {
-        printSuccess('✅ MCP server started in STDIO mode');
+        printSuccess('✅ MCP server started in STDIO mode with full orchestration');
         printInfo('🔗 Ready for Claude Code integration');
+        printSuccess('🎯 Orchestrator components initialized');
+        printSuccess('🤖 Swarm coordination enabled');
+        printSuccess('👥 Agent management ready');
+        printSuccess('🧠 Memory system active');
+        printSuccess('⚡ Task coordination online');
       }
-      
-      // Send immediate server capabilities for Claude Code
-      const serverInfo = {
-        name: 'flowx',
-        version: '8.0.2',
-        protocolVersion: '2024-11-05',
-        capabilities: {
-          tools: {},
-          prompts: {},
-          resources: {},
-          logging: {}
-        }
-      };
-      
-      // For STDIO transport, the server handles everything automatically
-      // Just wait for the server to handle connections
       
       // Handle process termination gracefully
       process.on('SIGINT', async () => {
         if (verbose) {
-          logger.info('Shutting down MCP server...');
+          logger.info('Shutting down MCP server with orchestration...');
         }
         if (mcpServer?.isRunning) {
+          await orchestrator.shutdown();
           await (server as any).stop();
+          await coordinationManager.shutdown();
+          await memoryManager.shutdown();
+          await terminalManager.shutdown();
           mcpServer.isRunning = false;
         }
         process.exit(0);
@@ -970,44 +1091,13 @@ async function serveMcpServer(context: CLIContext): Promise<void> {
         printInfo(`📡 Using HTTP transport on ${port}`);
       }
       
-      // Create Express app
-      const { default: express } = await import('express');
-      const app = express();
-      
-      // Create HTTP server
-      const server = createServer(app);
-      
-      // Create Socket.IO server
-      const io = new Server(server, {
-        cors: {
-          origin: '*',
-          methods: ['GET', 'POST']
-        }
-      });
-      
-      // Configure Express middleware
-      const { default: cors } = await import('cors');
-      app.use(cors());
-      app.use(express.json());
-      
-      // Initialize MCP server for HTTP
-      mcpServer = {
-        app,
-        server,
-        io,
-        tools: new Map(),
-        isRunning: false,
-        port,
-        host: 'localhost',
-        logger
-      };
-      
-             // Start HTTP server
-       return await startMcpServer(context);
-     }
-   } catch (error) {
-     throw new Error(`Failed to start MCP server: ${error instanceof Error ? error.message : String(error)}`);
-   }
- }
+      // For HTTP, use the existing Express-based implementation
+      return await startMcpServer(context);
+    }
+  } catch (error) {
+    printError(`Failed to start MCP server: ${error instanceof Error ? error.message : String(error)}`);
+    throw error;
+  }
+}
  
  export default mcpCommand;

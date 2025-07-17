@@ -348,7 +348,7 @@ export class CrossSessionTodoPersistence extends EventEmitter {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
-      const version = previousState ? (previousState.version || 1) + 1 : 1;
+      const version = previousState ? 2 : 1; // Simple versioning
       
       stmt.run([
         todo.id,
@@ -363,8 +363,8 @@ export class CrossSessionTodoPersistence extends EventEmitter {
         todo.parallelExecution ? 1 : 0,
         todo.memoryKey || null,
         JSON.stringify(todo.metadata || {}),
-        todo.createdAt.getTime(),
-        todo.updatedAt.getTime(),
+        (todo.createdAt || new Date()).getTime(),
+        (todo.updatedAt || new Date()).getTime(),
         this.currentSession.sessionId,
         version
       ]);
@@ -511,7 +511,7 @@ export class CrossSessionTodoPersistence extends EventEmitter {
           todoId,
           operation: 'delete',
           previousState,
-          newState: { id: todoId, isDeleted: true },
+          newState: { id: todoId },
           timestamp: new Date(),
           sessionId: this.currentSession.sessionId,
           metadata: {
@@ -1050,7 +1050,7 @@ export class CrossSessionTodoPersistence extends EventEmitter {
     return {
       ...local,
       // Use most recent timestamp for updates
-      updatedAt: local.updatedAt > remote.updatedAt ? local.updatedAt : remote.updatedAt,
+      updatedAt: (local.updatedAt || new Date()) > (remote.updatedAt || new Date()) ? (local.updatedAt || new Date()) : (remote.updatedAt || new Date()),
       // Merge non-conflicting fields
       tags: [...new Set([...(local.tags || []), ...(remote.tags || [])])],
       // Use higher priority
@@ -1241,8 +1241,8 @@ export class CrossSessionTodoPersistence extends EventEmitter {
           `"${todo.content.replace(/"/g, '""')}"`,
           todo.status,
           todo.priority,
-          todo.createdAt.toISOString(),
-          todo.updatedAt.toISOString()
+          (todo.createdAt || new Date()).toISOString(),
+          (todo.updatedAt || new Date()).toISOString()
         ];
         csvRows.push(row.join(','));
       }

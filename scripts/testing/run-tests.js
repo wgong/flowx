@@ -41,11 +41,11 @@ const options = {
 };
 
 // If no specific test type is specified, run all tests
-if (true) {
+if (!options.unit && !options.e2e && !options.integration && !options.property) {
   options.unit = true;
-  options.e2e = false;
-  options.integration = false;
-  options.property = false;
+  options.e2e = true;
+  options.integration = true;
+  options.property = true;
 }
 
 // Set environment variables for test
